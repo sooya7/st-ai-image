@@ -1,81 +1,72 @@
-/* ===== GPT Image - 悬浮窗 v2 ===== */
-
-/* --- FAB 按钮 --- */
-#st_gpt_fab {
-    position: fixed;
-    bottom: 28px;
-    right: 28px;
-    width: 52px;
-    height: 52px;
-    border-radius: 16px;
-    background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
-    background-size: 200% 200%;
-    animation: st_gpt_gradient 3s ease infinite;
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 22px;
-    cursor: pointer;
-    z-index: 9998;
-    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
-    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s;
-    border: 1px solid rgba(255,255,255,0.15);
-}
-
-@keyframes st_gpt_gradient {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-}
-
-#st_gpt_fab:hover {
-    transform: scale(1.12) rotate(-5deg);
-    box-shadow: 0 6px 28px rgba(99, 102, 241, 0.55);
-}
-
-#st_gpt_fab:active {
-    transform: scale(0.95);
-}
+/* ===== AI Image Generator - 悬浮窗 ===== */
 
 /* --- 悬浮窗主体 --- */
-#st_gpt_float_panel {
-    position: fixed;
-    bottom: 92px;
-    right: 28px;
-    width: 480px;
-    max-height: 72vh;
+#st_ai_float_panel {
+    width: 460px;
+    height: 520px;
+    max-height: 80vh;
     background: rgba(15, 15, 25, 0.92);
     backdrop-filter: blur(20px) saturate(1.5);
     -webkit-backdrop-filter: blur(20px) saturate(1.5);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
-    z-index: 9999;
     display: flex;
     flex-direction: column;
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     overflow: hidden;
-    transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-#st_gpt_float_panel.st_gpt_hidden {
-    opacity: 0;
-    transform: translateY(24px) scale(0.92);
-    pointer-events: none;
+#st_ai_float_panel.st_ai_hidden {
+    display: none;
+}
+
+/* --- 移动端 --- */
+@media (max-width: 600px) {
+    #st_ai_float_panel {
+        width: calc(100% - 20px);
+        max-height: 85vh;
+        border-radius: 14px;
+    }
+
+    #st_ai_float_panel.st_ai_hidden {
+        display: none;
+    }
+}
+
+/* --- Dialog 容器（showModal 渲染到 top layer，浏览器原生居中） --- */
+#st_ai_dialog {
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    overflow: visible;
+}
+
+#st_ai_dialog::backdrop {
+    background: rgba(0, 0, 0, 0.4);
+}
+
+#st_ai_dialog[open] {
+    animation: st_ai_dialog_in 0.2s ease;
+}
+
+@keyframes st_ai_dialog_in {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 /* --- Header --- */
-.st_gpt_float_header {
+.st_ai_float_header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 10px 14px;
     background: linear-gradient(180deg, rgba(255,255,255,0.04), transparent);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    cursor: move;
     user-select: none;
 }
 
-.st_gpt_float_tabs {
+.st_ai_float_tabs {
     display: flex;
     gap: 2px;
     background: rgba(255, 255, 255, 0.04);
@@ -83,7 +74,7 @@
     padding: 3px;
 }
 
-.st_gpt_tab {
+.st_ai_tab {
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.45);
@@ -96,18 +87,18 @@
     letter-spacing: 0.02em;
 }
 
-.st_gpt_tab:hover {
+.st_ai_tab:hover {
     color: rgba(255, 255, 255, 0.7);
     background: rgba(255, 255, 255, 0.06);
 }
 
-.st_gpt_tab.active {
+.st_ai_tab.active {
     background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.2));
     color: #fff;
     box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
 }
 
-#st_gpt_float_close {
+#st_ai_float_close {
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.3);
@@ -119,46 +110,42 @@
     line-height: 1;
 }
 
-#st_gpt_float_close:hover {
+#st_ai_float_close:hover {
     background: rgba(239, 68, 68, 0.15);
     color: #f87171;
 }
 
 /* --- Tab Content --- */
-.st_gpt_tab_content {
+.st_ai_tab_content {
     display: none;
     overflow-y: auto;
-    max-height: calc(72vh - 52px);
+    max-height: calc(80vh - 52px);
 }
 
-.st_gpt_tab_content.active {
+.st_ai_tab_content.active {
     display: block;
 }
 
-.st_gpt_tab_content::-webkit-scrollbar {
+.st_ai_tab_content::-webkit-scrollbar {
     width: 5px;
 }
 
-.st_gpt_tab_content::-webkit-scrollbar-track {
+.st_ai_tab_content::-webkit-scrollbar-track {
     background: transparent;
 }
 
-.st_gpt_tab_content::-webkit-scrollbar-thumb {
+.st_ai_tab_content::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 10px;
 }
 
-.st_gpt_tab_content::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
-
 /* --- 生图 Tab --- */
-.st_gpt_gen_area {
+.st_ai_gen_area {
     padding: 16px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.st_gpt_textarea {
+.st_ai_textarea {
     width: 100%;
     resize: none;
     min-height: 72px;
@@ -175,24 +162,24 @@
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.st_gpt_textarea::placeholder {
+.st_ai_textarea::placeholder {
     color: rgba(255, 255, 255, 0.25);
 }
 
-.st_gpt_textarea:focus {
+.st_ai_textarea:focus {
     outline: none;
     border-color: rgba(99, 102, 241, 0.5);
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
-.st_gpt_gen_controls {
+.st_ai_gen_controls {
     display: flex;
     gap: 8px;
     margin-top: 10px;
     align-items: center;
 }
 
-.st_gpt_select {
+.st_ai_select {
     background: rgba(255, 255, 255, 0.05);
     color: rgba(255, 255, 255, 0.8);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -209,17 +196,17 @@
     padding-right: 28px;
 }
 
-.st_gpt_select:focus {
+.st_ai_select:focus {
     outline: none;
     border-color: rgba(99, 102, 241, 0.5);
 }
 
-.st_gpt_select option {
+.st_ai_select option {
     background: #1e1e2e;
     color: #ddd;
 }
 
-.st_gpt_btn_primary {
+.st_ai_btn_primary {
     background: linear-gradient(135deg, #6366f1, #a855f7);
     color: #fff;
     border: none;
@@ -238,16 +225,16 @@
     letter-spacing: 0.02em;
 }
 
-.st_gpt_btn_primary:hover {
+.st_ai_btn_primary:hover {
     box-shadow: 0 4px 16px rgba(99, 102, 241, 0.45);
     transform: translateY(-1px);
 }
 
-.st_gpt_btn_primary:active {
+.st_ai_btn_primary:active {
     transform: translateY(0);
 }
 
-.st_gpt_btn_primary:disabled {
+.st_ai_btn_primary:disabled {
     opacity: 0.4;
     cursor: not-allowed;
     transform: none;
@@ -255,19 +242,19 @@
 }
 
 /* --- 生成结果 --- */
-.st_gpt_gen_result {
+.st_ai_gen_result {
     padding: 16px;
     min-height: 80px;
 }
 
-.st_gpt_gen_placeholder {
+.st_ai_gen_placeholder {
     text-align: center;
     color: rgba(255, 255, 255, 0.2);
     font-size: 13px;
     padding: 32px 0;
 }
 
-.st_gpt_gen_result img {
+.st_ai_gen_result img {
     max-width: 100%;
     border-radius: 10px;
     cursor: pointer;
@@ -275,11 +262,11 @@
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
-.st_gpt_gen_result img:hover {
+.st_ai_gen_result img:hover {
     transform: scale(1.01);
 }
 
-.st_gpt_gen_result_info {
+.st_ai_gen_result_info {
     margin-top: 10px;
     font-size: 12px;
     color: rgba(255, 255, 255, 0.4);
@@ -289,7 +276,7 @@
 }
 
 /* --- 图库 Tab --- */
-.st_gpt_gallery_header {
+.st_ai_gallery_header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -297,35 +284,31 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.st_gpt_gallery_count {
+.st_ai_gallery_count {
     font-size: 12px;
     color: rgba(255, 255, 255, 0.35);
     font-weight: 500;
 }
 
-.st_gpt_gallery_grid {
+.st_ai_gallery_grid {
     padding: 12px;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
-    max-height: calc(72vh - 130px);
+    max-height: calc(80vh - 130px);
     overflow-y: auto;
 }
 
-.st_gpt_gallery_grid::-webkit-scrollbar {
+.st_ai_gallery_grid::-webkit-scrollbar {
     width: 5px;
 }
 
-.st_gpt_gallery_grid::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.st_gpt_gallery_grid::-webkit-scrollbar-thumb {
+.st_ai_gallery_grid::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 10px;
 }
 
-.st_gpt_gallery_item {
+.st_ai_gallery_item {
     position: relative;
     border-radius: 10px;
     overflow: hidden;
@@ -335,12 +318,12 @@
     transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.st_gpt_gallery_item:hover {
+.st_ai_gallery_item:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
-.st_gpt_gallery_item img {
+.st_ai_gallery_item img {
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -348,15 +331,15 @@
     transition: transform 0.3s;
 }
 
-.st_gpt_gallery_item:hover img {
+.st_ai_gallery_item:hover img {
     transform: scale(1.05);
 }
 
-.st_gpt_gallery_item:hover .st_gpt_gallery_overlay {
+.st_ai_gallery_item:hover .st_ai_gallery_overlay {
     opacity: 1;
 }
 
-.st_gpt_gallery_overlay {
+.st_ai_gallery_overlay {
     position: absolute;
     bottom: 0;
     left: 0;
@@ -372,7 +355,7 @@
     text-overflow: ellipsis;
 }
 
-.st_gpt_gallery_actions {
+.st_ai_gallery_actions {
     position: absolute;
     top: 6px;
     right: 6px;
@@ -382,11 +365,11 @@
     transition: opacity 0.2s;
 }
 
-.st_gpt_gallery_item:hover .st_gpt_gallery_actions {
+.st_ai_gallery_item:hover .st_ai_gallery_actions {
     opacity: 1;
 }
 
-.st_gpt_gallery_actions .st_gpt_image_btn {
+.st_ai_gallery_actions .st_ai_btn {
     padding: 4px 6px;
     font-size: 11px;
     background: rgba(0, 0, 0, 0.5);
@@ -396,20 +379,28 @@
     color: rgba(255, 255, 255, 0.8);
 }
 
-.st_gpt_gallery_actions .st_gpt_image_btn:hover {
+.st_ai_gallery_actions .st_ai_btn:hover {
     background: rgba(0, 0, 0, 0.7);
     color: #fff;
 }
 
+.st_ai_image_empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 40px 0;
+    color: rgba(255, 255, 255, 0.15);
+    font-size: 13px;
+}
+
 /* --- 设置 Tab --- */
-.st_gpt_settings_form {
+.st_ai_settings_form {
     padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 14px;
 }
 
-.st_gpt_field label {
+.st_ai_field label {
     display: block;
     font-size: 12px;
     font-weight: 500;
@@ -419,14 +410,7 @@
     text-transform: uppercase;
 }
 
-.st_gpt_field small {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.25);
-    display: block;
-    margin-top: 4px;
-}
-
-.st_gpt_input {
+.st_ai_input {
     width: 100%;
     background: rgba(255, 255, 255, 0.04);
     color: rgba(255, 255, 255, 0.9);
@@ -438,17 +422,17 @@
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.st_gpt_input::placeholder {
+.st_ai_input::placeholder {
     color: rgba(255, 255, 255, 0.2);
 }
 
-.st_gpt_input:focus {
+.st_ai_input:focus {
     outline: none;
     border-color: rgba(99, 102, 241, 0.5);
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
-.st_gpt_checkbox {
+.st_ai_checkbox {
     display: flex !important;
     align-items: center;
     gap: 10px;
@@ -460,7 +444,7 @@
     letter-spacing: 0 !important;
 }
 
-.st_gpt_checkbox input[type="checkbox"] {
+.st_ai_checkbox input[type="checkbox"] {
     margin: 0;
     width: 16px;
     height: 16px;
@@ -469,7 +453,7 @@
 }
 
 /* --- 通用按钮 --- */
-.st_gpt_image_btn {
+.st_ai_btn {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 8px;
@@ -480,22 +464,14 @@
     transition: all 0.15s;
 }
 
-.st_gpt_image_btn:hover {
+.st_ai_btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: rgba(255, 255, 255, 0.9);
     border-color: rgba(255, 255, 255, 0.12);
 }
 
-.st_gpt_image_empty {
-    grid-column: 1 / -1;
-    text-align: center;
-    padding: 40px 0;
-    color: rgba(255, 255, 255, 0.15);
-    font-size: 13px;
-}
-
 /* --- 图片预览覆盖层 --- */
-.st_gpt_image_preview {
+.st_ai_image_preview {
     position: fixed;
     top: 0;
     left: 0;
@@ -512,7 +488,7 @@
     transition: opacity 0.25s;
 }
 
-.st_gpt_image_preview.st_gpt_preview_visible {
+.st_ai_image_preview.st_gpt_preview_visible {
     opacity: 1;
     pointer-events: auto;
 }
@@ -524,10 +500,10 @@
     flex-direction: column;
     align-items: center;
     gap: 16px;
-    animation: st_gpt_preview_in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: st_ai_preview_in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes st_gpt_preview_in {
+@keyframes st_ai_preview_in {
     from { transform: scale(0.9); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
 }
@@ -607,7 +583,6 @@
     max-width: 100%;
     max-height: 512px;
     border-radius: 10px;
-    cursor: pointer;
     transition: transform 0.2s;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
 }
@@ -627,16 +602,10 @@
     margin: 4px 0;
     max-width: 400px;
     word-break: break-word;
-    animation: st_gpt_err_in 0.2s ease;
-}
-
-@keyframes st_gpt_err_in {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
 }
 
 /* --- 加载动画 --- */
-.st_gpt_loading {
+.st_ai_loading {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -646,38 +615,66 @@
     font-size: 13px;
 }
 
-.st_gpt_spinner {
+.st_ai_spinner {
     width: 22px;
     height: 22px;
     border: 2px solid rgba(255, 255, 255, 0.1);
     border-top-color: #6366f1;
     border-radius: 50%;
-    animation: st_gpt_spin 0.7s linear infinite;
+    animation: st_ai_spin 0.7s linear infinite;
 }
 
-@keyframes st_gpt_spin {
+@keyframes st_ai_spin {
     to { transform: rotate(360deg); }
 }
 
-/* --- 生成中脉冲效果 --- */
-.st_gpt_gen_result .st_gpt_loading {
-    position: relative;
-}
+/* --- 图片预览覆盖层 --- */
 
-.st_gpt_gen_result .st_gpt_loading::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 60px;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, #6366f1, transparent);
-    border-radius: 2px;
-    animation: st_gpt_pulse 1.5s ease-in-out infinite;
-}
+/* --- 移动端 --- */
+@media (max-width: 600px) {
+    .st_ai_tab {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
 
-@keyframes st_gpt_pulse {
-    0%, 100% { opacity: 0; width: 40px; }
-    50% { opacity: 1; width: 80px; }
+    .st_ai_gen_controls {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .st_ai_select {
+        flex: 1;
+        min-width: 0;
+        font-size: 13px;
+    }
+
+    .st_ai_btn_primary {
+        width: 100%;
+        justify-content: center;
+        padding: 10px;
+        margin-left: 0;
+    }
+
+    .st_ai_gallery_grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+        padding: 8px;
+    }
+
+    .st_ai_gallery_overlay {
+        opacity: 1;
+    }
+
+    .st_ai_gallery_actions {
+        opacity: 1;
+    }
+
+    .st_gpt_inline_gen {
+        padding: 6px 14px;
+        font-size: 13px;
+    }
+
+    .st_gpt_inline_img {
+        max-height: 300px;
+    }
 }

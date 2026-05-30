@@ -323,12 +323,12 @@ async function renderGallery() {
     if (!history.length) return $c.html('<div class="st_gpt_image_empty">暂无生成记录</div>');
 
     $c.html(history.map((e) => `
-        <div class="st_gpt_gallery_item" data-id="${e.id}">
+        <div class="st_ai_gallery_item" data-id="${e.id}">
             <img src="${e.imageUrl}" loading="lazy">
-            <div class="st_gpt_gallery_overlay">${escapeHtml(e.prompt)}</div>
-            <div class="st_gpt_gallery_actions">
-                <button class="st_gpt_image_btn st_gpt_regen" data-id="${e.id}" data-prompt="${escapeHtml(e.prompt)}" title="重新生成"><i class="fa-solid fa-rotate"></i></button>
-                <button class="st_gpt_image_btn st_gpt_del" data-id="${e.id}" title="删除"><i class="fa-solid fa-trash"></i></button>
+            <div class="st_ai_gallery_overlay">${escapeHtml(e.prompt)}</div>
+            <div class="st_ai_gallery_actions">
+                <button class="st_ai_btn st_gpt_regen" data-id="${e.id}" data-prompt="${escapeHtml(e.prompt)}" title="重新生成"><i class="fa-solid fa-rotate"></i></button>
+                <button class="st_ai_btn st_gpt_del" data-id="${e.id}" title="删除"><i class="fa-solid fa-trash"></i></button>
             </div>
         </div>
     `).join(''));
@@ -397,41 +397,29 @@ function initAutoDetect() {
     console.log('[st-ai-image] MutationObserver attached to #chat');
 }
 
-// ===== 拖拽 =====
-function initDrag() {
-    const handle = document.getElementById('st_gpt_drag_handle');
-    const panel = document.getElementById('st_gpt_float_panel');
-    if (!handle || !panel) return;
-    let dragging = false, startX, startY, startLeft, startTop;
-
-    handle.addEventListener('mousedown', (e) => {
-        if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
-        dragging = true;
-        const rect = panel.getBoundingClientRect();
-        startX = e.clientX; startY = e.clientY;
-        startLeft = rect.left; startTop = rect.top;
-        panel.style.right = 'auto';
-        panel.style.bottom = 'auto';
-        panel.style.left = startLeft + 'px';
-        panel.style.top = startTop + 'px';
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (!dragging) return;
-        panel.style.left = (startLeft + e.clientX - startX) + 'px';
-        panel.style.top = (startTop + e.clientY - startY) + 'px';
-    });
-
-    document.addEventListener('mouseup', () => { dragging = false; });
-}
-
 // ===== 初始化 =====
 jQuery(async () => {
     try {
         const s = getSettings();
 
         const html = await $.get(`${extensionFolder}/settings.html`);
-        $('body').append(html);
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+
+        // Wand 按钮 → 魔法棒菜单
+        const wandBtn = tempDiv.querySelector('#st_ai_image_wand_button');
+        const menu = document.getElementById('extensionsMenu');
+        if (menu && wandBtn) menu.appendChild(wandBtn);
+
+        // 用 <dialog> 承载面板（渲染在 top layer，不受任何 CSS transform 影响）
+        const dialog = document.createElement('dialog');
+        dialog.id = 'st_ai_dialog';
+
+        const panel = tempDiv.querySelector('#st_ai_float_panel');
+        const preview = tempDiv.querySelector('#st_gpt_image_preview');
+        if (panel) dialog.appendChild(panel);
+        document.body.appendChild(dialog);
+        if (preview) document.body.appendChild(preview);
 
         // 绑定设置
         $('#st_gpt_image_api_base').val(s.apiBase);
@@ -469,17 +457,88 @@ jQuery(async () => {
             }
         });
 
-        // FAB 开关
-        $('#st_gpt_fab').on('click', () => $('#st_gpt_float_panel').toggleClass('st_gpt_hidden'));
-        $('#st_gpt_float_close').on('click', () => $('#st_gpt_float_panel').addClass('st_gpt_hidden'));
+        // Wand 按钮 → 打开悬浮窗
+        $('#st_ai_image_wand_button').on('click', function () {
+            const panel = document.getElementById('st_ai_float_panel');
+            const dialog = document.getElementById('st_ai_dialog');
+            panel.classList.remove('st_ai_hidden');
+            // 重置面板定位（清除拖拽残留），让 dialog 原生居中
+            panel.style.position = '';
+            panel.style.left = '';
+            panel.style.top = '';
+            panel.style.margin = '';
+            if (!dialog.open) dialog.showModal();
+        });
+
+        // 拖拽
+        const dragHandle = document.querySelector('.st_ai_float_header');
+        const dragPanel = document.getElementById('st_ai_float_panel');
+        let dragging = false, dragStartX, dragStartY, panelStartX, panelStartY;
+
+        if (dragHandle && dragPanel) {
+            dragHandle.style.cursor = 'move';
+
+            function startDrag(clientX, clientY) {
+                dragging = true;
+                const rect = dragPanel.getBoundingClientRect();
+                dragStartX = clientX;
+                dragStartY = clientY;
+                panelStartX = rect.left;
+                panelStartY = rect.top;
+                // 切换到 fixed 定位脱离 dialog 居中
+                dragPanel.style.position = 'fixed';
+                dragPanel.style.left = panelStartX + 'px';
+                dragPanel.style.top = panelStartY + 'px';
+                dragPanel.style.margin = '0';
+            }
+
+            function moveDrag(clientX, clientY) {
+                if (!dragging) return;
+                dragPanel.style.left = (panelStartX + clientX - dragStartX) + 'px';
+                dragPanel.style.top = (panelStartY + clientY - dragStartY) + 'px';
+            }
+
+            function endDrag() { dragging = false; }
+
+            dragHandle.addEventListener('mousedown', (e) => {
+                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+                e.preventDefault();
+                startDrag(e.clientX, e.clientY);
+            });
+            document.addEventListener('mousemove', (e) => moveDrag(e.clientX, e.clientY));
+            document.addEventListener('mouseup', endDrag);
+
+            dragHandle.addEventListener('touchstart', (e) => {
+                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+                const t = e.touches[0];
+                startDrag(t.clientX, t.clientY);
+            }, { passive: true });
+            document.addEventListener('touchmove', (e) => {
+                if (!dragging) return;
+                const t = e.touches[0];
+                moveDrag(t.clientX, t.clientY);
+            }, { passive: true });
+            document.addEventListener('touchend', endDrag);
+        }
+
+        // 关闭面板（只能通过 X 按钮关闭）
+        function closePanel() {
+            const dialog = document.getElementById('st_ai_dialog');
+            if (dialog.open) dialog.close();
+        }
+
+        $('#st_ai_float_close').on('click', closePanel);
+        // 阻止 ESC 关闭
+        document.getElementById('st_ai_dialog').addEventListener('cancel', (e) => e.preventDefault());
+        // 点击 backdrop 不关闭（不监听）
 
         // Tab 切换
-        $('.st_gpt_tab').on('click', function () {
+        $('.st_ai_tab').on('click', function () {
             const tab = $(this).data('tab');
-            $('.st_gpt_tab').removeClass('active');
+            $('.st_ai_tab').removeClass('active');
             $(this).addClass('active');
-            $('.st_gpt_tab_content').removeClass('active');
-            $(`.st_gpt_tab_content[data-tab="${tab}"]`).addClass('active');
+            $('.st_ai_tab_content').removeClass('active');
+            $(`.st_ai_tab_content[data-tab="${tab}"]`).addClass('active');
             if (tab === 'gallery') renderGallery();
         });
 
@@ -497,9 +556,9 @@ jQuery(async () => {
         });
 
         // 图库操作
-        $(document).on('click', '.st_gpt_gallery_item img', function () {
-            const $item = $(this).closest('.st_gpt_gallery_item');
-            showPreview($(this).attr('src'), $item.find('.st_gpt_gallery_overlay').text());
+        $(document).on('click', '.st_ai_gallery_item img', function () {
+            const $item = $(this).closest('.st_ai_gallery_item');
+            showPreview($(this).attr('src'), $item.find('.st_ai_gallery_overlay').text());
         });
         $(document).on('click', '.st_gpt_regen', async function (e) {
             e.stopPropagation();
@@ -514,9 +573,6 @@ jQuery(async () => {
         $('#st_gpt_image_clear_history').on('click', () => {
             if (confirm('清空所有生成记录？')) clearHistory();
         });
-
-        // 拖拽
-        initDrag();
 
         // 自动检测聊天中的生图指令 → 原位生成
         $(document).on('click', '.st_gpt_inline_gen', async function () {
