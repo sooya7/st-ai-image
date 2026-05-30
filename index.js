@@ -35,6 +35,69 @@ function saveSettings(s) {
     localStorage.setItem(`${extensionName}_settings`, JSON.stringify(s));
 }
 
+// ===== API 预设 =====
+const PRESET_KEY = `${extensionName}_presets`;
+
+function getPresets() {
+    try {
+        return JSON.parse(localStorage.getItem(PRESET_KEY)) || {};
+    } catch { return {}; }
+}
+
+function savePresets(presets) {
+    localStorage.setItem(PRESET_KEY, JSON.stringify(presets));
+}
+
+function refreshPresetList() {
+    const $sel = $('#st_gpt_preset_select');
+    const presets = getPresets();
+    const current = $sel.val();
+    $sel.empty().append('<option value="">-- 选择预设 --</option>');
+    for (const name of Object.keys(presets).sort()) {
+        $sel.append(`<option value="${name}">${name}</option>`);
+    }
+    if (current && presets[current]) $sel.val(current);
+}
+
+function loadPreset(name) {
+    const presets = getPresets();
+    if (!presets[name]) return;
+    const p = presets[name];
+    const s = getSettings();
+    s.apiBase = p.apiBase || '';
+    s.apiKey = p.apiKey || '';
+    s.model = p.model || '';
+    saveSettings(s);
+    $('#st_gpt_image_api_base').val(s.apiBase);
+    $('#st_gpt_image_api_key').val(s.apiKey);
+    $('#st_gpt_image_model').val(s.model);
+    toastr.success(`已加载预设: ${name}`);
+}
+
+function saveCurrentAsPreset() {
+    const s = getSettings();
+    if (!s.apiBase && !s.apiKey) return toastr.warning('请先填写 API 配置');
+    const name = prompt('输入预设名称:', s.model || '新预设');
+    if (!name?.trim()) return;
+    const presets = getPresets();
+    presets[name.trim()] = { apiBase: s.apiBase, apiKey: s.apiKey, model: s.model };
+    savePresets(presets);
+    refreshPresetList();
+    $('#st_gpt_preset_select').val(name.trim());
+    toastr.success(`预设已保存: ${name.trim()}`);
+}
+
+function deleteSelectedPreset() {
+    const name = $('#st_gpt_preset_select').val();
+    if (!name) return toastr.warning('请先选择一个预设');
+    if (!confirm(`删除预设 "${name}"？`)) return;
+    const presets = getPresets();
+    delete presets[name];
+    savePresets(presets);
+    refreshPresetList();
+    toastr.success(`已删除预设: ${name}`);
+}
+
 // ===== IndexedDB 图库 =====
 function openDB() {
     return new Promise((resolve, reject) => {
@@ -445,6 +508,15 @@ jQuery(async () => {
         bindSetting('#st_gpt_image_enabled', 'enabled', 'check');
         bindSetting('#st_gpt_image_auto_detect', 'autoDetect', 'check');
         bindSetting('#st_gpt_image_save_history', 'saveHistory', 'check');
+
+        // API 预设
+        refreshPresetList();
+        $('#st_gpt_preset_select').on('change', function () {
+            const name = String($(this).val()).trim();
+            if (name) loadPreset(name);
+        });
+        $('#st_gpt_preset_save').on('click', saveCurrentAsPreset);
+        $('#st_gpt_preset_delete').on('click', deleteSelectedPreset);
 
         // 获取模型列表
         $('#st_gpt_fetch_models').on('click', fetchModels);

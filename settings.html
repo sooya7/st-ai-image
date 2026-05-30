@@ -57,6 +57,14 @@
     <div class="st_ai_tab_content" data-tab="settings">
         <div class="st_ai_settings_form">
             <div class="st_ai_field">
+                <label>API 预设</label>
+                <div style="display:flex;gap:6px;align-items:center">
+                    <select id="st_gpt_preset_select" class="st_ai_input" style="flex:1"></select>
+                    <button id="st_gpt_preset_save" class="st_ai_btn" title="保存当前配置为预设"><i class="fa-solid fa-floppy-disk"></i></button>
+                    <button id="st_gpt_preset_delete" class="st_ai_btn" title="删除选中预设"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            </div>
+            <div class="st_ai_field">
                 <label>中转 API 地址</label>
                 <input type="text" id="st_gpt_image_api_base" class="st_ai_input" placeholder="https://your-proxy.com/v1">
             </div>
