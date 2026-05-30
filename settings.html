@@ -1,0 +1,95 @@
+<div id="st_gpt_fab" title="GPT Image 生图">
+    <i class="fa-solid fa-image"></i>
+</div>
+
+<div id="st_gpt_float_panel" class="st_gpt_hidden">
+    <div class="st_gpt_float_header" id="st_gpt_drag_handle">
+        <div class="st_gpt_float_tabs">
+            <button class="st_gpt_tab active" data-tab="generate"><i class="fa-solid fa-wand-magic-sparkles"></i> 生图</button>
+            <button class="st_gpt_tab" data-tab="gallery"><i class="fa-solid fa-images"></i> 图库</button>
+            <button class="st_gpt_tab" data-tab="settings"><i class="fa-solid fa-gear"></i> 设置</button>
+        </div>
+        <button id="st_gpt_float_close" class="st_gpt_image_btn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- 生图 Tab -->
+    <div class="st_gpt_tab_content active" data-tab="generate">
+        <div class="st_gpt_gen_area">
+            <textarea id="st_gpt_image_prompt" class="st_gpt_textarea" rows="3" placeholder="输入图片描述..."></textarea>
+            <div class="st_gpt_gen_controls">
+                <select id="st_gpt_image_size" class="st_gpt_select">
+                    <option value="1024x1024">1024x1024</option>
+                    <option value="1536x1024">1536x1024</option>
+                    <option value="1024x1536">1024x1536</option>
+                    <option value="auto">Auto</option>
+                </select>
+                <select id="st_gpt_image_quality" class="st_gpt_select">
+                    <option value="auto">Auto</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+                <button id="st_gpt_image_generate_btn" class="st_gpt_btn_primary">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> 生成
+                </button>
+            </div>
+        </div>
+        <div id="st_gpt_gen_result" class="st_gpt_gen_result">
+            <div class="st_gpt_gen_placeholder">生成的图片将显示在这里</div>
+        </div>
+    </div>
+
+    <!-- 图库 Tab -->
+    <div class="st_gpt_tab_content" data-tab="gallery">
+        <div class="st_gpt_gallery_header">
+            <span id="st_gpt_gallery_count" class="st_gpt_gallery_count">0 张图片</span>
+            <button id="st_gpt_image_clear_history" class="st_gpt_image_btn"><i class="fa-solid fa-trash"></i> 清空</button>
+        </div>
+        <div id="st_gpt_image_history_list" class="st_gpt_gallery_grid">
+            <div class="st_gpt_image_empty">暂无生成记录</div>
+        </div>
+    </div>
+
+    <!-- 设置 Tab -->
+    <div class="st_gpt_tab_content" data-tab="settings">
+        <div class="st_gpt_settings_form">
+            <div class="st_gpt_field">
+                <label>中转 API 地址</label>
+                <input type="text" id="st_gpt_image_api_base" class="st_gpt_input" placeholder="https://your-proxy.com/v1">
+            </div>
+            <div class="st_gpt_field">
+                <label>API Key</label>
+                <input type="password" id="st_gpt_image_api_key" class="st_gpt_input" placeholder="sk-...">
+            </div>
+            <div class="st_gpt_field">
+                <label>模型</label>
+                <div style="display:flex;gap:6px;align-items:center">
+                    <input type="text" id="st_gpt_image_model" class="st_gpt_input" placeholder="gpt-image-2" style="flex:1">
+                    <button id="st_gpt_fetch_models" class="st_gpt_image_btn" title="获取模型列表"><i class="fa-solid fa-rotate"></i></button>
+                </div>
+                <select id="st_gpt_model_list" class="st_gpt_input" style="display:none;margin-top:6px"></select>
+            </div>
+            <div class="st_gpt_field">
+                <label class="st_gpt_checkbox">
+                    <input type="checkbox" id="st_gpt_image_enabled">
+                    <span>启用扩展</span>
+                </label>
+            </div>
+            <div class="st_gpt_field">
+                <label class="st_gpt_checkbox">
+                    <input type="checkbox" id="st_gpt_image_auto_detect">
+                    <span>自动识别AI回复中的生图指令</span>
+                </label>
+            </div>
+            <div class="st_gpt_field">
+                <label class="st_gpt_checkbox">
+                    <input type="checkbox" id="st_gpt_image_save_history">
+                    <span>保存生成历史</span>
+                </label>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 图片预览覆盖层 -->
+<div id="st_gpt_image_preview" class="st_gpt_image_preview"></div>
