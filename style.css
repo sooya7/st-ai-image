@@ -180,10 +180,6 @@
     align-items: center;
 }
 
-.st_ai_template_select {
-    min-width: 92px;
-}
-
 .st_ai_select {
     background: rgba(255, 255, 255, 0.05);
     color: rgba(255, 255, 255, 0.8);
@@ -357,26 +353,6 @@
 
 .st_ai_gallery_item:hover img {
     transform: scale(1.05);
-}
-
-.st_ai_gallery_item:hover .st_ai_gallery_overlay {
-    opacity: 1;
-}
-
-.st_ai_gallery_overlay {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 24px 8px 6px;
-    background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
-    opacity: 0;
-    transition: opacity 0.2s;
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.8);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .st_ai_gallery_actions {
@@ -600,14 +576,6 @@
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
 }
 
-.st_gpt_preview_prompt {
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 13px;
-    max-width: 600px;
-    word-break: break-word;
-    text-align: center;
-}
-
 /* --- 聊天内嵌生图按钮 --- */
 .st_gpt_inline_gen {
     display: inline-flex;
@@ -724,10 +692,6 @@
         font-size: 13px;
     }
 
-    .st_ai_template_select {
-        min-width: 100%;
-    }
-
     .st_ai_inline_row {
         gap: 6px;
     }
@@ -754,10 +718,6 @@
         grid-template-columns: repeat(2, 1fr);
         gap: 6px;
         padding: 8px;
-    }
-
-    .st_ai_gallery_overlay {
-        opacity: 1;
     }
 
     .st_ai_gallery_actions {

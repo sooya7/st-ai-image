@@ -18,22 +18,21 @@ assert.strictEqual(
     'long API errors are summarized',
 );
 
-assert.strictEqual(
-    helpers.applyPromptTemplate('', 'character'),
-    '单人角色立绘，清晰五官，完整服装设计，自然站姿，纯色或简洁背景，masterpiece, best quality, highly detailed',
-);
-assert.strictEqual(
-    helpers.applyPromptTemplate('已有提示', 'scene'),
-    '已有提示，场景氛围，明确地点，光影层次，环境细节，情绪氛围，masterpiece, best quality, highly detailed',
-);
-
 assert.ok(
-    helpers.buildImageActionsHtml('result', 'p"rompt', 'https://example.com/a.png').includes('data-action="copy-prompt"'),
-    'result actions include copy prompt',
+    helpers.buildImageActionsHtml('result', 'p"rompt', 'https://example.com/a.png').includes('data-action="download-image"'),
+    'result actions include download image',
 );
 assert.ok(
     !helpers.buildImageActionsHtml('result', 'prompt', 'javascript:alert(1)').includes('javascript:'),
     'unsafe image URLs are not rendered',
+);
+assert.ok(
+    !helpers.buildImageActionsHtml('result', 'prompt', 'https://example.com/a.png').includes('copy-prompt'),
+    'prompt copy action is not rendered',
+);
+assert.ok(
+    !helpers.buildImageActionsHtml('result', 'prompt', 'https://example.com/a.png').includes('reuse-prompt'),
+    'prompt reuse action is not rendered',
 );
 
 assert.strictEqual(helpers.hasImageTag('abc [image]提示[/image] def'), true);

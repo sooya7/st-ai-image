@@ -208,20 +208,6 @@ function summarizeApiError(value) {
     return text.length > 340 ? `${text.slice(0, 340)}...` : text;
 }
 
-const PROMPT_TEMPLATES = {
-    character: '单人角色立绘，清晰五官，完整服装设计，自然站姿，纯色或简洁背景，masterpiece, best quality, highly detailed',
-    scene: '场景氛围，明确地点，光影层次，环境细节，情绪氛围，masterpiece, best quality, highly detailed',
-    cg: '剧情CG插画，人物互动，电影感构图，细腻表情，丰富背景，masterpiece, best quality, highly detailed',
-    item: '道具特写，主体居中，材质细节，干净背景，柔和布光，masterpiece, best quality, highly detailed',
-};
-
-function applyPromptTemplate(currentPrompt, templateKey) {
-    const template = PROMPT_TEMPLATES[templateKey] || '';
-    const current = String(currentPrompt ?? '').trim();
-    if (!template) return current;
-    return current ? `${current}，${template}` : template;
-}
-
 function ensureSafeImageUrl(value) {
     const safeUrl = sanitizeImageUrl(value);
     if (!safeUrl) throw new Error('API 返回了不安全或无法识别的图片地址');
@@ -229,13 +215,10 @@ function ensureSafeImageUrl(value) {
 }
 
 function buildImageActionsHtml(context, prompt, imageUrl) {
-    const safePrompt = escapeAttr(prompt);
     const safeUrl = escapeAttr(sanitizeImageUrl(imageUrl));
     const disabled = safeUrl ? '' : ' disabled';
     return `
         <button type="button" class="st_gpt_image_btn" data-action="download-image" data-context="${escapeAttr(context)}" data-url="${safeUrl}" title="下载图片" aria-label="下载图片"${disabled}><i class="fa-solid fa-download"></i></button>
-        <button type="button" class="st_gpt_image_btn" data-action="copy-prompt" data-prompt="${safePrompt}" title="复制提示词" aria-label="复制提示词"><i class="fa-solid fa-copy"></i></button>
-        <button type="button" class="st_gpt_image_btn" data-action="reuse-prompt" data-prompt="${safePrompt}" title="复用提示词" aria-label="复用提示词"><i class="fa-solid fa-pen-to-square"></i></button>
     `;
 }
 
@@ -391,7 +374,6 @@ async function generateImage(prompt) {
         $result.html(`
             <img src="${escapeAttr(url)}" alt="${escapeAttr(cleanPrompt)}" class="st_gpt_gen_img" data-prompt="${escapeAttr(cleanPrompt)}">
             <div class="st_gpt_gen_result_info">
-                <span>${escapeHtml(cleanPrompt)}</span>
                 <div class="st_ai_action_row">
                     ${buildImageActionsHtml('result', cleanPrompt, url)}
                 </div>
@@ -436,7 +418,6 @@ function showPreview(imageUrl, prompt) {
                 </div>
             </div>
             <img src="${escapeAttr(safeUrl)}" class="st_gpt_preview_img" alt="${escapeAttr(prompt)}">
-            <div class="st_gpt_preview_prompt">${escapeHtml(prompt)}</div>
         </div>
     `).addClass('st_gpt_preview_visible');
 
@@ -459,43 +440,12 @@ function downloadImage(imageUrl) {
     a.remove();
 }
 
-async function copyPrompt(prompt) {
-    const text = String(prompt ?? '');
-    if (!text) return toastr.warning('没有可复制的提示词');
-    try {
-        if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(text);
-        } else {
-            const input = document.createElement('textarea');
-            input.value = text;
-            input.style.position = 'fixed';
-            input.style.opacity = '0';
-            document.body.appendChild(input);
-            input.select();
-            document.execCommand('copy');
-            input.remove();
-        }
-        toastr.success('提示词已复制');
-    } catch (e) {
-        console.error('[st-ai-image] copy prompt error:', e);
-        toastr.error('复制失败');
-    }
-}
-
 function activateTab(tab) {
     $('.st_ai_tab').removeClass('active');
     $(`.st_ai_tab[data-tab="${tab}"]`).addClass('active');
     $('.st_ai_tab_content').removeClass('active');
     $(`.st_ai_tab_content[data-tab="${tab}"]`).addClass('active');
     if (tab === 'gallery') renderGallery();
-}
-
-function reusePrompt(prompt) {
-    const text = String(prompt ?? '').trim();
-    if (!text) return toastr.warning('没有可复用的提示词');
-    activateTab('generate');
-    $('#st_gpt_image_prompt').val(text).trigger('input').focus();
-    toastr.success('已填入提示词');
 }
 
 // ===== 图库 =====
@@ -514,7 +464,6 @@ async function renderGallery() {
         return `
             <div class="st_ai_gallery_item" data-id="${escapeAttr(e.id)}" data-prompt="${escapeAttr(prompt)}" data-url="${escapeAttr(safeUrl)}">
                 <img src="${escapeAttr(safeUrl)}" alt="${escapeAttr(prompt)}" loading="lazy">
-                <div class="st_ai_gallery_overlay">${escapeHtml(prompt)}</div>
                 <div class="st_ai_gallery_actions">
                     ${buildImageActionsHtml('gallery', prompt, safeUrl)}
                     <button type="button" class="st_ai_btn st_gpt_regen" data-id="${escapeAttr(e.id)}" data-prompt="${escapeAttr(prompt)}" title="重新生成" aria-label="重新生成"><i class="fa-solid fa-rotate"></i></button>
@@ -758,30 +707,14 @@ jQuery(async () => {
                 if (p) await generateImage(p);
             }
         });
-        $('#st_gpt_prompt_template').on('change', function () {
-            const templateKey = String($(this).val() || '');
-            if (!templateKey) return;
-            const $prompt = $('#st_gpt_image_prompt');
-            $prompt.val(applyPromptTemplate($prompt.val(), templateKey)).trigger('input').focus();
-            $(this).val('');
-        });
-
         // 图库操作
         $(document).on('click', '.st_ai_gallery_item img', function () {
             const $item = $(this).closest('.st_ai_gallery_item');
-            showPreview($(this).attr('src'), $item.find('.st_ai_gallery_overlay').text());
+            showPreview($(this).attr('src'), $item.data('prompt') || '');
         });
         $(document).on('click', '[data-action="download-image"]', function (e) {
             e.stopPropagation();
             downloadImage($(this).data('url'));
-        });
-        $(document).on('click', '[data-action="copy-prompt"]', async function (e) {
-            e.stopPropagation();
-            await copyPrompt($(this).data('prompt'));
-        });
-        $(document).on('click', '[data-action="reuse-prompt"]', function (e) {
-            e.stopPropagation();
-            reusePrompt($(this).data('prompt'));
         });
         $(document).on('click', '.st_gpt_regen', async function (e) {
             e.stopPropagation();
@@ -860,10 +793,8 @@ if (typeof module !== 'undefined') {
             escapeAttr,
             sanitizeImageUrl,
             summarizeApiError,
-            applyPromptTemplate,
             buildImageActionsHtml,
             hasImageTag,
-            PROMPT_TEMPLATES,
         },
     };
 }
