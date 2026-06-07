@@ -180,6 +180,10 @@
     align-items: center;
 }
 
+.st_ai_template_select {
+    min-width: 92px;
+}
+
 .st_ai_select {
     background: rgba(255, 255, 255, 0.05);
     color: rgba(255, 255, 255, 0.8);
@@ -242,6 +246,17 @@
     box-shadow: none;
 }
 
+.st_ai_btn_primary:focus-visible,
+.st_ai_btn:focus-visible,
+.st_gpt_image_btn:focus-visible,
+.st_ai_tab:focus-visible,
+.st_ai_input:focus-visible,
+.st_ai_select:focus-visible,
+.st_ai_textarea:focus-visible {
+    outline: 2px solid rgba(129, 140, 248, 0.9);
+    outline-offset: 2px;
+}
+
 /* --- 生成结果 --- */
 .st_ai_gen_result {
     padding: 16px;
@@ -274,6 +289,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 10px;
+}
+
+.st_ai_action_row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 /* --- 图库 Tab --- */
@@ -401,6 +424,22 @@
     gap: 14px;
 }
 
+.st_ai_inline_row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.st_ai_flex_fill {
+    flex: 1;
+    min-width: 0;
+}
+
+.st_ai_model_list {
+    display: none;
+    margin-top: 6px;
+}
+
 .st_ai_field label {
     display: block;
     font-size: 12px;
@@ -469,6 +508,37 @@
     background: rgba(255, 255, 255, 0.1);
     color: rgba(255, 255, 255, 0.9);
     border-color: rgba(255, 255, 255, 0.12);
+}
+
+.st_gpt_image_btn {
+    min-width: 32px;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.75);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
+}
+
+.st_gpt_image_btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+.st_gpt_image_btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.st_ai_error_text {
+    color: #f87171;
 }
 
 /* --- 图片预览覆盖层 --- */
@@ -574,6 +644,11 @@
     transform: none;
 }
 
+.st_gpt_inline_gen_error {
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.4);
+}
+
 /* --- 聊天内嵌生成图片 --- */
 .st_gpt_inline_img_wrap {
     display: inline-block;
@@ -647,6 +722,25 @@
         flex: 1;
         min-width: 0;
         font-size: 13px;
+    }
+
+    .st_ai_template_select {
+        min-width: 100%;
+    }
+
+    .st_ai_inline_row {
+        gap: 6px;
+    }
+
+    .st_ai_btn,
+    .st_gpt_image_btn {
+        min-width: 40px;
+        min-height: 40px;
+    }
+
+    .st_ai_gen_result_info {
+        align-items: flex-start;
+        flex-direction: column;
     }
 
     .st_ai_btn_primary {

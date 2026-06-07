@@ -54,7 +54,7 @@ function refreshPresetList() {
     const current = $sel.val();
     $sel.empty().append('<option value="">-- 选择预设 --</option>');
     for (const name of Object.keys(presets).sort()) {
-        $sel.append(`<option value="${name}">${name}</option>`);
+        $sel.append(`<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`);
     }
     if (current && presets[current]) $sel.val(current);
 }
@@ -176,10 +176,71 @@ async function clearHistory() {
     } catch {}
 }
 
-function escapeHtml(t) {
-    const d = document.createElement('div');
-    d.textContent = t;
-    return d.innerHTML;
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    }[ch]));
+}
+
+function escapeAttr(value) {
+    return escapeHtml(value);
+}
+
+function sanitizeImageUrl(value) {
+    const url = String(value ?? '').trim();
+    if (!url) return '';
+    if (/^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\s]+$/i.test(url)) return url;
+    if (/^blob:/i.test(url)) return url;
+    try {
+        const base = typeof window !== 'undefined' && window.location?.href ? window.location.href : 'https://example.invalid/';
+        const parsed = new URL(url, base);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return url;
+    } catch {}
+    return '';
+}
+
+function summarizeApiError(value) {
+    const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+    return text.length > 340 ? `${text.slice(0, 340)}...` : text;
+}
+
+const PROMPT_TEMPLATES = {
+    character: '单人角色立绘，清晰五官，完整服装设计，自然站姿，纯色或简洁背景，masterpiece, best quality, highly detailed',
+    scene: '场景氛围，明确地点，光影层次，环境细节，情绪氛围，masterpiece, best quality, highly detailed',
+    cg: '剧情CG插画，人物互动，电影感构图，细腻表情，丰富背景，masterpiece, best quality, highly detailed',
+    item: '道具特写，主体居中，材质细节，干净背景，柔和布光，masterpiece, best quality, highly detailed',
+};
+
+function applyPromptTemplate(currentPrompt, templateKey) {
+    const template = PROMPT_TEMPLATES[templateKey] || '';
+    const current = String(currentPrompt ?? '').trim();
+    if (!template) return current;
+    return current ? `${current}，${template}` : template;
+}
+
+function ensureSafeImageUrl(value) {
+    const safeUrl = sanitizeImageUrl(value);
+    if (!safeUrl) throw new Error('API 返回了不安全或无法识别的图片地址');
+    return safeUrl;
+}
+
+function buildImageActionsHtml(context, prompt, imageUrl) {
+    const safePrompt = escapeAttr(prompt);
+    const safeUrl = escapeAttr(sanitizeImageUrl(imageUrl));
+    const disabled = safeUrl ? '' : ' disabled';
+    return `
+        <button type="button" class="st_gpt_image_btn" data-action="download-image" data-context="${escapeAttr(context)}" data-url="${safeUrl}" title="下载图片" aria-label="下载图片"${disabled}><i class="fa-solid fa-download"></i></button>
+        <button type="button" class="st_gpt_image_btn" data-action="copy-prompt" data-prompt="${safePrompt}" title="复制提示词" aria-label="复制提示词"><i class="fa-solid fa-copy"></i></button>
+        <button type="button" class="st_gpt_image_btn" data-action="reuse-prompt" data-prompt="${safePrompt}" title="复用提示词" aria-label="复用提示词"><i class="fa-solid fa-pen-to-square"></i></button>
+    `;
+}
+
+function hasImageTag(text) {
+    return /\[image\](.+?)\[\/image\]/s.test(String(text ?? ''));
 }
 
 // ===== API (根据模型自动选择端点) =====
@@ -224,17 +285,16 @@ async function callImageAPI(prompt) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
-        if (!resp.ok) throw new Error(`Gemini API ${resp.status}: ${await resp.text()}`);
+        if (!resp.ok) throw new Error(`Gemini API ${resp.status}: ${summarizeApiError(await resp.text())}`);
         const data = await resp.json();
-        console.log('[st-ai-image] Gemini response:', JSON.stringify(data).slice(0, 1000));
 
         const img = extractImageFromResponse(data);
-        if (img) return img;
+        if (img) return ensureSafeImageUrl(img);
 
         // 给出更明确的错误信息
         const parts = data.candidates?.[0]?.content?.parts;
         const text = parts?.filter(p => p.text).map(p => p.text).join('') || '';
-        throw new Error('模型未返回图片。' + (text ? '回复文本: ' + text.slice(0, 200) : JSON.stringify(data).slice(0, 300)));
+        throw new Error('模型未返回图片。' + (text ? '回复文本: ' + summarizeApiError(text) : summarizeApiError(JSON.stringify(data))));
     }
 
     // OpenAI 兼容模型走标准端点
@@ -246,14 +306,13 @@ async function callImageAPI(prompt) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.apiKey}` },
         body: JSON.stringify(body),
     });
-    if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
+    if (!resp.ok) throw new Error(`API ${resp.status}: ${summarizeApiError(await resp.text())}`);
     const data = await resp.json();
-    console.log('[st-ai-image] API response:', JSON.stringify(data).slice(0, 1000));
 
     const img = extractImageFromResponse(data);
-    if (img) return img;
+    if (img) return ensureSafeImageUrl(img);
 
-    throw new Error('No image data. Response: ' + JSON.stringify(data).slice(0, 500));
+    throw new Error('No image data. Response: ' + summarizeApiError(JSON.stringify(data)));
 }
 
 // ===== 获取模型列表 (自动尝试两种格式) =====
@@ -301,7 +360,7 @@ async function fetchModels() {
 
         $list.empty().show();
         models.forEach(m => {
-            $list.append(`<option value="${m.id}">${m.name || m.id}</option>`);
+            $list.append(`<option value="${escapeAttr(m.id)}">${escapeHtml(m.name || m.id)}</option>`);
         });
         $list.val(s.model);
 
@@ -322,29 +381,29 @@ async function generateImage(prompt) {
     const $btn = $('#st_gpt_image_generate_btn');
     const $result = $('#st_gpt_gen_result');
     $btn.prop('disabled', true);
-    $result.html('<div class="st_gpt_loading"><div class="st_gpt_spinner"></div> 正在生成...</div>');
+    $result.html('<div class="st_ai_loading"><div class="st_ai_spinner"></div> 正在生成...</div>');
 
     try {
-        const url = await callImageAPI(prompt.trim());
-        saveToHistory({ prompt: prompt.trim(), imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size });
+        const cleanPrompt = prompt.trim();
+        const url = await callImageAPI(cleanPrompt);
+        await saveToHistory({ prompt: cleanPrompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size });
 
         $result.html(`
-            <img src="${url}" alt="${escapeHtml(prompt)}" class="st_gpt_gen_img">
+            <img src="${escapeAttr(url)}" alt="${escapeAttr(cleanPrompt)}" class="st_gpt_gen_img" data-prompt="${escapeAttr(cleanPrompt)}">
             <div class="st_gpt_gen_result_info">
-                <span>${escapeHtml(prompt.trim())}</span>
-                <div>
-                    <button class="st_gpt_image_btn" onclick="document.getElementById('st_gpt_dl_link').click()"><i class="fa-solid fa-download"></i></button>
-                    <a id="st_gpt_dl_link" href="${url}" download="ai-image-${Date.now()}.png" style="display:none"></a>
+                <span>${escapeHtml(cleanPrompt)}</span>
+                <div class="st_ai_action_row">
+                    ${buildImageActionsHtml('result', cleanPrompt, url)}
                 </div>
             </div>
         `);
 
-        $result.find('img').on('click', () => showPreview(url, prompt.trim()));
+        $result.find('img').on('click', () => showPreview(url, cleanPrompt));
         toastr.success('图片生成完成', 'GPT Image');
         return url;
     } catch (e) {
         console.error('[st-ai-image]', e);
-        $result.html(`<div class="st_gpt_gen_placeholder" style="color:#f55">生成失败: ${escapeHtml(e.message)}</div>`);
+        $result.html(`<div class="st_ai_gen_placeholder st_ai_error_text">生成失败: ${escapeHtml(e.message)}</div>`);
         toastr.error(e.message, '生成失败');
         return null;
     } finally {
@@ -354,26 +413,89 @@ async function generateImage(prompt) {
 
 // ===== 预览 =====
 function showPreview(imageUrl, prompt) {
+    const safeUrl = sanitizeImageUrl(imageUrl);
+    if (!safeUrl) {
+        toastr.error('图片地址无效，无法预览');
+        return;
+    }
     const $p = $('#st_gpt_image_preview');
+    const closePreview = () => {
+        $p.removeClass('st_gpt_preview_visible').off('.stAiPreview');
+        $(document).off('keydown.stAiPreview');
+    };
+
+    $p.off('.stAiPreview');
+    $(document).off('keydown.stAiPreview');
     $p.html(`
         <div class="st_gpt_preview_content">
             <div class="st_gpt_preview_header">
                 <span class="st_gpt_preview_title">图片预览</span>
-                <div style="display:flex;gap:8px">
-                    <button class="st_gpt_image_btn" id="st_gpt_pv_dl"><i class="fa-solid fa-download"></i></button>
-                    <button class="st_gpt_image_btn" id="st_gpt_pv_close"><i class="fa-solid fa-xmark"></i></button>
+                <div class="st_ai_action_row">
+                    <button type="button" class="st_gpt_image_btn" id="st_gpt_pv_dl" data-url="${escapeAttr(safeUrl)}" title="下载图片" aria-label="下载图片"><i class="fa-solid fa-download"></i></button>
+                    <button type="button" class="st_gpt_image_btn" id="st_gpt_pv_close" title="关闭预览" aria-label="关闭预览"><i class="fa-solid fa-xmark"></i></button>
                 </div>
             </div>
-            <img src="${imageUrl}" class="st_gpt_preview_img">
+            <img src="${escapeAttr(safeUrl)}" class="st_gpt_preview_img" alt="${escapeAttr(prompt)}">
             <div class="st_gpt_preview_prompt">${escapeHtml(prompt)}</div>
         </div>
     `).addClass('st_gpt_preview_visible');
 
-    $('#st_gpt_pv_close').on('click', () => $p.removeClass('st_gpt_preview_visible'));
-    $('#st_gpt_pv_dl').on('click', () => {
-        const a = document.createElement('a'); a.href = imageUrl; a.download = `ai-image-${Date.now()}.png`; a.click();
+    $('#st_gpt_pv_close').off('.stAiPreview').on('click.stAiPreview', closePreview);
+    $('#st_gpt_pv_dl').off('.stAiPreview').on('click.stAiPreview', () => downloadImage(safeUrl));
+    $p.on('click.stAiPreview', (e) => { if (e.target === $p[0]) closePreview(); });
+    $(document).on('keydown.stAiPreview', (e) => {
+        if (e.key === 'Escape') closePreview();
     });
-    $p.on('click', (e) => { if (e.target === $p[0]) $p.removeClass('st_gpt_preview_visible'); });
+}
+
+function downloadImage(imageUrl) {
+    const safeUrl = sanitizeImageUrl(imageUrl);
+    if (!safeUrl) return toastr.error('图片地址无效，无法下载');
+    const a = document.createElement('a');
+    a.href = safeUrl;
+    a.download = `ai-image-${Date.now()}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
+
+async function copyPrompt(prompt) {
+    const text = String(prompt ?? '');
+    if (!text) return toastr.warning('没有可复制的提示词');
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const input = document.createElement('textarea');
+            input.value = text;
+            input.style.position = 'fixed';
+            input.style.opacity = '0';
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            input.remove();
+        }
+        toastr.success('提示词已复制');
+    } catch (e) {
+        console.error('[st-ai-image] copy prompt error:', e);
+        toastr.error('复制失败');
+    }
+}
+
+function activateTab(tab) {
+    $('.st_ai_tab').removeClass('active');
+    $(`.st_ai_tab[data-tab="${tab}"]`).addClass('active');
+    $('.st_ai_tab_content').removeClass('active');
+    $(`.st_ai_tab_content[data-tab="${tab}"]`).addClass('active');
+    if (tab === 'gallery') renderGallery();
+}
+
+function reusePrompt(prompt) {
+    const text = String(prompt ?? '').trim();
+    if (!text) return toastr.warning('没有可复用的提示词');
+    activateTab('generate');
+    $('#st_gpt_image_prompt').val(text).trigger('input').focus();
+    toastr.success('已填入提示词');
 }
 
 // ===== 图库 =====
@@ -383,30 +505,37 @@ async function renderGallery() {
     const history = await getHistory();
     $('#st_gpt_gallery_count').text(`${history.length} 张图片`);
 
-    if (!history.length) return $c.html('<div class="st_gpt_image_empty">暂无生成记录</div>');
+    if (!history.length) return $c.html('<div class="st_ai_image_empty">暂无生成记录</div>');
 
-    $c.html(history.map((e) => `
-        <div class="st_ai_gallery_item" data-id="${e.id}">
-            <img src="${e.imageUrl}" loading="lazy">
-            <div class="st_ai_gallery_overlay">${escapeHtml(e.prompt)}</div>
-            <div class="st_ai_gallery_actions">
-                <button class="st_ai_btn st_gpt_regen" data-id="${e.id}" data-prompt="${escapeHtml(e.prompt)}" title="重新生成"><i class="fa-solid fa-rotate"></i></button>
-                <button class="st_ai_btn st_gpt_del" data-id="${e.id}" title="删除"><i class="fa-solid fa-trash"></i></button>
+    $c.html(history.map((e) => {
+        const safeUrl = sanitizeImageUrl(e.imageUrl);
+        if (!safeUrl) return '';
+        const prompt = String(e.prompt ?? '');
+        return `
+            <div class="st_ai_gallery_item" data-id="${escapeAttr(e.id)}" data-prompt="${escapeAttr(prompt)}" data-url="${escapeAttr(safeUrl)}">
+                <img src="${escapeAttr(safeUrl)}" alt="${escapeAttr(prompt)}" loading="lazy">
+                <div class="st_ai_gallery_overlay">${escapeHtml(prompt)}</div>
+                <div class="st_ai_gallery_actions">
+                    ${buildImageActionsHtml('gallery', prompt, safeUrl)}
+                    <button type="button" class="st_ai_btn st_gpt_regen" data-id="${escapeAttr(e.id)}" data-prompt="${escapeAttr(prompt)}" title="重新生成" aria-label="重新生成"><i class="fa-solid fa-rotate"></i></button>
+                    <button type="button" class="st_ai_btn st_gpt_del" data-id="${escapeAttr(e.id)}" title="删除" aria-label="删除"><i class="fa-solid fa-trash"></i></button>
+                </div>
             </div>
-        </div>
-    `).join(''));
+        `;
+    }).join(''));
 }
 
 // ===== 自动检测：替换聊天中的 [image]...[/image] 为可点击按钮 =====
 function processMessageElement(el) {
+    if (!hasImageTag(el.textContent)) return;
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
     const textNodes = [];
     while (walker.nextNode()) textNodes.push(walker.currentNode);
 
+    let replaced = false;
     for (const node of textNodes) {
         const re = /\[image\](.+?)\[\/image\]/gs;
         if (!re.test(node.textContent)) continue;
-        console.log('[st-ai-image] found [image] tag:', node.textContent.slice(0, 100));
         re.lastIndex = 0;
 
         const frag = document.createDocumentFragment();
@@ -419,6 +548,7 @@ function processMessageElement(el) {
             const btn = document.createElement('button');
             btn.className = 'st_gpt_inline_gen';
             btn.dataset.prompt = m[1].trim();
+            btn.type = 'button';
             btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 生成图片';
             frag.appendChild(btn);
             lastIdx = re.lastIndex;
@@ -427,7 +557,9 @@ function processMessageElement(el) {
             frag.appendChild(document.createTextNode(node.textContent.slice(lastIdx)));
         }
         node.parentNode.replaceChild(frag, node);
+        replaced = true;
     }
+    if (replaced) el.dataset.stGptProcessed = '1';
 }
 
 let scanTimer = null;
@@ -437,10 +569,8 @@ function scheduleScan() {
         const s = getSettings();
         if (!s.enabled || !s.autoDetect) return;
         const els = document.querySelectorAll('.mes_text');
-        console.log('[st-ai-image] scanning', els.length, 'messages');
         els.forEach(el => {
-            delete el.dataset.stGptProcessed;
-            processMessageElement(el);
+            if (hasImageTag(el.textContent)) processMessageElement(el);
         });
     }, 300);
 }
@@ -461,6 +591,7 @@ function initAutoDetect() {
 }
 
 // ===== 初始化 =====
+if (typeof window !== 'undefined' && typeof document !== 'undefined' && typeof jQuery === 'function') {
 jQuery(async () => {
     try {
         const s = getSettings();
@@ -551,6 +682,7 @@ jQuery(async () => {
             dragHandle.style.cursor = 'move';
 
             function startDrag(clientX, clientY) {
+                if (window.matchMedia?.('(max-width: 600px)').matches) return;
                 dragging = true;
                 const rect = dragPanel.getBoundingClientRect();
                 dragStartX = clientX;
@@ -566,8 +698,12 @@ jQuery(async () => {
 
             function moveDrag(clientX, clientY) {
                 if (!dragging) return;
-                dragPanel.style.left = (panelStartX + clientX - dragStartX) + 'px';
-                dragPanel.style.top = (panelStartY + clientY - dragStartY) + 'px';
+                const maxLeft = Math.max(0, window.innerWidth - dragPanel.offsetWidth);
+                const maxTop = Math.max(0, window.innerHeight - dragPanel.offsetHeight);
+                const nextLeft = Math.min(Math.max(0, panelStartX + clientX - dragStartX), maxLeft);
+                const nextTop = Math.min(Math.max(0, panelStartY + clientY - dragStartY), maxTop);
+                dragPanel.style.left = nextLeft + 'px';
+                dragPanel.style.top = nextTop + 'px';
             }
 
             function endDrag() { dragging = false; }
@@ -607,11 +743,7 @@ jQuery(async () => {
         // Tab 切换
         $('.st_ai_tab').on('click', function () {
             const tab = $(this).data('tab');
-            $('.st_ai_tab').removeClass('active');
-            $(this).addClass('active');
-            $('.st_ai_tab_content').removeClass('active');
-            $(`.st_ai_tab_content[data-tab="${tab}"]`).addClass('active');
-            if (tab === 'gallery') renderGallery();
+            activateTab(tab);
         });
 
         // 生成
@@ -626,11 +758,30 @@ jQuery(async () => {
                 if (p) await generateImage(p);
             }
         });
+        $('#st_gpt_prompt_template').on('change', function () {
+            const templateKey = String($(this).val() || '');
+            if (!templateKey) return;
+            const $prompt = $('#st_gpt_image_prompt');
+            $prompt.val(applyPromptTemplate($prompt.val(), templateKey)).trigger('input').focus();
+            $(this).val('');
+        });
 
         // 图库操作
         $(document).on('click', '.st_ai_gallery_item img', function () {
             const $item = $(this).closest('.st_ai_gallery_item');
             showPreview($(this).attr('src'), $item.find('.st_ai_gallery_overlay').text());
+        });
+        $(document).on('click', '[data-action="download-image"]', function (e) {
+            e.stopPropagation();
+            downloadImage($(this).data('url'));
+        });
+        $(document).on('click', '[data-action="copy-prompt"]', async function (e) {
+            e.stopPropagation();
+            await copyPrompt($(this).data('prompt'));
+        });
+        $(document).on('click', '[data-action="reuse-prompt"]', function (e) {
+            e.stopPropagation();
+            reusePrompt($(this).data('prompt'));
         });
         $(document).on('click', '.st_gpt_regen', async function (e) {
             e.stopPropagation();
@@ -656,7 +807,7 @@ jQuery(async () => {
 
             // 清理旧错误提示，重置样式
             btn.closest('.mes_text')?.querySelectorAll('.st_gpt_inline_error').forEach(e => e.remove());
-            btn.style.cssText = '';
+            btn.classList.remove('st_gpt_inline_gen_error');
 
             // 按钮变为加载状态
             btn.disabled = true;
@@ -664,18 +815,17 @@ jQuery(async () => {
 
             try {
                 const url = await callImageAPI(prompt);
-                saveToHistory({ prompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size });
+                await saveToHistory({ prompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size });
 
                 // 用图片替换按钮
                 const wrapper = document.createElement('span');
                 wrapper.className = 'st_gpt_inline_img_wrap';
-                wrapper.innerHTML = `<img src="${url}" class="st_gpt_inline_img" alt="${escapeHtml(prompt)}">`;
+                wrapper.innerHTML = `<img src="${escapeAttr(url)}" class="st_gpt_inline_img" alt="${escapeAttr(prompt)}">`;
                 btn.replaceWith(wrapper);
             } catch (e) {
                 console.error('[st-ai-image] inline gen error:', e);
                 btn.innerHTML = '<i class="fa-solid fa-rotate-right"></i> 重试';
-                btn.style.color = '#f87171';
-                btn.style.borderColor = 'rgba(248,113,113,0.4)';
+                btn.classList.add('st_gpt_inline_gen_error');
                 btn.disabled = false;
 
                 // 错误提示条
@@ -701,3 +851,19 @@ jQuery(async () => {
         console.error('[st-ai-image] init failed:', e);
     }
 });
+}
+
+if (typeof module !== 'undefined') {
+    module.exports = {
+        __stAiImageTest__: {
+            escapeHtml,
+            escapeAttr,
+            sanitizeImageUrl,
+            summarizeApiError,
+            applyPromptTemplate,
+            buildImageActionsHtml,
+            hasImageTag,
+            PROMPT_TEMPLATES,
+        },
+    };
+}
