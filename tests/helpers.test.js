@@ -67,6 +67,10 @@ assert.deepStrictEqual(
     helpers.parseInlineImageMarker('[st-ai-image id="7" src="%2Fuser%2Fimages%2FAI%20Image%20Generator%2Fst-ai-image-1780885283397.png"]'),
     { id: '7', imageUrl: '/user/images/AI Image Generator/st-ai-image-1780885283397.png' },
 );
+assert.deepStrictEqual(
+    helpers.parseInlineImageMarker('[st-ai-image id="1" src="%2Fuser%2Fimages%2FAI%20Image%20Generator%2Fst-ai-image-1780887219024.png"]'),
+    { id: '1', imageUrl: '/user/images/AI Image Generator/st-ai-image-1780887219024.png' },
+);
 assert.strictEqual(
     helpers.shouldProcessInlineText('abc [st-ai-image id="42"] def', { enabled: true, autoDetect: false }),
     true,

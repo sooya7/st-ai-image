@@ -21,6 +21,8 @@ const defaultSettings = {
 
 const inlineTasks = new Map();
 const historyEnsureTasks = new Map();
+let inlineScanInterval = null;
+let inlineScanIntervalStopAt = 0;
 
 
 // localStorage 存储设置（设置很小，不需要 IndexedDB）
@@ -846,7 +848,8 @@ function createInlineImageWrapper(markerInfo) {
 
 function processMessageById(messageId, { allowImageRequests = false } = {}) {
     if (!Number.isInteger(messageId) || typeof document === 'undefined') return false;
-    const el = document.querySelector(`#chat .mes[mesid="${messageId}"] .mes_text`);
+    const el = document.querySelector(`#chat .mes[mesid="${messageId}"] .mes_text`)
+        || document.querySelector(`#chat .mes[mesid="${messageId}"]`);
     if (!el) return false;
     processMessageElement(el, { allowImageRequests });
     return true;
@@ -920,10 +923,22 @@ function processMessageElement(el, { allowImageRequests = true } = {}) {
     if (replaced) el.dataset.stGptProcessed = '1';
 }
 
+function getInlineScanElements() {
+    const roots = Array.from(document.querySelectorAll('#chat .mes_text, #chat .mes'));
+    const seen = new Set();
+    return roots.filter((el) => {
+        if (!el?.textContent || !hasInlineRenderableTag(el.textContent)) return false;
+        if (el.classList?.contains('mes') && el.querySelector('.mes_text')?.textContent?.match(/\[st-ai-image\b|\[image\]/)) return false;
+        if (seen.has(el)) return false;
+        seen.add(el);
+        return true;
+    });
+}
+
 function scanInlineMessages() {
     const s = getSettings();
     const allowImageRequests = !!s.enabled;
-    const els = document.querySelectorAll('.mes_text');
+    const els = getInlineScanElements();
     els.forEach(el => {
         if (shouldProcessInlineText(el.textContent, s)) processMessageElement(el, { allowImageRequests });
     });
@@ -939,7 +954,20 @@ function scheduleScan(delay = 300) {
 }
 
 function scanInlineMessagesBurst() {
-    [0, 150, 600, 1500].forEach((delay) => setTimeout(scanInlineMessages, delay));
+    [0, 150, 600, 1500, 3000, 6000].forEach((delay) => setTimeout(scanInlineMessages, delay));
+    startInlineScanInterval();
+}
+
+function startInlineScanInterval(durationMs = 30000) {
+    inlineScanIntervalStopAt = Math.max(inlineScanIntervalStopAt, Date.now() + durationMs);
+    if (inlineScanInterval) return;
+    inlineScanInterval = setInterval(() => {
+        scanInlineMessages();
+        if (Date.now() >= inlineScanIntervalStopAt) {
+            clearInterval(inlineScanInterval);
+            inlineScanInterval = null;
+        }
+    }, 2000);
 }
 
 let inlineObserver = null;
