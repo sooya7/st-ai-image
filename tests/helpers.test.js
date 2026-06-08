@@ -107,5 +107,9 @@ assert.deepStrictEqual(
     helpers.extractMarkdownImages('abc ![cat](/user/images/AI%20Image%20Generator/a.png) def'),
     [{ prompt: 'cat', imageUrl: '/user/images/AI Image Generator/a.png' }],
 );
+assert.strictEqual(
+    helpers.normalizeGalleryImageUrl('https://example.test/user/images/AI%20Image%20Generator/a.png'),
+    '/user/images/AI Image Generator/a.png',
+);
 
 console.log('helpers.test.js passed');

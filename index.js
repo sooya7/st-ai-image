@@ -293,6 +293,22 @@ function getStableInlineImageUrl(imageUrl) {
     return safeUrl;
 }
 
+function normalizeGalleryImageUrl(imageUrl) {
+    const safeUrl = sanitizeImageUrl(imageUrl);
+    if (!safeUrl) return '';
+    try {
+        const base = typeof window !== 'undefined' && window.location?.href ? window.location.href : 'https://example.test/';
+        const parsed = new URL(safeUrl, base);
+        const decodedPath = decodeURI(parsed.pathname);
+        if (/^\/user\/images\//i.test(decodedPath)) return decodedPath + parsed.search + parsed.hash;
+    } catch {}
+    return safeUrl;
+}
+
+function isUserImagesUrl(imageUrl) {
+    return /^\/user\/images\//i.test(normalizeGalleryImageUrl(imageUrl));
+}
+
 async function uploadImageToSillyTavernGallery(imageUrl) {
     let dataImage = parseDataImageUrl(imageUrl);
     if (!dataImage) {
@@ -331,20 +347,20 @@ async function saveGeneratedImage(entry, { force = false } = {}) {
         console.warn('[st-ai-image] upload to SillyTavern gallery failed:', e);
     }
 
-    if (serverImageUrl) imageUrl = serverImageUrl;
+    if (serverImageUrl) imageUrl = normalizeGalleryImageUrl(serverImageUrl);
     const saved = await saveToHistory({ ...entry, imageUrl }, { force });
     return { saved, imageUrl, serverImageUrl };
 }
 
 async function findHistoryByImageUrl(imageUrl) {
-    const safeUrl = sanitizeImageUrl(imageUrl);
+    const safeUrl = normalizeGalleryImageUrl(imageUrl);
     if (!safeUrl) return null;
     const history = await getHistory();
-    return history.find((item) => sanitizeImageUrl(item.imageUrl) === safeUrl) || null;
+    return history.find((item) => normalizeGalleryImageUrl(item.imageUrl) === safeUrl) || null;
 }
 
 async function ensureHistoryEntryForImageUrl(imageUrl, defaults = {}) {
-    const safeUrl = sanitizeImageUrl(imageUrl);
+    const safeUrl = normalizeGalleryImageUrl(imageUrl);
     if (!safeUrl) return null;
     if (historyEnsureTasks.has(safeUrl)) return await historyEnsureTasks.get(safeUrl);
 
@@ -369,10 +385,26 @@ async function ensureHistoryEntryForImageUrl(imageUrl, defaults = {}) {
 }
 
 async function syncMarkdownImagesToHistoryFromText(text) {
-    const images = extractMarkdownImages(text).filter((image) => /\/user\/images\//i.test(image.imageUrl));
+    const images = extractMarkdownImages(text).filter((image) => isUserImagesUrl(image.imageUrl));
+    for (const image of images) {
+        await ensureHistoryEntryForImageUrl(normalizeGalleryImageUrl(image.imageUrl), { prompt: image.prompt });
+    }
+}
+
+async function syncRenderedChatImagesToHistory() {
+    if (typeof document === 'undefined') return false;
+    const images = Array.from(document.querySelectorAll('#chat .mes_text img, #chat .mes img'))
+        .map((img) => ({
+            prompt: img.getAttribute('alt') || img.closest?.('.mes')?.querySelector?.('.name_text')?.textContent || 'AI Image',
+            imageUrl: normalizeGalleryImageUrl(img.getAttribute('src') || img.currentSrc || img.src),
+        }))
+        .filter((image) => isUserImagesUrl(image.imageUrl));
+
     for (const image of images) {
         await ensureHistoryEntryForImageUrl(image.imageUrl, { prompt: image.prompt });
     }
+    if (images.length) renderGallery();
+    return images.length > 0;
 }
 
 async function syncMarkdownImagesInChatToHistory() {
@@ -392,6 +424,7 @@ async function syncMarkdownImagesInChatToHistory() {
                 }
             }
         }
+        await syncRenderedChatImagesToHistory();
         renderGallery();
         return true;
     })();
@@ -1096,6 +1129,7 @@ function initAutoDetect() {
     scanInlineMessagesBurst();
     [0, 1000, 3000].forEach((delay) => setTimeout(() => migrateInlineMarkersInChat(), delay));
     [1500, 4000].forEach((delay) => setTimeout(() => syncMarkdownImagesInChatToHistory(), delay));
+    [2000, 5000, 10000].forEach((delay) => setTimeout(() => syncRenderedChatImagesToHistory(), delay));
 
     const target = document.body || document.getElementById('chat');
     if (!target) {
@@ -1388,6 +1422,7 @@ jQuery(async () => {
                 btn.replaceWith(wrapper);
                 const markerUrl = getStableInlineImageUrl(serverImageUrl || imageUrl);
                 if (markerUrl) {
+                    await ensureHistoryEntryForImageUrl(markerUrl, { prompt, model: s.model, size: s.size });
                     const persisted = await persistInlineImageInMessage(Number.isInteger(messageId) ? messageId : null, originalTag, { id: saved?.id, imageUrl: markerUrl, prompt });
                     if (!persisted) toastr.warning('图片已进图库，但当前消息没有写回聊天记录');
                 } else {
@@ -1442,6 +1477,7 @@ if (typeof module !== 'undefined') {
             replaceFirstImageRequest,
             replaceInlineImageMarkersWithMarkdown,
             extractMarkdownImages,
+            normalizeGalleryImageUrl,
         },
     };
 }
