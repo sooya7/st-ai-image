@@ -435,16 +435,31 @@ function ensureSafeImageUrl(value) {
     return safeUrl;
 }
 
+function escapeMarkdownAlt(value) {
+    return String(value ?? 'AI Image')
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/\\/g, '\\\\')
+        .replace(/\]/g, '\\]')
+        .trim() || 'AI Image';
+}
+
+function formatMarkdownImageUrl(value) {
+    const safeUrl = sanitizeImageUrl(value);
+    if (!safeUrl) return '';
+    if (/^data:/i.test(safeUrl)) return safeUrl;
+    return encodeURI(safeUrl).replace(/[()]/g, (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function createMarkdownImageMarkup(imageUrl, prompt = '') {
+    const url = formatMarkdownImageUrl(imageUrl);
+    if (!url) return '';
+    return `![${escapeMarkdownAlt(prompt || 'AI Image')}](${url})`;
+}
+
 function createInlineImageMarker(id) {
     if (id && typeof id === 'object') {
         const safeUrl = sanitizeImageUrl(id.imageUrl);
-        const safeId = String(id.id ?? '').replace(/[^a-zA-Z0-9_.:-]/g, '');
-        if (safeUrl) {
-            const attrs = [];
-            if (safeId) attrs.push(`id="${safeId}"`);
-            attrs.push(`src="${encodeURIComponent(safeUrl)}"`);
-            return `[st-ai-image ${attrs.join(' ')}]`;
-        }
+        if (safeUrl) return createMarkdownImageMarkup(safeUrl, id.prompt);
         id = id.id;
     }
     const safeId = String(id ?? '').replace(/[^a-zA-Z0-9_.:-]/g, '');
@@ -469,6 +484,14 @@ function parseInlineImageMarker(marker) {
         id: rawId.replace(/[^a-zA-Z0-9_.:-]/g, ''),
         imageUrl,
     };
+}
+
+function replaceInlineImageMarkersWithMarkdown(text) {
+    INLINE_IMAGE_MARKER_RE.lastIndex = 0;
+    return String(text ?? '').replace(INLINE_IMAGE_MARKER_RE, (marker) => {
+        const info = parseInlineImageMarker(marker);
+        return info.imageUrl ? createMarkdownImageMarkup(info.imageUrl) : marker;
+    });
 }
 
 function hasInlineImageMarker(text) {
@@ -884,6 +907,42 @@ async function persistInlineImageInMessage(messageId, originalTag, markerData) {
     }
 }
 
+async function migrateInlineMarkersInChat() {
+    const ctx = getSillyTavernContext();
+    if (!ctx?.chat?.length) return false;
+
+    let changed = false;
+    ctx.chat.forEach((message, messageId) => {
+        if (!message) return;
+        let messageChanged = false;
+        if (typeof message.mes === 'string' && hasInlineImageMarker(message.mes)) {
+            const next = replaceInlineImageMarkersWithMarkdown(message.mes);
+            if (next !== message.mes) {
+                message.mes = next;
+                messageChanged = true;
+            }
+        }
+        if (Array.isArray(message.swipes)) {
+            message.swipes = message.swipes.map((swipe) => {
+                if (typeof swipe !== 'string' || !hasInlineImageMarker(swipe)) return swipe;
+                const next = replaceInlineImageMarkersWithMarkdown(swipe);
+                if (next !== swipe) messageChanged = true;
+                return next;
+            });
+        }
+        if (messageChanged) {
+            changed = true;
+            ctx.updateMessageBlock?.(messageId, message);
+        }
+    });
+
+    if (changed) {
+        await ctx.saveChat?.();
+        scanInlineMessagesBurst();
+    }
+    return changed;
+}
+
 function processMessageElement(el, { allowImageRequests = true } = {}) {
     if (!hasInlineRenderableTag(el.textContent)) return;
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
@@ -975,6 +1034,7 @@ let inlineScanEventsBound = false;
 function initAutoDetect() {
     console.log('[st-ai-image] initAutoDetect called');
     scanInlineMessagesBurst();
+    [0, 1000, 3000].forEach((delay) => setTimeout(() => migrateInlineMarkersInChat(), delay));
 
     const target = document.body || document.getElementById('chat');
     if (!target) {
@@ -1267,7 +1327,7 @@ jQuery(async () => {
                 btn.replaceWith(wrapper);
                 const markerUrl = getStableInlineImageUrl(serverImageUrl || imageUrl);
                 if (markerUrl) {
-                    const persisted = await persistInlineImageInMessage(Number.isInteger(messageId) ? messageId : null, originalTag, { id: saved?.id, imageUrl: markerUrl });
+                    const persisted = await persistInlineImageInMessage(Number.isInteger(messageId) ? messageId : null, originalTag, { id: saved?.id, imageUrl: markerUrl, prompt });
                     if (!persisted) toastr.warning('图片已进图库，但当前消息没有写回聊天记录');
                 } else {
                     toastr.warning('图片已显示，但没有可持久保存的地址，刷新后需要重新生成');
@@ -1319,6 +1379,7 @@ if (typeof module !== 'undefined') {
             hasInlineImageMarker,
             shouldProcessInlineText,
             replaceFirstImageRequest,
+            replaceInlineImageMarkersWithMarkdown,
         },
     };
 }
