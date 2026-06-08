@@ -47,6 +47,10 @@ assert.strictEqual(
     helpers.createInlineImageMarker({ imageUrl: 'user/images/AI Image Generator/a.png' }),
     '[st-ai-image src="user%2Fimages%2FAI%20Image%20Generator%2Fa.png"]',
 );
+assert.strictEqual(
+    helpers.createInlineImageMarker({ id: 7, imageUrl: 'user/images/AI Image Generator/a.png' }),
+    '[st-ai-image id="7" src="user%2Fimages%2FAI%20Image%20Generator%2Fa.png"]',
+);
 assert.strictEqual(helpers.hasInlineImageMarker('abc [st-ai-image id="42"] def'), true);
 assert.strictEqual(helpers.hasInlineImageMarker('abc [st-ai-image src="user%2Fimages%2Fa.png"] def'), true);
 const encodedServerMarker = '[st-ai-image src="%2Fuser%2Fimages%2FAI%20Image%20Generator%2Fst-ai-image-1780885283397.png"]';
@@ -58,6 +62,10 @@ assert.deepStrictEqual(
 assert.deepStrictEqual(
     helpers.parseInlineImageMarker(encodedServerMarker),
     { id: '', imageUrl: '/user/images/AI Image Generator/st-ai-image-1780885283397.png' },
+);
+assert.deepStrictEqual(
+    helpers.parseInlineImageMarker('[st-ai-image id="7" src="%2Fuser%2Fimages%2FAI%20Image%20Generator%2Fst-ai-image-1780885283397.png"]'),
+    { id: '7', imageUrl: '/user/images/AI Image Generator/st-ai-image-1780885283397.png' },
 );
 assert.strictEqual(
     helpers.shouldProcessInlineText('abc [st-ai-image id="42"] def', { enabled: true, autoDetect: false }),

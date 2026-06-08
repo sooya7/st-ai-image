@@ -4,6 +4,7 @@ const extensionFolder = `scripts/extensions/third-party/${extensionName}`;
 const DB_NAME = 'st_ai_image_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'history';
+const FALLBACK_HISTORY_KEY = `${extensionName}_history_fallback`;
 const IMAGE_TAG_RE = /\[image\]([\s\S]+?)\[\/image\]/g;
 const INLINE_IMAGE_MARKER_RE = /\[st-ai-image\b[^\]]*\]/g;
 
@@ -19,6 +20,7 @@ const defaultSettings = {
 };
 
 const inlineTasks = new Map();
+const historyEnsureTasks = new Map();
 
 
 // localStorage 存储设置（设置很小，不需要 IndexedDB）
@@ -117,7 +119,57 @@ function openDB() {
     });
 }
 
-async function getHistory() {
+function normalizeHistoryEntry(entry, id = entry?.id) {
+    const item = {
+        prompt: String(entry?.prompt ?? ''),
+        imageUrl: sanitizeImageUrl(entry?.imageUrl),
+        timestamp: Number(entry?.timestamp || Date.now()),
+        model: entry?.model,
+        size: entry?.size,
+    };
+    if (id !== undefined && id !== null && id !== '') item.id = id;
+    return item;
+}
+
+function mergeHistoryItems(items) {
+    const seen = new Set();
+    return (Array.isArray(items) ? items : [])
+        .map((item) => normalizeHistoryEntry(item))
+        .filter((item) => item.imageUrl)
+        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+        .filter((item) => {
+            const key = item.imageUrl || `id:${item.id}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+}
+
+function getFallbackHistory() {
+    if (typeof localStorage === 'undefined') return [];
+    try {
+        const raw = localStorage.getItem(FALLBACK_HISTORY_KEY);
+        return mergeHistoryItems(JSON.parse(raw || '[]'));
+    } catch {
+        return [];
+    }
+}
+
+function saveFallbackHistoryEntry(entry) {
+    if (typeof localStorage === 'undefined') return null;
+    const item = normalizeHistoryEntry(entry, entry?.id || `fallback-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    if (!item.imageUrl) return null;
+    try {
+        const items = mergeHistoryItems([item, ...getFallbackHistory()]).slice(0, 200);
+        localStorage.setItem(FALLBACK_HISTORY_KEY, JSON.stringify(items));
+        return item;
+    } catch (e) {
+        console.error('[st-ai-image] fallback history save error:', e);
+        return null;
+    }
+}
+
+async function getIndexedDbHistory() {
     try {
         const db = await openDB();
         return new Promise((resolve, reject) => {
@@ -134,13 +186,23 @@ async function getHistory() {
     } catch { return []; }
 }
 
+async function getHistory() {
+    const indexedDbHistory = await getIndexedDbHistory();
+    return mergeHistoryItems([...indexedDbHistory, ...getFallbackHistory()]);
+}
+
 async function getHistoryItem(id) {
+    const fallbackItem = getFallbackHistory().find((item) => String(item.id) === String(id));
+    if (fallbackItem) return fallbackItem;
+    const numericId = Number(id);
+    if (!Number.isInteger(numericId)) return null;
+
     try {
         const db = await openDB();
         return new Promise((resolve) => {
             const tx = db.transaction(STORE_NAME, 'readonly');
             const store = tx.objectStore(STORE_NAME);
-            const req = store.get(Number(id));
+            const req = store.get(numericId);
             req.onsuccess = () => resolve(req.result || null);
             req.onerror = () => resolve(null);
         });
@@ -148,13 +210,7 @@ async function getHistoryItem(id) {
 }
 
 async function addHistoryEntry(entry) {
-    const item = {
-        prompt: entry.prompt,
-        imageUrl: entry.imageUrl,
-        timestamp: entry.timestamp || Date.now(),
-        model: entry.model,
-        size: entry.size,
-    };
+    const item = normalizeHistoryEntry(entry, undefined);
     const db = await openDB();
     return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -181,7 +237,9 @@ async function saveToHistory(entry, { force = false } = {}) {
         return saved;
     } catch (e) {
         console.error('[st-ai-image] saveToHistory error:', e);
-        return null;
+        const fallback = saveFallbackHistoryEntry(entry);
+        if (fallback) renderGallery();
+        return fallback;
     }
 }
 
@@ -274,6 +332,38 @@ async function saveGeneratedImage(entry, { force = false } = {}) {
     return { saved, imageUrl, serverImageUrl };
 }
 
+async function findHistoryByImageUrl(imageUrl) {
+    const safeUrl = sanitizeImageUrl(imageUrl);
+    if (!safeUrl) return null;
+    const history = await getHistory();
+    return history.find((item) => sanitizeImageUrl(item.imageUrl) === safeUrl) || null;
+}
+
+async function ensureHistoryEntryForImageUrl(imageUrl, defaults = {}) {
+    const safeUrl = sanitizeImageUrl(imageUrl);
+    if (!safeUrl) return null;
+    if (historyEnsureTasks.has(safeUrl)) return await historyEnsureTasks.get(safeUrl);
+
+    const task = (async () => {
+        const existing = await findHistoryByImageUrl(safeUrl);
+        if (existing) return existing;
+        return await saveToHistory({
+            prompt: defaults.prompt || '',
+            imageUrl: safeUrl,
+            timestamp: defaults.timestamp || Date.now(),
+            model: defaults.model,
+            size: defaults.size,
+        }, { force: true });
+    })();
+
+    historyEnsureTasks.set(safeUrl, task);
+    try {
+        return await task;
+    } finally {
+        historyEnsureTasks.delete(safeUrl);
+    }
+}
+
 async function trimHistory() {
     try {
         const items = await getHistory();
@@ -346,7 +436,13 @@ function ensureSafeImageUrl(value) {
 function createInlineImageMarker(id) {
     if (id && typeof id === 'object') {
         const safeUrl = sanitizeImageUrl(id.imageUrl);
-        if (safeUrl) return `[st-ai-image src="${encodeURIComponent(safeUrl)}"]`;
+        const safeId = String(id.id ?? '').replace(/[^a-zA-Z0-9_.:-]/g, '');
+        if (safeUrl) {
+            const attrs = [];
+            if (safeId) attrs.push(`id="${safeId}"`);
+            attrs.push(`src="${encodeURIComponent(safeUrl)}"`);
+            return `[st-ai-image ${attrs.join(' ')}]`;
+        }
         id = id.id;
     }
     const safeId = String(id ?? '').replace(/[^a-zA-Z0-9_.:-]/g, '');
@@ -722,7 +818,9 @@ function renderInlineImageContent(wrapper, entry) {
 async function hydrateInlineImage(wrapper, markerInfo) {
     const info = markerInfo && typeof markerInfo === 'object' ? markerInfo : { id: String(markerInfo ?? ''), imageUrl: '' };
     if (info.imageUrl) {
-        renderInlineImageContent(wrapper, { id: info.id, imageUrl: info.imageUrl });
+        let entry = info.id ? await getHistoryItem(info.id) : null;
+        if (!entry) entry = await ensureHistoryEntryForImageUrl(info.imageUrl);
+        renderInlineImageContent(wrapper, entry || { id: info.id, imageUrl: info.imageUrl });
         return;
     }
 
@@ -775,7 +873,7 @@ async function persistInlineImageInMessage(messageId, originalTag, markerData) {
         ctx.updateMessageBlock?.(messageId, message);
         processMessageById(messageId, { allowImageRequests: false });
         await ctx.saveChat?.();
-        scheduleScan();
+        scanInlineMessagesBurst();
         return true;
     } catch (e) {
         console.error('[st-ai-image] persist inline image error:', e);
@@ -822,32 +920,70 @@ function processMessageElement(el, { allowImageRequests = true } = {}) {
     if (replaced) el.dataset.stGptProcessed = '1';
 }
 
-let scanTimer = null;
-function scheduleScan() {
-    if (scanTimer) clearTimeout(scanTimer);
-    scanTimer = setTimeout(() => {
-        const s = getSettings();
-        const allowImageRequests = !!s.enabled;
-        const els = document.querySelectorAll('.mes_text');
-        els.forEach(el => {
-            if (shouldProcessInlineText(el.textContent, s)) processMessageElement(el, { allowImageRequests });
-        });
-    }, 300);
+function scanInlineMessages() {
+    const s = getSettings();
+    const allowImageRequests = !!s.enabled;
+    const els = document.querySelectorAll('.mes_text');
+    els.forEach(el => {
+        if (shouldProcessInlineText(el.textContent, s)) processMessageElement(el, { allowImageRequests });
+    });
 }
 
+let scanTimer = null;
+function scheduleScan(delay = 300) {
+    if (scanTimer) clearTimeout(scanTimer);
+    scanTimer = setTimeout(() => {
+        scanTimer = null;
+        scanInlineMessages();
+    }, delay);
+}
+
+function scanInlineMessagesBurst() {
+    [0, 150, 600, 1500].forEach((delay) => setTimeout(scanInlineMessages, delay));
+}
+
+let inlineObserver = null;
+let inlineScanEventsBound = false;
 function initAutoDetect() {
     console.log('[st-ai-image] initAutoDetect called');
-    scheduleScan();
+    scanInlineMessagesBurst();
 
-    const chat = document.getElementById('chat');
-    if (!chat) {
-        console.warn('[st-ai-image] #chat element not found');
+    const target = document.body || document.getElementById('chat');
+    if (!target) {
+        console.warn('[st-ai-image] scan target not found');
         return;
     }
 
-    const observer = new MutationObserver(scheduleScan);
-    observer.observe(chat, { childList: true, subtree: true, characterData: true });
-    console.log('[st-ai-image] MutationObserver attached to #chat');
+    inlineObserver?.disconnect?.();
+    inlineObserver = new MutationObserver(() => scheduleScan(100));
+    inlineObserver.observe(target, { childList: true, subtree: true, characterData: true });
+
+    if (!inlineScanEventsBound) {
+        inlineScanEventsBound = true;
+        window.addEventListener('focus', scanInlineMessagesBurst);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) scanInlineMessagesBurst();
+        });
+
+        const ctx = getSillyTavernContext();
+        const eventSource = ctx?.eventSource || globalThis.eventSource;
+        const eventTypes = ctx?.event_types || globalThis.event_types || {};
+        [
+            'CHAT_CHANGED',
+            'MESSAGE_RECEIVED',
+            'MESSAGE_SENT',
+            'MESSAGE_EDITED',
+            'MESSAGE_SWIPED',
+            'GENERATION_ENDED',
+            'CHARACTER_MESSAGE_RENDERED',
+            'USER_MESSAGE_RENDERED',
+        ].forEach((name) => {
+            const eventName = eventTypes?.[name];
+            if (eventName && typeof eventSource?.on === 'function') eventSource.on(eventName, scanInlineMessagesBurst);
+        });
+    }
+
+    console.log('[st-ai-image] inline scanner attached');
 }
 
 // ===== 初始化 =====
