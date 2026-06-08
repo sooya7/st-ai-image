@@ -841,12 +841,18 @@ function downloadImage(imageUrl) {
     a.remove();
 }
 
-function activateTab(tab) {
+async function refreshGalleryFromChat() {
+    await syncMarkdownImagesInChatToHistory();
+    await syncRenderedChatImagesToHistory();
+    await renderGallery();
+}
+
+async function activateTab(tab) {
     $('.st_ai_tab').removeClass('active');
     $(`.st_ai_tab[data-tab="${tab}"]`).addClass('active');
     $('.st_ai_tab_content').removeClass('active');
     $(`.st_ai_tab_content[data-tab="${tab}"]`).addClass('active');
-    if (tab === 'gallery') renderGallery();
+    if (tab === 'gallery') await refreshGalleryFromChat();
 }
 
 // ===== 图库 =====
@@ -1240,7 +1246,7 @@ jQuery(async () => {
         });
 
         // Wand 按钮 → 打开悬浮窗
-        $('#st_ai_image_wand_button').on('click', function () {
+        $('#st_ai_image_wand_button').on('click', async function () {
             const panel = document.getElementById('st_ai_float_panel');
             const dialog = document.getElementById('st_ai_dialog');
             panel.classList.remove('st_ai_hidden');
@@ -1250,6 +1256,7 @@ jQuery(async () => {
             panel.style.top = '';
             panel.style.margin = '';
             if (!dialog.open) dialog.showModal();
+            await refreshGalleryFromChat();
         });
 
         // 拖拽
@@ -1320,9 +1327,9 @@ jQuery(async () => {
         // 点击 backdrop 不关闭（不监听）
 
         // Tab 切换
-        $('.st_ai_tab').on('click', function () {
+        $('.st_ai_tab').on('click', async function () {
             const tab = $(this).data('tab');
-            activateTab(tab);
+            await activateTab(tab);
         });
 
         // 生成
