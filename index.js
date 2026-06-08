@@ -5,7 +5,7 @@ const DB_NAME = 'st_ai_image_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'history';
 const IMAGE_TAG_RE = /\[image\]([\s\S]+?)\[\/image\]/g;
-const INLINE_IMAGE_MARKER_RE = /\[st-ai-image\s+id=["']?([a-zA-Z0-9_.:-]+)["']?\]/g;
+const INLINE_IMAGE_MARKER_RE = /\[st-ai-image\b[^\]]*\]/g;
 
 const defaultSettings = {
     enabled: true,
@@ -185,6 +185,95 @@ async function saveToHistory(entry, { force = false } = {}) {
     }
 }
 
+function parseDataImageUrl(value) {
+    const match = String(value ?? '').trim().match(/^data:image\/([a-z0-9.+-]+);base64,([\s\S]+)$/i);
+    if (!match) return null;
+    const mimeSubtype = match[1].toLowerCase();
+    const format = mimeSubtype === 'jpeg' ? 'jpg' : mimeSubtype.split('+')[0];
+    if (!/^(png|jpg|jpeg|webp|gif|bmp|avif)$/.test(format)) return null;
+    return { format, base64: match[2].replace(/\s+/g, '') };
+}
+
+function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+    });
+}
+
+async function fetchImageAsDataUrl(imageUrl) {
+    const safeUrl = sanitizeImageUrl(imageUrl);
+    if (!/^https?:/i.test(safeUrl)) return '';
+    const response = await fetch(safeUrl);
+    if (!response.ok) throw new Error(`图片下载失败: ${response.status}`);
+    const blob = await response.blob();
+    if (!blob.type.startsWith('image/')) throw new Error('远程地址不是图片');
+    return await blobToDataUrl(blob);
+}
+
+function getRequestHeadersForJson() {
+    const ctx = getSillyTavernContext();
+    if (typeof ctx?.getRequestHeaders === 'function') return ctx.getRequestHeaders();
+    return { 'Content-Type': 'application/json' };
+}
+
+function getSillyTavernGalleryFolder() {
+    const ctx = getSillyTavernContext();
+    const character = Number.isInteger(ctx?.characterId) ? ctx.characters?.[ctx.characterId] : null;
+    return character?.name || 'AI Image Generator';
+}
+
+function getStableInlineImageUrl(imageUrl) {
+    const safeUrl = sanitizeImageUrl(imageUrl);
+    if (!safeUrl || /^data:/i.test(safeUrl) || /^blob:/i.test(safeUrl)) return '';
+    return safeUrl;
+}
+
+async function uploadImageToSillyTavernGallery(imageUrl) {
+    let dataImage = parseDataImageUrl(imageUrl);
+    if (!dataImage) {
+        const fetchedDataUrl = await fetchImageAsDataUrl(imageUrl);
+        dataImage = parseDataImageUrl(fetchedDataUrl);
+    }
+    if (!dataImage) return '';
+
+    const response = await fetch('/api/images/upload', {
+        method: 'POST',
+        headers: getRequestHeadersForJson(),
+        body: JSON.stringify({
+            image: dataImage.base64,
+            format: dataImage.format,
+            ch_name: getSillyTavernGalleryFolder(),
+            filename: `st-ai-image-${Date.now()}`,
+        }),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`酒馆图库保存失败: ${summarizeApiError(errorText)}`);
+    }
+
+    const data = await response.json();
+    return sanitizeImageUrl(data.path);
+}
+
+async function saveGeneratedImage(entry, { force = false } = {}) {
+    let imageUrl = sanitizeImageUrl(entry.imageUrl);
+    let serverImageUrl = '';
+
+    try {
+        serverImageUrl = await uploadImageToSillyTavernGallery(imageUrl);
+    } catch (e) {
+        console.warn('[st-ai-image] upload to SillyTavern gallery failed:', e);
+    }
+
+    if (serverImageUrl) imageUrl = serverImageUrl;
+    const saved = await saveToHistory({ ...entry, imageUrl }, { force });
+    return { saved, imageUrl, serverImageUrl };
+}
+
 async function trimHistory() {
     try {
         const items = await getHistory();
@@ -255,8 +344,33 @@ function ensureSafeImageUrl(value) {
 }
 
 function createInlineImageMarker(id) {
+    if (id && typeof id === 'object') {
+        const safeUrl = sanitizeImageUrl(id.imageUrl);
+        if (safeUrl) return `[st-ai-image src="${encodeURIComponent(safeUrl)}"]`;
+        id = id.id;
+    }
     const safeId = String(id ?? '').replace(/[^a-zA-Z0-9_.:-]/g, '');
     return safeId ? `[st-ai-image id="${safeId}"]` : '';
+}
+
+function parseInlineImageMarker(marker) {
+    const text = String(marker ?? '');
+    const srcMatch = text.match(/\bsrc=(?:"([^"]*)"|'([^']*)'|([^\]\s]+))/);
+    const idMatch = text.match(/\bid=(?:"([^"]*)"|'([^']*)'|([a-zA-Z0-9_.:-]+))/);
+    const rawSrc = srcMatch ? (srcMatch[1] ?? srcMatch[2] ?? srcMatch[3] ?? '') : '';
+    const rawId = idMatch ? (idMatch[1] ?? idMatch[2] ?? idMatch[3] ?? '') : '';
+    let imageUrl = '';
+    if (rawSrc) {
+        try {
+            imageUrl = sanitizeImageUrl(decodeURIComponent(rawSrc));
+        } catch {
+            imageUrl = sanitizeImageUrl(rawSrc);
+        }
+    }
+    return {
+        id: rawId.replace(/[^a-zA-Z0-9_.:-]/g, ''),
+        imageUrl,
+    };
 }
 
 function hasInlineImageMarker(text) {
@@ -444,20 +558,20 @@ async function generateImage(prompt) {
     try {
         const cleanPrompt = prompt.trim();
         const url = await callImageAPI(cleanPrompt);
-        const saved = await saveToHistory({ prompt: cleanPrompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size });
+        const { saved, imageUrl } = await saveGeneratedImage({ prompt: cleanPrompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size });
 
         $result.html(`
-            <img src="${escapeAttr(url)}" alt="${escapeAttr(cleanPrompt)}" class="st_gpt_gen_img" data-prompt="${escapeAttr(cleanPrompt)}">
+            <img src="${escapeAttr(imageUrl)}" alt="${escapeAttr(cleanPrompt)}" class="st_gpt_gen_img" data-prompt="${escapeAttr(cleanPrompt)}">
             <div class="st_gpt_gen_result_info">
                 <div class="st_ai_action_row">
-                    ${buildImageActionsHtml('result', cleanPrompt, url, { historyId: saved?.id })}
+                    ${buildImageActionsHtml('result', cleanPrompt, imageUrl, { historyId: saved?.id })}
                 </div>
             </div>
         `);
 
-        $result.find('img').on('click', () => showPreview(url, cleanPrompt));
+        $result.find('img').on('click', () => showPreview(imageUrl, cleanPrompt));
         toastr.success('图片生成完成', 'GPT Image');
-        return url;
+        return imageUrl;
     } catch (e) {
         console.error('[st-ai-image]', e);
         $result.html(`<div class="st_ai_gen_placeholder st_ai_error_text">生成失败: ${escapeHtml(e.message)}</div>`);
@@ -605,8 +719,14 @@ function renderInlineImageContent(wrapper, entry) {
     `;
 }
 
-async function hydrateInlineImage(wrapper, historyId) {
-    const entry = await getHistoryItem(historyId);
+async function hydrateInlineImage(wrapper, markerInfo) {
+    const info = markerInfo && typeof markerInfo === 'object' ? markerInfo : { id: String(markerInfo ?? ''), imageUrl: '' };
+    if (info.imageUrl) {
+        renderInlineImageContent(wrapper, { id: info.id, imageUrl: info.imageUrl });
+        return;
+    }
+
+    const entry = await getHistoryItem(info.id);
     if (!entry) {
         wrapper.classList.add('st_gpt_inline_missing');
         wrapper.textContent = '图片记录不存在';
@@ -615,29 +735,31 @@ async function hydrateInlineImage(wrapper, historyId) {
     renderInlineImageContent(wrapper, entry);
 }
 
-function createInlineImageWrapper(historyId) {
+function createInlineImageWrapper(markerInfo) {
+    const info = markerInfo && typeof markerInfo === 'object' ? markerInfo : { id: String(markerInfo ?? ''), imageUrl: '' };
     const wrapper = document.createElement('span');
     wrapper.className = 'st_gpt_inline_img_wrap st_gpt_inline_loading';
-    wrapper.dataset.historyId = historyId;
+    wrapper.dataset.historyId = info.id || '';
+    wrapper.dataset.url = info.imageUrl || '';
     wrapper.textContent = '图片加载中...';
-    hydrateInlineImage(wrapper, historyId).finally(() => wrapper.classList.remove('st_gpt_inline_loading'));
+    hydrateInlineImage(wrapper, info).finally(() => wrapper.classList.remove('st_gpt_inline_loading'));
     return wrapper;
 }
 
-async function persistInlineImageInMessage(messageId, originalTag, historyId) {
+async function persistInlineImageInMessage(messageId, originalTag, markerData) {
     const ctx = getSillyTavernContext();
-    if (!ctx || !Number.isInteger(messageId) || !ctx.chat?.[messageId] || !historyId) return false;
+    if (!ctx || !Number.isInteger(messageId) || !ctx.chat?.[messageId] || !markerData) return false;
 
     const message = ctx.chat[messageId];
     const currentMessage = String(message.mes ?? '');
-    const nextMessage = replaceFirstImageRequest(currentMessage, originalTag, historyId);
+    const nextMessage = replaceFirstImageRequest(currentMessage, originalTag, markerData);
     if (nextMessage === currentMessage) return false;
 
     message.mes = nextMessage;
     if (Array.isArray(message.swipes)) {
         const swipeId = Number(message.swipe_id ?? 0);
         if (typeof message.swipes[swipeId] === 'string') {
-            message.swipes[swipeId] = replaceFirstImageRequest(message.swipes[swipeId], originalTag, historyId);
+            message.swipes[swipeId] = replaceFirstImageRequest(message.swipes[swipeId], originalTag, markerData);
         }
     }
 
@@ -661,7 +783,7 @@ function processMessageElement(el, { allowImageRequests = true } = {}) {
     const messageId = getMessageIdFromElement(el);
     let replaced = false;
     for (const node of textNodes) {
-        const re = /\[image\]([\s\S]+?)\[\/image\]|\[st-ai-image\s+id=["']?([a-zA-Z0-9_.:-]+)["']?\]/g;
+        const re = /\[image\]([\s\S]+?)\[\/image\]|\[st-ai-image\b[^\]]*\]/g;
         const text = node.textContent;
         if (!re.test(text)) continue;
         re.lastIndex = 0;
@@ -677,8 +799,8 @@ function processMessageElement(el, { allowImageRequests = true } = {}) {
                 frag.appendChild(createInlineGenerateButton(m[1].trim(), m[0], messageId));
             } else if (m[1] !== undefined) {
                 frag.appendChild(document.createTextNode(m[0]));
-            } else if (m[2] !== undefined) {
-                frag.appendChild(createInlineImageWrapper(m[2]));
+            } else {
+                frag.appendChild(createInlineImageWrapper(parseInlineImageMarker(m[0])));
             }
             lastIdx = re.lastIndex;
         }
@@ -907,9 +1029,10 @@ jQuery(async () => {
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
             const s = getSettings();
-            const saved = await saveToHistory({ prompt, imageUrl: safeUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true });
+            const { saved, imageUrl: savedUrl } = await saveGeneratedImage({ prompt, imageUrl: safeUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true });
             if (saved?.id) {
                 btn.dataset.historyId = saved.id;
+                btn.dataset.url = savedUrl;
                 btn.title = '已在图库';
                 btn.setAttribute('aria-label', '已在图库');
                 btn.innerHTML = '<i class="fa-solid fa-bookmark"></i>';
@@ -962,16 +1085,19 @@ jQuery(async () => {
 
             try {
                 const url = await callImageAPI(prompt);
-                const saved = await saveToHistory({ prompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size }, { force: true });
+                const { saved, imageUrl, serverImageUrl } = await saveGeneratedImage({ prompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size }, { force: true });
 
                 // 用图片替换按钮
                 const wrapper = document.createElement('span');
                 wrapper.className = 'st_gpt_inline_img_wrap';
-                renderInlineImageContent(wrapper, saved || { prompt, imageUrl: url, timestamp: Date.now() });
+                renderInlineImageContent(wrapper, saved || { prompt, imageUrl, timestamp: Date.now() });
                 btn.replaceWith(wrapper);
-                if (saved?.id) {
-                    const persisted = await persistInlineImageInMessage(Number.isInteger(messageId) ? messageId : null, originalTag, saved.id);
+                const markerUrl = getStableInlineImageUrl(serverImageUrl || imageUrl);
+                if (markerUrl) {
+                    const persisted = await persistInlineImageInMessage(Number.isInteger(messageId) ? messageId : null, originalTag, { id: saved?.id, imageUrl: markerUrl });
                     if (!persisted) toastr.warning('图片已进图库，但当前消息没有写回聊天记录');
+                } else {
+                    toastr.warning('图片已显示，但没有可持久保存的地址，刷新后需要重新生成');
                 }
             } catch (e) {
                 console.error('[st-ai-image] inline gen error:', e);
@@ -1016,6 +1142,7 @@ if (typeof module !== 'undefined') {
             buildImageActionsHtml,
             hasImageTag,
             createInlineImageMarker,
+            parseInlineImageMarker,
             hasInlineImageMarker,
             shouldProcessInlineText,
             replaceFirstImageRequest,

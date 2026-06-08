@@ -43,7 +43,16 @@ assert.strictEqual(helpers.hasImageTag('abc [image]提示[/image] def'), true);
 assert.strictEqual(helpers.hasImageTag('abc def'), false);
 
 assert.strictEqual(helpers.createInlineImageMarker(42), '[st-ai-image id="42"]');
+assert.strictEqual(
+    helpers.createInlineImageMarker({ imageUrl: 'user/images/AI Image Generator/a.png' }),
+    '[st-ai-image src="user%2Fimages%2FAI%20Image%20Generator%2Fa.png"]',
+);
 assert.strictEqual(helpers.hasInlineImageMarker('abc [st-ai-image id="42"] def'), true);
+assert.strictEqual(helpers.hasInlineImageMarker('abc [st-ai-image src="user%2Fimages%2Fa.png"] def'), true);
+assert.deepStrictEqual(
+    helpers.parseInlineImageMarker('[st-ai-image src="user%2Fimages%2Fa.png"]'),
+    { id: '', imageUrl: 'user/images/a.png' },
+);
 assert.strictEqual(
     helpers.shouldProcessInlineText('abc [st-ai-image id="42"] def', { enabled: true, autoDetect: false }),
     true,
@@ -57,8 +66,8 @@ assert.strictEqual(
     true,
 );
 assert.strictEqual(
-    helpers.replaceFirstImageRequest('abc [image]prompt[/image] def', '[image]prompt[/image]', 42),
-    'abc [st-ai-image id="42"] def',
+    helpers.replaceFirstImageRequest('abc [image]prompt[/image] def', '[image]prompt[/image]', { imageUrl: 'user/images/a.png' }),
+    'abc [st-ai-image src="user%2Fimages%2Fa.png"] def',
 );
 assert.strictEqual(
     helpers.replaceFirstImageRequest('abc [image]prompt[/image] def', '[image]missing[/image]', 7),
