@@ -103,5 +103,9 @@ assert.strictEqual(
     helpers.replaceInlineImageMarkersWithMarkdown('abc [st-ai-image id="2" src="%2Fuser%2Fimages%2FAI%20Image%20Generator%2Fst-ai-image-1780887566161.png"] def'),
     'abc ![AI Image](/user/images/AI%20Image%20Generator/st-ai-image-1780887566161.png) def',
 );
+assert.deepStrictEqual(
+    helpers.extractMarkdownImages('abc ![cat](/user/images/AI%20Image%20Generator/a.png) def'),
+    [{ prompt: 'cat', imageUrl: '/user/images/AI Image Generator/a.png' }],
+);
 
 console.log('helpers.test.js passed');

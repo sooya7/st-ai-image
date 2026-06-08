@@ -7,6 +7,7 @@ const STORE_NAME = 'history';
 const FALLBACK_HISTORY_KEY = `${extensionName}_history_fallback`;
 const IMAGE_TAG_RE = /\[image\]([\s\S]+?)\[\/image\]/g;
 const INLINE_IMAGE_MARKER_RE = /\[st-ai-image\b[^\]]*\]/g;
+const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\((<([^>]+)>|([^)]+))\)/g;
 
 const defaultSettings = {
     enabled: true,
@@ -21,6 +22,7 @@ const defaultSettings = {
 
 const inlineTasks = new Map();
 const historyEnsureTasks = new Map();
+const markdownGallerySyncTasks = new Map();
 let inlineScanInterval = null;
 let inlineScanIntervalStopAt = 0;
 
@@ -366,6 +368,42 @@ async function ensureHistoryEntryForImageUrl(imageUrl, defaults = {}) {
     }
 }
 
+async function syncMarkdownImagesToHistoryFromText(text) {
+    const images = extractMarkdownImages(text).filter((image) => /\/user\/images\//i.test(image.imageUrl));
+    for (const image of images) {
+        await ensureHistoryEntryForImageUrl(image.imageUrl, { prompt: image.prompt });
+    }
+}
+
+async function syncMarkdownImagesInChatToHistory() {
+    const ctx = getSillyTavernContext();
+    if (!ctx?.chat?.length) return false;
+
+    const key = ctx.chat.map((message) => `${message?.mes || ''}|${message?.swipe_id || 0}`).join('\n');
+    if (markdownGallerySyncTasks.has(key)) return await markdownGallerySyncTasks.get(key);
+
+    const task = (async () => {
+        for (const message of ctx.chat) {
+            if (!message) continue;
+            if (typeof message.mes === 'string') await syncMarkdownImagesToHistoryFromText(message.mes);
+            if (Array.isArray(message.swipes)) {
+                for (const swipe of message.swipes) {
+                    if (typeof swipe === 'string') await syncMarkdownImagesToHistoryFromText(swipe);
+                }
+            }
+        }
+        renderGallery();
+        return true;
+    })();
+
+    markdownGallerySyncTasks.set(key, task);
+    try {
+        return await task;
+    } finally {
+        markdownGallerySyncTasks.delete(key);
+    }
+}
+
 async function trimHistory() {
     try {
         const items = await getHistory();
@@ -454,6 +492,26 @@ function createMarkdownImageMarkup(imageUrl, prompt = '') {
     const url = formatMarkdownImageUrl(imageUrl);
     if (!url) return '';
     return `![${escapeMarkdownAlt(prompt || 'AI Image')}](${url})`;
+}
+
+function unescapeMarkdownAlt(value) {
+    return String(value ?? '').replace(/\\([\]\\])/g, '$1').trim();
+}
+
+function extractMarkdownImages(text) {
+    MARKDOWN_IMAGE_RE.lastIndex = 0;
+    const images = [];
+    let match;
+    while ((match = MARKDOWN_IMAGE_RE.exec(String(text ?? ''))) !== null) {
+        const rawUrl = match[3] ?? match[4] ?? '';
+        let decodedUrl = rawUrl.trim();
+        try {
+            decodedUrl = decodeURI(decodedUrl);
+        } catch {}
+        const imageUrl = sanitizeImageUrl(decodedUrl);
+        if (imageUrl) images.push({ prompt: unescapeMarkdownAlt(match[1]) || 'AI Image', imageUrl });
+    }
+    return images;
 }
 
 function createInlineImageMarker(id) {
@@ -899,6 +957,7 @@ async function persistInlineImageInMessage(messageId, originalTag, markerData) {
         ctx.updateMessageBlock?.(messageId, message);
         processMessageById(messageId, { allowImageRequests: false });
         await ctx.saveChat?.();
+        await syncMarkdownImagesInChatToHistory();
         scanInlineMessagesBurst();
         return true;
     } catch (e) {
@@ -938,6 +997,7 @@ async function migrateInlineMarkersInChat() {
 
     if (changed) {
         await ctx.saveChat?.();
+        await syncMarkdownImagesInChatToHistory();
         scanInlineMessagesBurst();
     }
     return changed;
@@ -1035,6 +1095,7 @@ function initAutoDetect() {
     console.log('[st-ai-image] initAutoDetect called');
     scanInlineMessagesBurst();
     [0, 1000, 3000].forEach((delay) => setTimeout(() => migrateInlineMarkersInChat(), delay));
+    [1500, 4000].forEach((delay) => setTimeout(() => syncMarkdownImagesInChatToHistory(), delay));
 
     const target = document.body || document.getElementById('chat');
     if (!target) {
@@ -1380,6 +1441,7 @@ if (typeof module !== 'undefined') {
             shouldProcessInlineText,
             replaceFirstImageRequest,
             replaceInlineImageMarkersWithMarkdown,
+            extractMarkdownImages,
         },
     };
 }
