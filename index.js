@@ -4,6 +4,8 @@ const extensionFolder = `scripts/extensions/third-party/${extensionName}`;
 const DB_NAME = 'st_ai_image_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'history';
+const IMAGE_TAG_RE = /\[image\]([\s\S]+?)\[\/image\]/g;
+const INLINE_IMAGE_MARKER_RE = /\[st-ai-image\s+id=["']?([a-zA-Z0-9_.:-]+)["']?\]/g;
 
 const defaultSettings = {
     enabled: true,
@@ -15,6 +17,8 @@ const defaultSettings = {
     quality: 'auto',
     saveHistory: true,
 };
+
+const inlineTasks = new Map();
 
 
 // localStorage 存储设置（设置很小，不需要 IndexedDB）
@@ -130,19 +134,50 @@ async function getHistory() {
     } catch { return []; }
 }
 
-async function saveToHistory(entry) {
-    const s = getSettings();
-    if (!s.saveHistory) return;
+async function getHistoryItem(id) {
     try {
         const db = await openDB();
+        return new Promise((resolve) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.get(Number(id));
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => resolve(null);
+        });
+    } catch { return null; }
+}
+
+async function addHistoryEntry(entry) {
+    const item = {
+        prompt: entry.prompt,
+        imageUrl: entry.imageUrl,
+        timestamp: entry.timestamp || Date.now(),
+        model: entry.model,
+        size: entry.size,
+    };
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-        store.add({ prompt: entry.prompt, imageUrl: entry.imageUrl, timestamp: entry.timestamp, model: entry.model, size: entry.size });
+        const req = store.add(item);
+        req.onsuccess = () => resolve({ ...item, id: req.result });
+        req.onerror = () => reject(req.error);
         tx.oncomplete = () => trimHistory();
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+async function saveToHistory(entry, { force = false } = {}) {
+    const s = getSettings();
+    if (!s.saveHistory && !force) return null;
+    try {
+        const saved = await addHistoryEntry(entry);
+        renderGallery();
+        return saved;
     } catch (e) {
         console.error('[st-ai-image] saveToHistory error:', e);
+        return null;
     }
-    renderGallery();
 }
 
 async function trimHistory() {
@@ -214,16 +249,44 @@ function ensureSafeImageUrl(value) {
     return safeUrl;
 }
 
-function buildImageActionsHtml(context, prompt, imageUrl) {
+function createInlineImageMarker(id) {
+    const safeId = String(id ?? '').replace(/[^a-zA-Z0-9_.:-]/g, '');
+    return safeId ? `[st-ai-image id="${safeId}"]` : '';
+}
+
+function hasInlineImageMarker(text) {
+    INLINE_IMAGE_MARKER_RE.lastIndex = 0;
+    return INLINE_IMAGE_MARKER_RE.test(String(text ?? ''));
+}
+
+function hasInlineRenderableTag(text) {
+    return hasImageTag(text) || hasInlineImageMarker(text);
+}
+
+function replaceFirstImageRequest(text, originalTag, imageId) {
+    const value = String(text ?? '');
+    const marker = createInlineImageMarker(imageId);
+    if (!marker) return value;
+    if (originalTag && value.includes(originalTag)) return value.replace(originalTag, marker);
+    return value.replace(/\[image\]([\s\S]+?)\[\/image\]/, marker);
+}
+
+function buildImageActionsHtml(context, prompt, imageUrl, options = {}) {
     const safeUrl = escapeAttr(sanitizeImageUrl(imageUrl));
     const disabled = safeUrl ? '' : ' disabled';
+    const allowSave = context !== 'gallery' && options.allowSave !== false;
+    const historyId = options.historyId ? escapeAttr(options.historyId) : '';
+    const saveDisabled = safeUrl && !historyId ? '' : ' disabled';
+    const saveTitle = historyId ? '已在图库' : '存入图库';
     return `
         <button type="button" class="st_gpt_image_btn" data-action="download-image" data-context="${escapeAttr(context)}" data-url="${safeUrl}" title="下载图片" aria-label="下载图片"${disabled}><i class="fa-solid fa-download"></i></button>
+        ${allowSave ? `<button type="button" class="st_gpt_image_btn" data-action="save-image" data-context="${escapeAttr(context)}" data-url="${safeUrl}" data-prompt="${escapeAttr(prompt)}" data-history-id="${historyId}" title="${saveTitle}" aria-label="${saveTitle}"${saveDisabled}><i class="fa-solid ${historyId ? 'fa-bookmark' : 'fa-folder-plus'}"></i></button>` : ''}
     `;
 }
 
 function hasImageTag(text) {
-    return /\[image\](.+?)\[\/image\]/s.test(String(text ?? ''));
+    IMAGE_TAG_RE.lastIndex = 0;
+    return IMAGE_TAG_RE.test(String(text ?? ''));
 }
 
 // ===== API (根据模型自动选择端点) =====
@@ -369,13 +432,13 @@ async function generateImage(prompt) {
     try {
         const cleanPrompt = prompt.trim();
         const url = await callImageAPI(cleanPrompt);
-        await saveToHistory({ prompt: cleanPrompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size });
+        const saved = await saveToHistory({ prompt: cleanPrompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size });
 
         $result.html(`
             <img src="${escapeAttr(url)}" alt="${escapeAttr(cleanPrompt)}" class="st_gpt_gen_img" data-prompt="${escapeAttr(cleanPrompt)}">
             <div class="st_gpt_gen_result_info">
                 <div class="st_ai_action_row">
-                    ${buildImageActionsHtml('result', cleanPrompt, url)}
+                    ${buildImageActionsHtml('result', cleanPrompt, url, { historyId: saved?.id })}
                 </div>
             </div>
         `);
@@ -474,36 +537,139 @@ async function renderGallery() {
     }).join(''));
 }
 
-// ===== 自动检测：替换聊天中的 [image]...[/image] 为可点击按钮 =====
+// ===== 自动检测：替换聊天中的 [image]...[/image] 或持久图片标记 =====
+function getSillyTavernContext() {
+    try {
+        return globalThis.SillyTavern?.getContext?.() || null;
+    } catch {
+        return null;
+    }
+}
+
+function getMessageIdFromElement(el) {
+    const mes = el?.closest?.('.mes');
+    const id = Number(mes?.getAttribute('mesid'));
+    return Number.isInteger(id) ? id : null;
+}
+
+function getInlineTaskKey(messageId, originalTag) {
+    return `${messageId ?? 'unknown'}:${originalTag || ''}`;
+}
+
+function createInlineGenerateButton(prompt, originalTag, messageId) {
+    const btn = document.createElement('button');
+    const taskKey = getInlineTaskKey(messageId, originalTag);
+    const isPending = inlineTasks.has(taskKey);
+    btn.className = 'st_gpt_inline_gen';
+    btn.dataset.prompt = prompt;
+    btn.dataset.originalTag = originalTag;
+    btn.dataset.messageId = messageId ?? '';
+    btn.type = 'button';
+    btn.disabled = isPending;
+    btn.innerHTML = isPending
+        ? '<i class="fa-solid fa-spinner fa-spin"></i> 生成中...'
+        : '<i class="fa-solid fa-wand-magic-sparkles"></i> 生成图片';
+    return btn;
+}
+
+function renderInlineImageContent(wrapper, entry) {
+    const safeUrl = sanitizeImageUrl(entry?.imageUrl);
+    const prompt = String(entry?.prompt ?? '');
+    if (!safeUrl) {
+        wrapper.classList.add('st_gpt_inline_missing');
+        wrapper.textContent = '图片记录不可用';
+        return;
+    }
+
+    wrapper.classList.remove('st_gpt_inline_missing');
+    wrapper.dataset.historyId = entry.id ?? '';
+    wrapper.dataset.prompt = prompt;
+    wrapper.dataset.url = safeUrl;
+    wrapper.innerHTML = `
+        <img src="${escapeAttr(safeUrl)}" class="st_gpt_inline_img" alt="${escapeAttr(prompt)}">
+        <span class="st_gpt_inline_actions">
+            ${buildImageActionsHtml('inline', prompt, safeUrl, { historyId: entry.id })}
+        </span>
+    `;
+}
+
+async function hydrateInlineImage(wrapper, historyId) {
+    const entry = await getHistoryItem(historyId);
+    if (!entry) {
+        wrapper.classList.add('st_gpt_inline_missing');
+        wrapper.textContent = '图片记录不存在';
+        return;
+    }
+    renderInlineImageContent(wrapper, entry);
+}
+
+function createInlineImageWrapper(historyId) {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'st_gpt_inline_img_wrap st_gpt_inline_loading';
+    wrapper.dataset.historyId = historyId;
+    wrapper.textContent = '图片加载中...';
+    hydrateInlineImage(wrapper, historyId).finally(() => wrapper.classList.remove('st_gpt_inline_loading'));
+    return wrapper;
+}
+
+async function persistInlineImageInMessage(messageId, originalTag, historyId) {
+    const ctx = getSillyTavernContext();
+    if (!ctx || !Number.isInteger(messageId) || !ctx.chat?.[messageId] || !historyId) return false;
+
+    const message = ctx.chat[messageId];
+    const currentMessage = String(message.mes ?? '');
+    const nextMessage = replaceFirstImageRequest(currentMessage, originalTag, historyId);
+    if (nextMessage === currentMessage) return false;
+
+    message.mes = nextMessage;
+    if (Array.isArray(message.swipes)) {
+        const swipeId = Number(message.swipe_id ?? 0);
+        if (typeof message.swipes[swipeId] === 'string') {
+            message.swipes[swipeId] = replaceFirstImageRequest(message.swipes[swipeId], originalTag, historyId);
+        }
+    }
+
+    try {
+        ctx.updateMessageBlock?.(messageId, message);
+        await ctx.saveChat?.();
+        scheduleScan();
+        return true;
+    } catch (e) {
+        console.error('[st-ai-image] persist inline image error:', e);
+        return false;
+    }
+}
+
 function processMessageElement(el) {
-    if (!hasImageTag(el.textContent)) return;
+    if (!hasInlineRenderableTag(el.textContent)) return;
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
     const textNodes = [];
     while (walker.nextNode()) textNodes.push(walker.currentNode);
 
+    const messageId = getMessageIdFromElement(el);
     let replaced = false;
     for (const node of textNodes) {
-        const re = /\[image\](.+?)\[\/image\]/gs;
-        if (!re.test(node.textContent)) continue;
+        const re = /\[image\]([\s\S]+?)\[\/image\]|\[st-ai-image\s+id=["']?([a-zA-Z0-9_.:-]+)["']?\]/g;
+        const text = node.textContent;
+        if (!re.test(text)) continue;
         re.lastIndex = 0;
 
         const frag = document.createDocumentFragment();
         let lastIdx = 0;
         let m;
-        while ((m = re.exec(node.textContent)) !== null) {
+        while ((m = re.exec(text)) !== null) {
             if (m.index > lastIdx) {
-                frag.appendChild(document.createTextNode(node.textContent.slice(lastIdx, m.index)));
+                frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
             }
-            const btn = document.createElement('button');
-            btn.className = 'st_gpt_inline_gen';
-            btn.dataset.prompt = m[1].trim();
-            btn.type = 'button';
-            btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 生成图片';
-            frag.appendChild(btn);
+            if (m[1] !== undefined) {
+                frag.appendChild(createInlineGenerateButton(m[1].trim(), m[0], messageId));
+            } else if (m[2] !== undefined) {
+                frag.appendChild(createInlineImageWrapper(m[2]));
+            }
             lastIdx = re.lastIndex;
         }
-        if (lastIdx < node.textContent.length) {
-            frag.appendChild(document.createTextNode(node.textContent.slice(lastIdx)));
+        if (lastIdx < text.length) {
+            frag.appendChild(document.createTextNode(text.slice(lastIdx)));
         }
         node.parentNode.replaceChild(frag, node);
         replaced = true;
@@ -519,7 +685,7 @@ function scheduleScan() {
         if (!s.enabled || !s.autoDetect) return;
         const els = document.querySelectorAll('.mes_text');
         els.forEach(el => {
-            if (hasImageTag(el.textContent)) processMessageElement(el);
+            if (hasInlineRenderableTag(el.textContent)) processMessageElement(el);
         });
     }, 300);
 }
@@ -716,6 +882,35 @@ jQuery(async () => {
             e.stopPropagation();
             downloadImage($(this).data('url'));
         });
+        $(document).on('click', '[data-action="save-image"]', async function (e) {
+            e.stopPropagation();
+            const btn = this;
+            const imageUrl = $(btn).data('url');
+            const prompt = String($(btn).data('prompt') || '');
+            const safeUrl = sanitizeImageUrl(imageUrl);
+            if (!safeUrl) return toastr.error('图片地址无效，无法保存');
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            const s = getSettings();
+            const saved = await saveToHistory({ prompt, imageUrl: safeUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true });
+            if (saved?.id) {
+                btn.dataset.historyId = saved.id;
+                btn.title = '已在图库';
+                btn.setAttribute('aria-label', '已在图库');
+                btn.innerHTML = '<i class="fa-solid fa-bookmark"></i>';
+                toastr.success('已保存到图库');
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-folder-plus"></i>';
+                toastr.error('保存到图库失败');
+            }
+        });
+        $(document).on('click', '.st_gpt_inline_img', function (e) {
+            e.stopPropagation();
+            const $wrap = $(this).closest('.st_gpt_inline_img_wrap');
+            showPreview($(this).attr('src'), $wrap.data('prompt') || '');
+        });
         $(document).on('click', '.st_gpt_regen', async function (e) {
             e.stopPropagation();
             const prompt = $(this).data('prompt');
@@ -737,6 +932,10 @@ jQuery(async () => {
             if (!prompt) return;
             const s = getSettings();
             if (!s.apiKey) return toastr.error('请先在设置中填写 API Key');
+            const messageId = btn.dataset.messageId === '' ? getMessageIdFromElement(btn) : Number(btn.dataset.messageId);
+            const originalTag = btn.dataset.originalTag || `[image]${prompt}[/image]`;
+            const taskKey = getInlineTaskKey(Number.isInteger(messageId) ? messageId : null, originalTag);
+            if (inlineTasks.has(taskKey)) return;
 
             // 清理旧错误提示，重置样式
             btn.closest('.mes_text')?.querySelectorAll('.st_gpt_inline_error').forEach(e => e.remove());
@@ -745,16 +944,21 @@ jQuery(async () => {
             // 按钮变为加载状态
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 生成中...';
+            inlineTasks.set(taskKey, { prompt, messageId, originalTag, startedAt: Date.now() });
 
             try {
                 const url = await callImageAPI(prompt);
-                await saveToHistory({ prompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size });
+                const saved = await saveToHistory({ prompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size }, { force: true });
 
                 // 用图片替换按钮
                 const wrapper = document.createElement('span');
                 wrapper.className = 'st_gpt_inline_img_wrap';
-                wrapper.innerHTML = `<img src="${escapeAttr(url)}" class="st_gpt_inline_img" alt="${escapeAttr(prompt)}">`;
+                renderInlineImageContent(wrapper, saved || { prompt, imageUrl: url, timestamp: Date.now() });
                 btn.replaceWith(wrapper);
+                if (saved?.id) {
+                    const persisted = await persistInlineImageInMessage(Number.isInteger(messageId) ? messageId : null, originalTag, saved.id);
+                    if (!persisted) toastr.warning('图片已进图库，但当前消息没有写回聊天记录');
+                }
             } catch (e) {
                 console.error('[st-ai-image] inline gen error:', e);
                 btn.innerHTML = '<i class="fa-solid fa-rotate-right"></i> 重试';
@@ -769,6 +973,8 @@ jQuery(async () => {
                 setTimeout(() => err.remove(), 5000);
 
                 toastr.error(e.message, '生图失败');
+            } finally {
+                inlineTasks.delete(taskKey);
             }
         });
         initAutoDetect();
@@ -795,6 +1001,9 @@ if (typeof module !== 'undefined') {
             summarizeApiError,
             buildImageActionsHtml,
             hasImageTag,
+            createInlineImageMarker,
+            hasInlineImageMarker,
+            replaceFirstImageRequest,
         },
     };
 }

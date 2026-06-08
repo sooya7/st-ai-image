@@ -23,6 +23,10 @@ assert.ok(
     'result actions include download image',
 );
 assert.ok(
+    helpers.buildImageActionsHtml('result', 'prompt', 'https://example.com/a.png').includes('data-action="save-image"'),
+    'result actions include save to gallery',
+);
+assert.ok(
     !helpers.buildImageActionsHtml('result', 'prompt', 'javascript:alert(1)').includes('javascript:'),
     'unsafe image URLs are not rendered',
 );
@@ -37,5 +41,16 @@ assert.ok(
 
 assert.strictEqual(helpers.hasImageTag('abc [image]提示[/image] def'), true);
 assert.strictEqual(helpers.hasImageTag('abc def'), false);
+
+assert.strictEqual(helpers.createInlineImageMarker(42), '[st-ai-image id="42"]');
+assert.strictEqual(helpers.hasInlineImageMarker('abc [st-ai-image id="42"] def'), true);
+assert.strictEqual(
+    helpers.replaceFirstImageRequest('abc [image]prompt[/image] def', '[image]prompt[/image]', 42),
+    'abc [st-ai-image id="42"] def',
+);
+assert.strictEqual(
+    helpers.replaceFirstImageRequest('abc [image]prompt[/image] def', '[image]missing[/image]', 7),
+    'abc [st-ai-image id="7"] def',
+);
 
 console.log('helpers.test.js passed');
