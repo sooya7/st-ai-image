@@ -384,8 +384,8 @@ function hasInlineRenderableTag(text) {
 
 function shouldProcessInlineText(text, settings = getSettings()) {
     const value = String(text ?? '');
-    if (!settings.enabled) return false;
     if (hasInlineImageMarker(value)) return true;
+    if (!settings.enabled) return false;
     return !!settings.autoDetect && hasImageTag(value);
 }
 
@@ -746,6 +746,14 @@ function createInlineImageWrapper(markerInfo) {
     return wrapper;
 }
 
+function processMessageById(messageId, { allowImageRequests = false } = {}) {
+    if (!Number.isInteger(messageId) || typeof document === 'undefined') return false;
+    const el = document.querySelector(`#chat .mes[mesid="${messageId}"] .mes_text`);
+    if (!el) return false;
+    processMessageElement(el, { allowImageRequests });
+    return true;
+}
+
 async function persistInlineImageInMessage(messageId, originalTag, markerData) {
     const ctx = getSillyTavernContext();
     if (!ctx || !Number.isInteger(messageId) || !ctx.chat?.[messageId] || !markerData) return false;
@@ -765,6 +773,7 @@ async function persistInlineImageInMessage(messageId, originalTag, markerData) {
 
     try {
         ctx.updateMessageBlock?.(messageId, message);
+        processMessageById(messageId, { allowImageRequests: false });
         await ctx.saveChat?.();
         scheduleScan();
         return true;
@@ -818,10 +827,10 @@ function scheduleScan() {
     if (scanTimer) clearTimeout(scanTimer);
     scanTimer = setTimeout(() => {
         const s = getSettings();
-        if (!s.enabled) return;
+        const allowImageRequests = !!(s.enabled && s.autoDetect);
         const els = document.querySelectorAll('.mes_text');
         els.forEach(el => {
-            if (shouldProcessInlineText(el.textContent, s)) processMessageElement(el, { allowImageRequests: !!s.autoDetect });
+            if (shouldProcessInlineText(el.textContent, s)) processMessageElement(el, { allowImageRequests });
         });
     }, 300);
 }

@@ -49,12 +49,22 @@ assert.strictEqual(
 );
 assert.strictEqual(helpers.hasInlineImageMarker('abc [st-ai-image id="42"] def'), true);
 assert.strictEqual(helpers.hasInlineImageMarker('abc [st-ai-image src="user%2Fimages%2Fa.png"] def'), true);
+const encodedServerMarker = '[st-ai-image src="%2Fuser%2Fimages%2FAI%20Image%20Generator%2Fst-ai-image-1780885283397.png"]';
+assert.strictEqual(helpers.hasInlineImageMarker(`abc ${encodedServerMarker} def`), true);
 assert.deepStrictEqual(
     helpers.parseInlineImageMarker('[st-ai-image src="user%2Fimages%2Fa.png"]'),
     { id: '', imageUrl: 'user/images/a.png' },
 );
+assert.deepStrictEqual(
+    helpers.parseInlineImageMarker(encodedServerMarker),
+    { id: '', imageUrl: '/user/images/AI Image Generator/st-ai-image-1780885283397.png' },
+);
 assert.strictEqual(
     helpers.shouldProcessInlineText('abc [st-ai-image id="42"] def', { enabled: true, autoDetect: false }),
+    true,
+);
+assert.strictEqual(
+    helpers.shouldProcessInlineText(encodedServerMarker, { enabled: false, autoDetect: false }),
     true,
 );
 assert.strictEqual(
