@@ -45,6 +45,18 @@ assert.strictEqual(helpers.hasImageTag('abc def'), false);
 assert.strictEqual(helpers.createInlineImageMarker(42), '[st-ai-image id="42"]');
 assert.strictEqual(helpers.hasInlineImageMarker('abc [st-ai-image id="42"] def'), true);
 assert.strictEqual(
+    helpers.shouldProcessInlineText('abc [st-ai-image id="42"] def', { enabled: true, autoDetect: false }),
+    true,
+);
+assert.strictEqual(
+    helpers.shouldProcessInlineText('abc [image]prompt[/image] def', { enabled: true, autoDetect: false }),
+    false,
+);
+assert.strictEqual(
+    helpers.shouldProcessInlineText('abc [image]prompt[/image] def', { enabled: true, autoDetect: true }),
+    true,
+);
+assert.strictEqual(
     helpers.replaceFirstImageRequest('abc [image]prompt[/image] def', '[image]prompt[/image]', 42),
     'abc [st-ai-image id="42"] def',
 );

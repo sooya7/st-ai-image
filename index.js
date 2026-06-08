@@ -160,10 +160,15 @@ async function addHistoryEntry(entry) {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
         const req = store.add(item);
-        req.onsuccess = () => resolve({ ...item, id: req.result });
+        let id = null;
+        req.onsuccess = () => { id = req.result; };
         req.onerror = () => reject(req.error);
-        tx.oncomplete = () => trimHistory();
+        tx.oncomplete = () => {
+            trimHistory();
+            resolve({ ...item, id });
+        };
         tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error || new Error('History save transaction aborted'));
     });
 }
 
@@ -261,6 +266,13 @@ function hasInlineImageMarker(text) {
 
 function hasInlineRenderableTag(text) {
     return hasImageTag(text) || hasInlineImageMarker(text);
+}
+
+function shouldProcessInlineText(text, settings = getSettings()) {
+    const value = String(text ?? '');
+    if (!settings.enabled) return false;
+    if (hasInlineImageMarker(value)) return true;
+    return !!settings.autoDetect && hasImageTag(value);
 }
 
 function replaceFirstImageRequest(text, originalTag, imageId) {
@@ -640,7 +652,7 @@ async function persistInlineImageInMessage(messageId, originalTag, historyId) {
     }
 }
 
-function processMessageElement(el) {
+function processMessageElement(el, { allowImageRequests = true } = {}) {
     if (!hasInlineRenderableTag(el.textContent)) return;
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
     const textNodes = [];
@@ -661,8 +673,10 @@ function processMessageElement(el) {
             if (m.index > lastIdx) {
                 frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
             }
-            if (m[1] !== undefined) {
+            if (m[1] !== undefined && allowImageRequests) {
                 frag.appendChild(createInlineGenerateButton(m[1].trim(), m[0], messageId));
+            } else if (m[1] !== undefined) {
+                frag.appendChild(document.createTextNode(m[0]));
             } else if (m[2] !== undefined) {
                 frag.appendChild(createInlineImageWrapper(m[2]));
             }
@@ -682,10 +696,10 @@ function scheduleScan() {
     if (scanTimer) clearTimeout(scanTimer);
     scanTimer = setTimeout(() => {
         const s = getSettings();
-        if (!s.enabled || !s.autoDetect) return;
+        if (!s.enabled) return;
         const els = document.querySelectorAll('.mes_text');
         els.forEach(el => {
-            if (hasInlineRenderableTag(el.textContent)) processMessageElement(el);
+            if (shouldProcessInlineText(el.textContent, s)) processMessageElement(el, { allowImageRequests: !!s.autoDetect });
         });
     }, 300);
 }
@@ -1003,6 +1017,7 @@ if (typeof module !== 'undefined') {
             hasImageTag,
             createInlineImageMarker,
             hasInlineImageMarker,
+            shouldProcessInlineText,
             replaceFirstImageRequest,
         },
     };
