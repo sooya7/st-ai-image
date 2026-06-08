@@ -5,7 +5,9 @@ const DB_NAME = 'st_ai_image_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'history';
 const FALLBACK_HISTORY_KEY = `${extensionName}_history_fallback`;
-const IMAGE_TAG_RE = /\[image\]([\s\S]+?)\[\/image\]/g;
+const IMAGE_REQUEST_SOURCE = String.raw`\[(?:image|图片|图像|画图|生图)\]([\s\S]+?)\[\/(?:image|图片|图像|画图|生图)\]|<\s*(?:image|图片|图像|画图|生图)\s*>([\s\S]+?)<\s*\/\s*(?:image|图片|图像|画图|生图)\s*>`;
+const IMAGE_TAG_RE = new RegExp(IMAGE_REQUEST_SOURCE, 'gi');
+const IMAGE_TAG_FIRST_RE = new RegExp(IMAGE_REQUEST_SOURCE, 'i');
 const INLINE_IMAGE_MARKER_RE = /\[st-ai-image\b[^\]]*\]/g;
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\((<([^>]+)>|([^)]+))\)/g;
 
@@ -25,6 +27,7 @@ const historyEnsureTasks = new Map();
 const markdownGallerySyncTasks = new Map();
 let inlineScanInterval = null;
 let inlineScanIntervalStopAt = 0;
+let currentFloorMessageElement = null;
 
 
 // localStorage 存储设置（设置很小，不需要 IndexedDB）
@@ -601,12 +604,17 @@ function shouldProcessInlineText(text, settings = getSettings()) {
     return hasImageTag(value);
 }
 
+function getImageRequestPrompt(match) {
+    if (!match) return '';
+    return String(match[1] ?? match[2] ?? '').trim();
+}
+
 function replaceFirstImageRequest(text, originalTag, imageId) {
     const value = String(text ?? '');
     const marker = createInlineImageMarker(imageId);
     if (!marker) return value;
     if (originalTag && value.includes(originalTag)) return value.replace(originalTag, marker);
-    return value.replace(/\[image\]([\s\S]+?)\[\/image\]/, marker);
+    return value.replace(IMAGE_TAG_FIRST_RE, marker);
 }
 
 function buildImageActionsHtml(context, prompt, imageUrl, options = {}) {
@@ -916,6 +924,87 @@ function createInlineGenerateButton(prompt, originalTag, messageId) {
     return btn;
 }
 
+function getCurrentFloorMessageElement() {
+    const messages = Array.from(document.querySelectorAll('#chat .mes'));
+    if (!messages.length) return null;
+    if (currentFloorMessageElement?.isConnected && currentFloorMessageElement.closest?.('#chat')) return currentFloorMessageElement;
+
+    const selected = messages.find((mes) =>
+        mes.classList?.contains('last_mes')
+        || mes.classList?.contains('selected')
+        || mes.classList?.contains('highlighted')
+    );
+    if (selected) return selected;
+
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    const visible = messages
+        .map((mes) => {
+            const rect = mes.getBoundingClientRect();
+            const visibleTop = Math.max(0, rect.top);
+            const visibleBottom = Math.min(viewportHeight, rect.bottom);
+            return { mes, area: Math.max(0, visibleBottom - visibleTop), bottom: rect.bottom };
+        })
+        .filter((item) => item.area > 0)
+        .sort((a, b) => b.area - a.area || b.bottom - a.bottom);
+    if (visible[0]?.mes) return visible[0].mes;
+
+    return messages[messages.length - 1] || null;
+}
+
+function stripGeneratedImageArtifacts(text) {
+    return String(text ?? '')
+        .replace(IMAGE_TAG_RE, '$1$2')
+        .replace(INLINE_IMAGE_MARKER_RE, '')
+        .replace(MARKDOWN_IMAGE_RE, '$1')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function getMessageTextFromContext(messageId) {
+    const ctx = getSillyTavernContext();
+    const message = Number.isInteger(messageId) ? ctx?.chat?.[messageId] : null;
+    if (!message) return '';
+    const swipeId = Number(message.swipe_id ?? 0);
+    if (Array.isArray(message.swipes) && typeof message.swipes[swipeId] === 'string') return message.swipes[swipeId];
+    return typeof message.mes === 'string' ? message.mes : '';
+}
+
+function getPromptFromImageTagText(text) {
+    const re = new RegExp(IMAGE_REQUEST_SOURCE, 'i');
+    const match = re.exec(String(text ?? ''));
+    return getImageRequestPrompt(match);
+}
+
+function buildPromptFromFloorText(text) {
+    const clean = stripGeneratedImageArtifacts(text);
+    if (!clean) return '';
+    return clean.length > 1200 ? `${clean.slice(0, 1200)}...` : clean;
+}
+
+function getCurrentFloorPrompt() {
+    const mes = getCurrentFloorMessageElement();
+    if (!mes) return { prompt: '', messageId: null };
+    const messageId = getMessageIdFromElement(mes);
+    const contextText = getMessageTextFromContext(messageId);
+    const renderedText = mes.querySelector?.('.mes_text')?.textContent || mes.textContent || '';
+    const sourceText = contextText || renderedText;
+    const taggedPrompt = getPromptFromImageTagText(sourceText);
+    return {
+        prompt: taggedPrompt || buildPromptFromFloorText(sourceText),
+        messageId,
+    };
+}
+
+async function generateImageFromCurrentFloor() {
+    const { prompt, messageId } = getCurrentFloorPrompt();
+    if (!prompt) return toastr.warning('没有找到当前楼层内容');
+    $('#st_gpt_image_prompt').val(prompt);
+    await activateTab('generate');
+    const imageUrl = await generateImage(prompt);
+    if (imageUrl && Number.isInteger(messageId)) toastr.success(`已从第 ${messageId + 1} 楼生成图片`);
+    return imageUrl;
+}
+
 function renderInlineImageContent(wrapper, entry) {
     const safeUrl = sanitizeImageUrl(entry?.imageUrl);
     const prompt = String(entry?.prompt ?? '');
@@ -1051,7 +1140,7 @@ function processMessageElement(el, { allowImageRequests = true } = {}) {
     const messageId = getMessageIdFromElement(el);
     let replaced = false;
     for (const node of textNodes) {
-        const re = /\[image\]([\s\S]+?)\[\/image\]|\[st-ai-image\b[^\]]*\]/g;
+        const re = new RegExp(`${IMAGE_REQUEST_SOURCE}|\\[st-ai-image\\b[^\\]]*\\]`, 'gi');
         const text = node.textContent;
         if (!re.test(text)) continue;
         re.lastIndex = 0;
@@ -1063,9 +1152,10 @@ function processMessageElement(el, { allowImageRequests = true } = {}) {
             if (m.index > lastIdx) {
                 frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
             }
-            if (m[1] !== undefined && allowImageRequests) {
-                frag.appendChild(createInlineGenerateButton(m[1].trim(), m[0], messageId));
-            } else if (m[1] !== undefined) {
+            const prompt = getImageRequestPrompt(m);
+            if (prompt && allowImageRequests) {
+                frag.appendChild(createInlineGenerateButton(prompt, m[0], messageId));
+            } else if (prompt) {
                 frag.appendChild(document.createTextNode(m[0]));
             } else {
                 frag.appendChild(createInlineImageWrapper(parseInlineImageMarker(m[0])));
@@ -1086,7 +1176,7 @@ function getInlineScanElements() {
     const seen = new Set();
     return roots.filter((el) => {
         if (!el?.textContent || !hasInlineRenderableTag(el.textContent)) return false;
-        if (el.classList?.contains('mes') && el.querySelector('.mes_text')?.textContent?.match(/\[st-ai-image\b|\[image\]/)) return false;
+        if (el.classList?.contains('mes') && el.querySelector('.mes_text')?.textContent && hasInlineRenderableTag(el.querySelector('.mes_text').textContent)) return false;
         if (seen.has(el)) return false;
         seen.add(el);
         return true;
@@ -1337,6 +1427,19 @@ jQuery(async () => {
             const p = $('#st_gpt_image_prompt').val()?.trim();
             if (p) await generateImage(p);
         });
+        $('#st_gpt_generate_current_floor_btn').on('click', async () => {
+            const btn = document.getElementById('st_gpt_generate_current_floor_btn');
+            if (!btn) return;
+            btn.disabled = true;
+            const oldHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 从当前楼层生成中...';
+            try {
+                await generateImageFromCurrentFloor();
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = oldHtml;
+            }
+        });
         $('#st_gpt_image_prompt').on('keydown', async (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -1395,6 +1498,10 @@ jQuery(async () => {
         });
         $('#st_gpt_image_clear_history').on('click', () => {
             if (confirm('清空所有生成记录？')) clearHistory();
+        });
+
+        $(document).on('click', '#chat .mes', function () {
+            currentFloorMessageElement = this;
         });
 
         // 自动检测聊天中的生图指令 → 原位生成
