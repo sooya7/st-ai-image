@@ -386,7 +386,7 @@ function shouldProcessInlineText(text, settings = getSettings()) {
     const value = String(text ?? '');
     if (hasInlineImageMarker(value)) return true;
     if (!settings.enabled) return false;
-    return !!settings.autoDetect && hasImageTag(value);
+    return hasImageTag(value);
 }
 
 function replaceFirstImageRequest(text, originalTag, imageId) {
@@ -827,7 +827,7 @@ function scheduleScan() {
     if (scanTimer) clearTimeout(scanTimer);
     scanTimer = setTimeout(() => {
         const s = getSettings();
-        const allowImageRequests = !!(s.enabled && s.autoDetect);
+        const allowImageRequests = !!s.enabled;
         const els = document.querySelectorAll('.mes_text');
         els.forEach(el => {
             if (shouldProcessInlineText(el.textContent, s)) processMessageElement(el, { allowImageRequests });

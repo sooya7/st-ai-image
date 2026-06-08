@@ -69,6 +69,10 @@ assert.strictEqual(
 );
 assert.strictEqual(
     helpers.shouldProcessInlineText('abc [image]prompt[/image] def', { enabled: true, autoDetect: false }),
+    true,
+);
+assert.strictEqual(
+    helpers.shouldProcessInlineText('abc [image]prompt[/image] def', { enabled: false, autoDetect: true }),
     false,
 );
 assert.strictEqual(
