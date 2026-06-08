@@ -5,9 +5,11 @@ const DB_NAME = 'st_ai_image_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'history';
 const FALLBACK_HISTORY_KEY = `${extensionName}_history_fallback`;
-const IMAGE_REQUEST_SOURCE = String.raw`\[(?:image|图片|图像|画图|生图)\]([\s\S]+?)\[\/(?:image|图片|图像|画图|生图)\]|<\s*(?:image|图片|图像|画图|生图)\s*>([\s\S]+?)<\s*\/\s*(?:image|图片|图像|画图|生图)\s*>`;
+const IMAGE_TAG_NAMES_SOURCE = String.raw`image|图片|图像|画图|生图`;
+const IMAGE_REQUEST_SOURCE = String.raw`\[\s*(${IMAGE_TAG_NAMES_SOURCE})\s*\]([\s\S]+?)\[\s*\/\s*\1\s*\]|<\s*(${IMAGE_TAG_NAMES_SOURCE})\s*>([\s\S]+?)<\s*\/\s*\3\s*>`;
 const IMAGE_TAG_RE = new RegExp(IMAGE_REQUEST_SOURCE, 'gi');
 const IMAGE_TAG_FIRST_RE = new RegExp(IMAGE_REQUEST_SOURCE, 'i');
+const IMAGE_TAG_QUICK_RE = /\[\s*\/?\s*(?:image|图片|图像|画图|生图)\s*\]|<\s*\/?\s*(?:image|图片|图像|画图|生图)\s*>/i;
 const INLINE_IMAGE_MARKER_RE = /\[st-ai-image\b[^\]]*\]/g;
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\((<([^>]+)>|([^)]+))\)/g;
 
@@ -606,7 +608,7 @@ function shouldProcessInlineText(text, settings = getSettings()) {
 
 function getImageRequestPrompt(match) {
     if (!match) return '';
-    return String(match[1] ?? match[2] ?? '').trim();
+    return String(match[2] ?? match[4] ?? '').trim();
 }
 
 function replaceFirstImageRequest(text, originalTag, imageId) {
@@ -631,6 +633,8 @@ function buildImageActionsHtml(context, prompt, imageUrl, options = {}) {
 }
 
 function hasImageTag(text) {
+    IMAGE_TAG_QUICK_RE.lastIndex = 0;
+    if (!IMAGE_TAG_QUICK_RE.test(String(text ?? ''))) return false;
     IMAGE_TAG_RE.lastIndex = 0;
     return IMAGE_TAG_RE.test(String(text ?? ''));
 }
