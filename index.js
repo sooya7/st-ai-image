@@ -1240,6 +1240,23 @@ function startInlineScanInterval(durationMs = 30000) {
 
 let inlineObserver = null;
 let inlineScanEventsBound = false;
+
+// [AI 自动图文出图] 通过 SillyTavern 内置 addExtensionPrompt 后台自动提示 AI 在文中输出 [image] 标签
+function registerSystemExtensionPrompt() {
+    const ctx = getSillyTavernContext();
+    if (!ctx || typeof ctx.addExtensionPrompt !== "function") return;
+
+    const s = getSettings();
+    const systemInstruction = String(s.systemPrompt || "").trim();
+
+    if (s.enabled && s.autoInjectPrompt && systemInstruction) {
+        ctx.addExtensionPrompt("st-ai-image", "auto-image-prompt", systemInstruction, "system", "before_char", 0);
+        console.log("[st-ai-image] System extension prompt successfully injected!");
+    } else {
+        ctx.addExtensionPrompt("st-ai-image", "auto-image-prompt", "", "system", "before_char", 0);
+    }
+}
+
 function initAutoDetect() {
     console.log('[st-ai-image] initAutoDetect called');
     registerSystemExtensionPrompt();
@@ -1282,22 +1299,6 @@ function initAutoDetect() {
             if (eventName && typeof eventSource?.on === 'function') eventSource.on(eventName, scanInlineMessagesBurst);
         });
     }
-
-    // [AI 自动图文出图] 通过 SillyTavern 内置 addExtensionPrompt 后台自动提示 AI 在文中输出 [image] 标筎
-function registerSystemExtensionPrompt() {
-    const ctx = getSillyTavernContext();
-    if (!ctx || typeof ctx.addExtensionPrompt !== "function") return;
-    
-    const s = getSettings();
-    const systemInstruction = String(s.systemPrompt || "").trim();
-    
-    if (s.enabled && s.autoInjectPrompt && systemInstruction) {
-        ctx.addExtensionPrompt("st-ai-image", "auto-image-prompt", systemInstruction, "system", "before_char", 0);
-        console.log("[st-ai-image] System extension prompt successfully injected!");
-    } else {
-        ctx.addExtensionPrompt("st-ai-image", "auto-image-prompt", "", "system", "before_char", 0);
-    }
-}
 
 console.log('[st-ai-image] inline scanner attached');
 }
