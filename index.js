@@ -1379,6 +1379,16 @@ jQuery(async () => {
             }
         });
 
+        // 提示词模板快捷选择
+        $('#st_gpt_prompt_template').on('change', function () {
+            const key = String($(this).val()).trim();
+            if (!key) return;
+            const current = String($('#st_gpt_image_prompt').val()).trim();
+            const merged = applyPromptTemplate(current, key);
+            $('#st_gpt_image_prompt').val(merged);
+            $(this).val('');
+        });
+
         // Wand 按钮 → 打开悬浮窗
         $('#st_ai_image_wand_button').on('click', async function () {
             const panel = document.getElementById('st_ai_float_panel');

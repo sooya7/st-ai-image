@@ -780,3 +780,11 @@
     border-color: rgba(255, 255, 255, 0.08);
     font-size: 12px;
 }
+
+/* --- 系统提示词文本框 --- */
+.st_ai_prompt_textarea_field textarea {
+    min-height: 80px;
+    max-height: 200px;
+    font-size: 12px;
+    line-height: 1.6;
+}
