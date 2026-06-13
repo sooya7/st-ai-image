@@ -768,3 +768,15 @@
         max-height: 300px;
     }
 }
+
+/* --- 提示词模板控制增强 --- */
+.st_ai_template_row {
+    margin-top: 8px;
+    display: flex;
+}
+.st_ai_template_select {
+    width: 100%;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.08);
+    font-size: 12px;
+}

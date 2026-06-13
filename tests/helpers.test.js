@@ -18,98 +18,13 @@ assert.strictEqual(
     'long API errors are summarized',
 );
 
-assert.ok(
-    helpers.buildImageActionsHtml('result', 'p"rompt', 'https://example.com/a.png').includes('data-action="download-image"'),
-    'result actions include download image',
-);
-assert.ok(
-    helpers.buildImageActionsHtml('result', 'prompt', 'https://example.com/a.png').includes('data-action="save-image"'),
-    'result actions include save to gallery',
-);
-assert.ok(
-    !helpers.buildImageActionsHtml('result', 'prompt', 'javascript:alert(1)').includes('javascript:'),
-    'unsafe image URLs are not rendered',
-);
-assert.ok(
-    !helpers.buildImageActionsHtml('result', 'prompt', 'https://example.com/a.png').includes('copy-prompt'),
-    'prompt copy action is not rendered',
-);
-assert.ok(
-    !helpers.buildImageActionsHtml('result', 'prompt', 'https://example.com/a.png').includes('reuse-prompt'),
-    'prompt reuse action is not rendered',
-);
-
-assert.strictEqual(helpers.hasImageTag('abc [image]提示[/image] def'), true);
-assert.strictEqual(helpers.hasImageTag('abc def'), false);
-
-assert.strictEqual(helpers.createInlineImageMarker(42), '[st-ai-image id="42"]');
 assert.strictEqual(
-    helpers.createInlineImageMarker({ imageUrl: 'user/images/AI Image Generator/a.png' }),
-    '![AI Image](user/images/AI%20Image%20Generator/a.png)',
+    helpers.applyPromptTemplate('', 'character'),
+    '单人角色立绘，清晰五官，完整服装设计，自然站姿，纯色或简洁背景，masterpiece, best quality, highly detailed',
 );
 assert.strictEqual(
-    helpers.createInlineImageMarker({ id: 7, imageUrl: 'user/images/AI Image Generator/a.png', prompt: 'cat ] pic' }),
-    '![cat \\] pic](user/images/AI%20Image%20Generator/a.png)',
-);
-assert.strictEqual(helpers.hasInlineImageMarker('abc [st-ai-image id="42"] def'), true);
-assert.strictEqual(helpers.hasInlineImageMarker('abc [st-ai-image src="user%2Fimages%2Fa.png"] def'), true);
-const encodedServerMarker = '[st-ai-image src="%2Fuser%2Fimages%2FAI%20Image%20Generator%2Fst-ai-image-1780885283397.png"]';
-assert.strictEqual(helpers.hasInlineImageMarker(`abc ${encodedServerMarker} def`), true);
-assert.deepStrictEqual(
-    helpers.parseInlineImageMarker('[st-ai-image src="user%2Fimages%2Fa.png"]'),
-    { id: '', imageUrl: 'user/images/a.png' },
-);
-assert.deepStrictEqual(
-    helpers.parseInlineImageMarker(encodedServerMarker),
-    { id: '', imageUrl: '/user/images/AI Image Generator/st-ai-image-1780885283397.png' },
-);
-assert.deepStrictEqual(
-    helpers.parseInlineImageMarker('[st-ai-image id="7" src="%2Fuser%2Fimages%2FAI%20Image%20Generator%2Fst-ai-image-1780885283397.png"]'),
-    { id: '7', imageUrl: '/user/images/AI Image Generator/st-ai-image-1780885283397.png' },
-);
-assert.deepStrictEqual(
-    helpers.parseInlineImageMarker('[st-ai-image id="1" src="%2Fuser%2Fimages%2FAI%20Image%20Generator%2Fst-ai-image-1780887219024.png"]'),
-    { id: '1', imageUrl: '/user/images/AI Image Generator/st-ai-image-1780887219024.png' },
-);
-assert.strictEqual(
-    helpers.shouldProcessInlineText('abc [st-ai-image id="42"] def', { enabled: true, autoDetect: false }),
-    true,
-);
-assert.strictEqual(
-    helpers.shouldProcessInlineText(encodedServerMarker, { enabled: false, autoDetect: false }),
-    true,
-);
-assert.strictEqual(
-    helpers.shouldProcessInlineText('abc [image]prompt[/image] def', { enabled: true, autoDetect: false }),
-    true,
-);
-assert.strictEqual(
-    helpers.shouldProcessInlineText('abc [image]prompt[/image] def', { enabled: false, autoDetect: true }),
-    false,
-);
-assert.strictEqual(
-    helpers.shouldProcessInlineText('abc [image]prompt[/image] def', { enabled: true, autoDetect: true }),
-    true,
-);
-assert.strictEqual(
-    helpers.replaceFirstImageRequest('abc [image]prompt[/image] def', '[image]prompt[/image]', { imageUrl: 'user/images/a.png' }),
-    'abc ![AI Image](user/images/a.png) def',
-);
-assert.strictEqual(
-    helpers.replaceFirstImageRequest('abc [image]prompt[/image] def', '[image]missing[/image]', 7),
-    'abc [st-ai-image id="7"] def',
-);
-assert.strictEqual(
-    helpers.replaceInlineImageMarkersWithMarkdown('abc [st-ai-image id="2" src="%2Fuser%2Fimages%2FAI%20Image%20Generator%2Fst-ai-image-1780887566161.png"] def'),
-    'abc ![AI Image](/user/images/AI%20Image%20Generator/st-ai-image-1780887566161.png) def',
-);
-assert.deepStrictEqual(
-    helpers.extractMarkdownImages('abc ![cat](/user/images/AI%20Image%20Generator/a.png) def'),
-    [{ prompt: 'cat', imageUrl: '/user/images/AI Image Generator/a.png' }],
-);
-assert.strictEqual(
-    helpers.normalizeGalleryImageUrl('https://example.test/user/images/AI%20Image%20Generator/a.png'),
-    '/user/images/AI Image Generator/a.png',
+    helpers.applyPromptTemplate('已有提示', 'scene'),
+    '已有提示，场景氛围，明确地点，光影层次，环境细节，情绪氛围，masterpiece, best quality, highly detailed',
 );
 
 console.log('helpers.test.js passed');

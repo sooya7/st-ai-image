@@ -22,6 +22,8 @@ const defaultSettings = {
     size: '1024x1024',
     quality: 'auto',
     saveHistory: true,
+    autoInjectPrompt: true,
+    systemPrompt: "[AI绘图触发规则]当剧情推进到需要展示视觉场景、战斗、物品道具、环境变化、或角色换装等画面时，你必须在文中叙述合适位置插入出图标签。格式:[image] 画面主体的极其详尽视觉细节描述，不得有任何抽象概念词 [/image] (每次回复最多只允许出现一个标签)",
 };
 
 const inlineTasks = new Map();
@@ -471,6 +473,20 @@ async function clearHistory() {
         tx.objectStore(STORE_NAME).clear();
         tx.oncomplete = () => renderGallery();
     } catch {}
+}
+
+const PROMPT_TEMPLATES = {
+    character: "单人角色立绘，清晰五官，完整服装设计，自然站姿，纯色或简洁背景，masterpiece, best quality, highly detailed",
+    scene: "场景氛围，明确地点，光影层次，环境细节，情绪氛围，masterpiece, best quality, highly detailed",
+    cg: "剧情CG插画，人物互动，电影感构图，细腻表情，丰富背景，masterpiece, best quality, highly detailed",
+    item: "道具特写，主体居中，材质细节，干净背景，柔和布光，masterpiece, best quality, highly detailed",
+};
+
+function applyPromptTemplate(currentPrompt, templateKey) {
+    const template = PROMPT_TEMPLATES[templateKey] || "";
+    const current = String(currentPrompt ?? "").trim();
+    if (!template) return current;
+    return current ? current + "，" + template : template;
 }
 
 function escapeHtml(value) {
@@ -1226,6 +1242,7 @@ let inlineObserver = null;
 let inlineScanEventsBound = false;
 function initAutoDetect() {
     console.log('[st-ai-image] initAutoDetect called');
+    registerSystemExtensionPrompt();
     scanInlineMessagesBurst();
     [0, 1000, 3000].forEach((delay) => setTimeout(() => migrateInlineMarkersInChat(), delay));
     [1500, 4000].forEach((delay) => setTimeout(() => syncMarkdownImagesInChatToHistory(), delay));
@@ -1266,7 +1283,23 @@ function initAutoDetect() {
         });
     }
 
-    console.log('[st-ai-image] inline scanner attached');
+    // [AI 自动图文出图] 通过 SillyTavern 内置 addExtensionPrompt 后台自动提示 AI 在文中输出 [image] 标筎
+function registerSystemExtensionPrompt() {
+    const ctx = getSillyTavernContext();
+    if (!ctx || typeof ctx.addExtensionPrompt !== "function") return;
+    
+    const s = getSettings();
+    const systemInstruction = String(s.systemPrompt || "").trim();
+    
+    if (s.enabled && s.autoInjectPrompt && systemInstruction) {
+        ctx.addExtensionPrompt("st-ai-image", "auto-image-prompt", systemInstruction, "system", "before_char", 0);
+        console.log("[st-ai-image] System extension prompt successfully injected!");
+    } else {
+        ctx.addExtensionPrompt("st-ai-image", "auto-image-prompt", "", "system", "before_char", 0);
+    }
+}
+
+console.log('[st-ai-image] inline scanner attached');
 }
 
 // ===== 初始化 =====
@@ -1303,6 +1336,8 @@ jQuery(async () => {
         $('#st_gpt_image_enabled').prop('checked', s.enabled);
         $('#st_gpt_image_auto_detect').prop('checked', s.autoDetect);
         $('#st_gpt_image_save_history').prop('checked', s.saveHistory);
+        $('#st_gpt_image_auto_inject_prompt').prop('checked', s.autoInjectPrompt);
+        $('#st_gpt_image_system_prompt_text').val(s.systemPrompt || '');
 
         const bindSetting = (id, key, type) => {
             $(id).on(type === 'check' ? 'change' : 'input', function () {
@@ -1318,6 +1353,11 @@ jQuery(async () => {
         bindSetting('#st_gpt_image_enabled', 'enabled', 'check');
         bindSetting('#st_gpt_image_auto_detect', 'autoDetect', 'check');
         bindSetting('#st_gpt_image_save_history', 'saveHistory', 'check');
+        bindSetting('#st_gpt_image_auto_inject_prompt', 'autoInjectPrompt', 'check');
+        bindSetting('#st_gpt_image_system_prompt_text', 'systemPrompt', 'text');
+        $('#st_gpt_image_auto_inject_prompt').on('change', registerSystemExtensionPrompt);
+        $('#st_gpt_image_enabled').on('change', registerSystemExtensionPrompt);
+        $('#st_gpt_image_system_prompt_text').on('input', registerSystemExtensionPrompt);
 
         // API 预设
         refreshPresetList();
@@ -1596,6 +1636,7 @@ if (typeof module !== 'undefined') {
             replaceInlineImageMarkersWithMarkdown,
             extractMarkdownImages,
             normalizeGalleryImageUrl,
+            applyPromptTemplate,
         },
     };
 }

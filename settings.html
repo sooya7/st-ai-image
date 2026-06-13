@@ -19,6 +19,15 @@
     <div class="st_ai_tab_content active" data-tab="generate">
         <div class="st_ai_gen_area">
             <textarea id="st_gpt_image_prompt" class="st_ai_textarea" rows="3" placeholder="输入图片描述..."></textarea>
+            <div class="st_ai_template_row">
+                <select id="st_gpt_prompt_template" class="st_ai_select st_ai_template_select" title="提示词模板" aria-label="提示词模板">
+                    <option value="">-- 快捷提示词模板 --</option>
+                    <option value="character">角色立绘</option>
+                    <option value="scene">场景氛围</option>
+                    <option value="cg">CG插画</option>
+                    <option value="item">道具特写</option>
+                </select>
+            </div>
             <div class="st_ai_gen_controls">
                 <select id="st_gpt_image_size" class="st_ai_select">
                     <option value="1024x1024">1024x1024</option>
@@ -94,6 +103,16 @@
                     <input type="checkbox" id="st_gpt_image_auto_detect">
                     <span>自动识别AI回复中的生图指令</span>
                 </label>
+            </div>
+            <div class="st_ai_field">
+                <label class="st_ai_checkbox">
+                    <input type="checkbox" id="st_gpt_image_auto_inject_prompt">
+                    <span>AI 自动图文出图 (通过系统提示词注入)</span>
+                </label>
+            </div>
+            <div class="st_ai_field st_ai_prompt_textarea_field" id="st_ai_prompt_container">
+                <label for="st_gpt_image_system_prompt_text">自定义 AI 出图系统提示词</label>
+                <textarea id="st_gpt_image_system_prompt_text" class="st_ai_textarea" rows="4" placeholder="输入自定义去提示 AI 出图的系统提示词..."></textarea>
             </div>
             <div class="st_ai_field">
                 <label class="st_ai_checkbox">
