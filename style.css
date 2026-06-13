@@ -707,8 +707,6 @@
     to { transform: rotate(360deg); }
 }
 
-/* --- 图片预览覆盖层 --- */
-
 /* --- 移动端 --- */
 @media (max-width: 600px) {
     .st_ai_tab {

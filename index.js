@@ -973,7 +973,7 @@ function getCurrentFloorMessageElement() {
 
 function stripGeneratedImageArtifacts(text) {
     return String(text ?? '')
-        .replace(IMAGE_TAG_RE, '$1$2')
+        .replace(IMAGE_TAG_RE, '$2$4')
         .replace(INLINE_IMAGE_MARKER_RE, '')
         .replace(MARKDOWN_IMAGE_RE, '$1')
         .replace(/\s+/g, ' ')
@@ -1152,6 +1152,7 @@ async function migrateInlineMarkersInChat() {
 }
 
 function processMessageElement(el, { allowImageRequests = true } = {}) {
+    if (el.dataset.stGptProcessed === '1') return;
     if (!hasInlineRenderableTag(el.textContent)) return;
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
     const textNodes = [];
