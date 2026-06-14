@@ -492,7 +492,7 @@ function escapeAttr(value) {
 function sanitizeImageUrl(value) {
     const url = String(value ?? '').trim();
     if (!url) return '';
-    if (/^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\s]+$/i.test(url)) return url;
+    if (/^data:image\/[a-z0-9.+-]+;base64,[a-zA-Z0-9+/=\s]+$/i.test(url)) return url;
     if (/^blob:/i.test(url)) return url;
     try {
         const base = typeof window !== 'undefined' && window.location?.href ? window.location.href : 'https://example.invalid/';
