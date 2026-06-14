@@ -288,6 +288,30 @@ function getRequestHeadersForJson() {
     return { 'Content-Type': 'application/json' };
 }
 
+let _csrfTokenCache = null;
+
+async function getCsrfToken() {
+    if (_csrfTokenCache) return _csrfTokenCache;
+    try {
+        const res = await fetch('/csrf-token');
+        if (res.ok) {
+            const data = await res.json();
+            _csrfTokenCache = data.token || '';
+            return _csrfTokenCache;
+        }
+    } catch (e) {
+        console.warn('[st-ai-image] 获取CSRF token失败:', e);
+    }
+    return '';
+}
+
+async function getRequestHeadersWithCsrf() {
+    const headers = getRequestHeadersForJson();
+    const token = await getCsrfToken();
+    if (token) headers['x-csrf-token'] = token;
+    return headers;
+}
+
 function getSillyTavernGalleryFolder() {
     const ctx = getSillyTavernContext();
     const character = Number.isInteger(ctx?.characterId) ? ctx.characters?.[ctx.characterId] : null;
@@ -324,16 +348,27 @@ async function uploadImageToSillyTavernGallery(imageUrl) {
     }
     if (!dataImage) return '';
 
-    const response = await fetch('/api/images/upload', {
-        method: 'POST',
-        headers: getRequestHeadersForJson(),
-        body: JSON.stringify({
-            image: dataImage.base64,
-            format: dataImage.format,
-            ch_name: getSillyTavernGalleryFolder(),
-            filename: `st-ai-image-${Date.now()}`,
-        }),
+    const body = JSON.stringify({
+        image: dataImage.base64,
+        format: dataImage.format,
+        ch_name: getSillyTavernGalleryFolder(),
+        filename: `st-ai-image-${Date.now()}`,
     });
+
+    let response = await fetch('/api/images/upload', {
+        method: 'POST',
+        headers: await getRequestHeadersWithCsrf(),
+        body,
+    });
+
+    if (response.status === 403) {
+        _csrfTokenCache = null;
+        response = await fetch('/api/images/upload', {
+            method: 'POST',
+            headers: await getRequestHeadersWithCsrf(),
+            body,
+        });
+    }
 
     if (!response.ok) {
         const errorText = await response.text();
