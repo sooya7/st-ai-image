@@ -1154,42 +1154,83 @@ async function migrateInlineMarkersInChat() {
 function processMessageElement(el, { allowImageRequests = true } = {}) {
     if (el.dataset.stGptProcessed === '1') return;
     if (!hasInlineRenderableTag(el.textContent)) return;
+
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
     const textNodes = [];
     while (walker.nextNode()) textNodes.push(walker.currentNode);
+    if (!textNodes.length) return;
+
+    // 拼接所有文本节点内容，用于匹配跨节点的 [image]...[/image] 标签
+    const fullText = textNodes.map(n => n.textContent).join('');
+    const re = new RegExp(`${IMAGE_REQUEST_SOURCE}|\\[st-ai-image\\b[^\\]]*\\]`, 'gi');
+    if (!re.test(fullText)) return;
+    re.lastIndex = 0;
 
     const messageId = getMessageIdFromElement(el);
-    let replaced = false;
+
+    // 计算每个文本节点在拼接字符串中的起止位置
+    const nodeRanges = [];
+    let offset = 0;
     for (const node of textNodes) {
-        const re = new RegExp(`${IMAGE_REQUEST_SOURCE}|\\[st-ai-image\\b[^\\]]*\\]`, 'gi');
-        const text = node.textContent;
-        if (!re.test(text)) continue;
-        re.lastIndex = 0;
+        const len = node.textContent.length;
+        nodeRanges.push({ node, start: offset, end: offset + len });
+        offset += len;
+    }
+
+    // 收集所有匹配结果及其对应的 DOM 操作
+    const allMatches = [];
+    let m;
+    while ((m = re.exec(fullText)) !== null) {
+        const matchStart = m.index;
+        const matchEnd = re.lastIndex;
+        const prompt = getImageRequestPrompt(m);
+        let replacement;
+        if (prompt && allowImageRequests) {
+            replacement = createInlineGenerateButton(prompt, m[0], messageId);
+        } else if (prompt) {
+            replacement = document.createTextNode(m[0]);
+        } else {
+            replacement = createInlineImageWrapper(parseInlineImageMarker(m[0]));
+        }
+        allMatches.push({ matchStart, matchEnd, replacement });
+    }
+    if (!allMatches.length) return;
+
+    // 将匹配结果映射回各文本节点，逐节点做 DOM 替换
+    for (const { node, start: nodeStart, end: nodeEnd } of nodeRanges) {
+        const nodeMatches = allMatches.filter(
+            ({ matchStart, matchEnd }) => matchStart < nodeEnd && matchEnd > nodeStart,
+        );
+        if (!nodeMatches.length) continue;
 
         const frag = document.createDocumentFragment();
         let lastIdx = 0;
-        let m;
-        while ((m = re.exec(text)) !== null) {
-            if (m.index > lastIdx) {
-                frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+        const localText = node.textContent;
+
+        for (const { matchStart, matchEnd, replacement } of nodeMatches) {
+            const localStart = Math.max(0, matchStart - nodeStart);
+            const localEnd = Math.min(localText.length, matchEnd - nodeStart);
+
+            if (localStart > lastIdx) {
+                frag.appendChild(document.createTextNode(localText.slice(lastIdx, localStart)));
             }
-            const prompt = getImageRequestPrompt(m);
-            if (prompt && allowImageRequests) {
-                frag.appendChild(createInlineGenerateButton(prompt, m[0], messageId));
-            } else if (prompt) {
-                frag.appendChild(document.createTextNode(m[0]));
-            } else {
-                frag.appendChild(createInlineImageWrapper(parseInlineImageMarker(m[0])));
+
+            // 仅在匹配起始所在的节点中插入替换元素，后续跨入的节点跳过
+            if (matchStart >= nodeStart && matchStart < nodeEnd) {
+                frag.appendChild(replacement);
             }
-            lastIdx = re.lastIndex;
+
+            lastIdx = localEnd;
         }
-        if (lastIdx < text.length) {
-            frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+
+        if (lastIdx < localText.length) {
+            frag.appendChild(document.createTextNode(localText.slice(lastIdx)));
         }
+
         node.parentNode.replaceChild(frag, node);
-        replaced = true;
     }
-    if (replaced) el.dataset.stGptProcessed = '1';
+
+    el.dataset.stGptProcessed = '1';
 }
 
 function getInlineScanElements() {
