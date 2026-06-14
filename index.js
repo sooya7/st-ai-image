@@ -475,20 +475,6 @@ async function clearHistory() {
     } catch (e) { console.warn('[st-ai-image] clearHistory error:', e); }
 }
 
-const PROMPT_TEMPLATES = {
-    character: "单人角色立绘，清晰五官，完整服装设计，自然站姿，纯色或简洁背景，masterpiece, best quality, highly detailed",
-    scene: "场景氛围，明确地点，光影层次，环境细节，情绪氛围，masterpiece, best quality, highly detailed",
-    cg: "剧情CG插画，人物互动，电影感构图，细腻表情，丰富背景，masterpiece, best quality, highly detailed",
-    item: "道具特写，主体居中，材质细节，干净背景，柔和布光，masterpiece, best quality, highly detailed",
-};
-
-function applyPromptTemplate(currentPrompt, templateKey) {
-    const template = PROMPT_TEMPLATES[templateKey] || "";
-    const current = String(currentPrompt ?? "").trim();
-    if (!template) return current;
-    return current ? current + "，" + template : template;
-}
-
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
         '&': '&amp;',
@@ -1445,16 +1431,6 @@ jQuery(async () => {
             }
         });
 
-        // 提示词模板快捷选择
-        $('#st_gpt_prompt_template').on('change', function () {
-            const key = String($(this).val()).trim();
-            if (!key) return;
-            const current = String($('#st_gpt_image_prompt').val()).trim();
-            const merged = applyPromptTemplate(current, key);
-            $('#st_gpt_image_prompt').val(merged);
-            $(this).val('');
-        });
-
         // Wand 按钮 → 打开悬浮窗
         $('#st_ai_image_wand_button').on('click', async function () {
             const panel = document.getElementById('st_ai_float_panel');
@@ -1712,7 +1688,6 @@ if (typeof module !== 'undefined') {
             replaceInlineImageMarkersWithMarkdown,
             extractMarkdownImages,
             normalizeGalleryImageUrl,
-            applyPromptTemplate,
         },
     };
 }
