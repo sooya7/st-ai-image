@@ -454,7 +454,7 @@ async function trimHistory() {
             const toDelete = items.slice(200);
             for (const item of toDelete) store.delete(item.id);
         }
-    } catch {}
+    } catch (e) { console.warn('[st-ai-image] trimHistory error:', e); }
 }
 
 async function deleteHistoryItem(id) {
@@ -463,7 +463,7 @@ async function deleteHistoryItem(id) {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         tx.objectStore(STORE_NAME).delete(id);
         tx.oncomplete = () => renderGallery();
-    } catch {}
+    } catch (e) { console.warn('[st-ai-image] deleteHistoryItem error:', e); }
 }
 
 async function clearHistory() {
@@ -472,7 +472,7 @@ async function clearHistory() {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         tx.objectStore(STORE_NAME).clear();
         tx.oncomplete = () => renderGallery();
-    } catch {}
+    } catch (e) { console.warn('[st-ai-image] clearHistory error:', e); }
 }
 
 const PROMPT_TEMPLATES = {
@@ -618,7 +618,7 @@ function hasInlineRenderableTag(text) {
 function shouldProcessInlineText(text, settings = getSettings()) {
     const value = String(text ?? '');
     if (hasInlineImageMarker(value)) return true;
-    if (!settings.enabled) return false;
+    if (!settings.enabled || !settings.autoDetect) return false;
     return hasImageTag(value);
 }
 
@@ -680,22 +680,23 @@ function isGeminiModel(model) {
     return /gemini/i.test(model);
 }
 
-async function callImageAPI(prompt) {
+async function callImageAPI(prompt, { signal } = {}) {
     const s = getSettings();
     let base = s.apiBase.replace(/\/+$/, '');
     if (base.endsWith('/v1')) base = base.slice(0, -3);
 
     // Gemini 模型走原生端点（需要 responseModalities 才能出图）
     if (isGeminiModel(s.model)) {
-        const url = `${base}/v1beta/models/${s.model}:generateContent?key=${s.apiKey}`;
+        const url = `${base}/v1beta/models/${s.model}:generateContent`;
         const body = {
             contents: [{ role: 'user', parts: [{ text: `Generate an image: ${prompt}` }] }],
             generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
         };
         const resp = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.apiKey },
             body: JSON.stringify(body),
+            signal,
         });
         if (!resp.ok) throw new Error(`Gemini API ${resp.status}: ${summarizeApiError(await resp.text())}`);
         const data = await resp.json();
@@ -717,6 +718,7 @@ async function callImageAPI(prompt) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.apiKey}` },
         body: JSON.stringify(body),
+        signal,
     });
     if (!resp.ok) throw new Error(`API ${resp.status}: ${summarizeApiError(await resp.text())}`);
     const data = await resp.json();
@@ -755,7 +757,9 @@ async function fetchModels() {
 
         // 没结果再尝试 Gemini 格式
         if (!models.length) {
-            const resp = await fetch(`${base}/v1beta/models?key=${s.apiKey}`);
+            const resp = await fetch(`${base}/v1beta/models`, {
+                headers: { 'x-goog-api-key': s.apiKey },
+            });
             if (resp.ok) {
                 const data = await resp.json();
                 models = (data.models || []).map(m => ({
@@ -785,10 +789,16 @@ async function fetchModels() {
     }
 }
 
+let _currentGenAbortController = null;
+
 async function generateImage(prompt) {
     if (!prompt?.trim()) return toastr.warning('请输入图片描述');
     const s = getSettings();
     if (!s.apiKey) return toastr.error('请先在设置中填写 API Key');
+
+    // 取消上一次进行中的请求
+    _currentGenAbortController?.abort();
+    _currentGenAbortController = new AbortController();
 
     const $btn = $('#st_gpt_image_generate_btn');
     const $result = $('#st_gpt_gen_result');
@@ -797,7 +807,7 @@ async function generateImage(prompt) {
 
     try {
         const cleanPrompt = prompt.trim();
-        const url = await callImageAPI(cleanPrompt);
+        const url = await callImageAPI(cleanPrompt, { signal: _currentGenAbortController.signal });
         const { saved, imageUrl } = await saveGeneratedImage({ prompt: cleanPrompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size });
 
         $result.html(`
@@ -813,11 +823,16 @@ async function generateImage(prompt) {
         toastr.success('图片生成完成', 'GPT Image');
         return imageUrl;
     } catch (e) {
+        if (e.name === 'AbortError') {
+            $result.html('<div class="st_ai_gen_placeholder">已取消</div>');
+            return null;
+        }
         console.error('[st-ai-image]', e);
         $result.html(`<div class="st_ai_gen_placeholder st_ai_error_text">生成失败: ${escapeHtml(e.message)}</div>`);
         toastr.error(e.message, '生成失败');
         return null;
     } finally {
+        _currentGenAbortController = null;
         $btn.prop('disabled', false);
     }
 }
@@ -1152,8 +1167,13 @@ async function migrateInlineMarkersInChat() {
 }
 
 function processMessageElement(el, { allowImageRequests = true } = {}) {
-    if (el.dataset.stGptProcessed === '1') return;
-    if (!hasInlineRenderableTag(el.textContent)) return;
+    const currentText = el.textContent;
+    if (el.dataset.stGptProcessed === '1') {
+        // 内容变化时（如流式输出新增标签），重置标记重新处理
+        if (el.dataset._stGptText === currentText) return;
+        delete el.dataset.stGptProcessed;
+    }
+    if (!hasInlineRenderableTag(currentText)) return;
 
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
     const textNodes = [];
@@ -1231,6 +1251,7 @@ function processMessageElement(el, { allowImageRequests = true } = {}) {
     }
 
     el.dataset.stGptProcessed = '1';
+    el.dataset._stGptText = currentText;
 }
 
 function getInlineScanElements() {
@@ -1255,7 +1276,7 @@ function scanInlineMessages() {
 }
 
 let scanTimer = null;
-function scheduleScan(delay = 300) {
+function scheduleScan(delay = 150) {
     if (scanTimer) clearTimeout(scanTimer);
     scanTimer = setTimeout(() => {
         scanTimer = null;
@@ -1264,7 +1285,7 @@ function scheduleScan(delay = 300) {
 }
 
 function scanInlineMessagesBurst() {
-    [0, 150, 600, 1500, 3000, 6000].forEach((delay) => setTimeout(scanInlineMessages, delay));
+    [0, 500, 2000, 5000].forEach((delay) => setTimeout(scanInlineMessages, delay));
     startInlineScanInterval();
 }
 
@@ -1277,7 +1298,7 @@ function startInlineScanInterval(durationMs = 30000) {
             clearInterval(inlineScanInterval);
             inlineScanInterval = null;
         }
-    }, 2000);
+    }, 3000);
 }
 
 let inlineObserver = null;
@@ -1309,7 +1330,7 @@ function initAutoDetect() {
     [1500, 4000].forEach((delay) => setTimeout(() => syncMarkdownImagesInChatToHistory(), delay));
     [2000, 5000, 10000].forEach((delay) => setTimeout(() => syncRenderedChatImagesToHistory(), delay));
 
-    const target = document.body || document.getElementById('chat');
+    const target = document.getElementById('chat') || document.body;
     if (!target) {
         console.warn('[st-ai-image] scan target not found');
         return;
@@ -1344,7 +1365,7 @@ function initAutoDetect() {
         });
     }
 
-console.log('[st-ai-image] inline scanner attached');
+    console.log('[st-ai-image] inline scanner attached');
 }
 
 // ===== 初始化 =====
