@@ -715,7 +715,7 @@ async function callImageAPI(prompt, { signal } = {}) {
     const extra = String(s.extraPrompt || '').trim();
     const negative = String(s.negativePrompt || '').trim();
     let fullPrompt = prompt;
-    if (extra) fullPrompt = `${fullPrompt}, ${extra}`;
+    if (extra) fullPrompt = `${extra}, ${fullPrompt}`;
 
     // Gemini 模型走原生端点（需要 responseModalities 才能出图）
     if (isGeminiModel(s.model)) {
