@@ -556,9 +556,12 @@ function extractMarkdownImages(text) {
 
 function createInlineImageMarker(id) {
     if (id && typeof id === 'object') {
+        const safeId = String(id.id ?? '').replace(/[^a-zA-Z0-9_.:-]/g, '');
+        if (safeId) return `[st-ai-image id="${safeId}"]`;
+        // 没有 ID 时才用 markdown 内联 URL（会占用发给 AI 的上下文）
         const safeUrl = sanitizeImageUrl(id.imageUrl);
         if (safeUrl) return createMarkdownImageMarkup(safeUrl, id.prompt);
-        id = id.id;
+        return '';
     }
     const safeId = String(id ?? '').replace(/[^a-zA-Z0-9_.:-]/g, '');
     return safeId ? `[st-ai-image id="${safeId}"]` : '';
