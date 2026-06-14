@@ -296,7 +296,7 @@ function getSillyTavernGalleryFolder() {
 
 function getStableInlineImageUrl(imageUrl) {
     const safeUrl = sanitizeImageUrl(imageUrl);
-    if (!safeUrl || /^data:/i.test(safeUrl) || /^blob:/i.test(safeUrl)) return '';
+    if (!safeUrl || /^blob:/i.test(safeUrl)) return '';
     return safeUrl;
 }
 
