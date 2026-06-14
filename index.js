@@ -22,6 +22,8 @@ const defaultSettings = {
     size: '1024x1024',
     quality: 'auto',
     saveHistory: true,
+    extraPrompt: '',
+    negativePrompt: '',
     autoInjectPrompt: true,
     systemPrompt: "[AI绘图触发规则]当剧情推进到需要展示视觉场景、战斗、物品道具、环境变化、或角色换装等画面时，你必须在文中叙述合适位置插入出图标签。格式:[image] 画面主体的极其详尽视觉细节描述，不得有任何抽象概念词 [/image] (每次回复最多只允许出现一个标签)",
 };
@@ -709,11 +711,19 @@ async function callImageAPI(prompt, { signal } = {}) {
     let base = s.apiBase.replace(/\/+$/, '');
     if (base.endsWith('/v1')) base = base.slice(0, -3);
 
+    // 拼接额外提示词
+    const extra = String(s.extraPrompt || '').trim();
+    const negative = String(s.negativePrompt || '').trim();
+    let fullPrompt = prompt;
+    if (extra) fullPrompt = `${fullPrompt}, ${extra}`;
+
     // Gemini 模型走原生端点（需要 responseModalities 才能出图）
     if (isGeminiModel(s.model)) {
         const url = `${base}/v1beta/models/${s.model}:generateContent`;
+        let geminiText = `Generate an image: ${fullPrompt}`;
+        if (negative) geminiText += `. Avoid: ${negative}`;
         const body = {
-            contents: [{ role: 'user', parts: [{ text: `Generate an image: ${prompt}` }] }],
+            contents: [{ role: 'user', parts: [{ text: geminiText }] }],
             generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
         };
         const resp = await fetch(url, {
@@ -735,8 +745,9 @@ async function callImageAPI(prompt, { signal } = {}) {
     }
 
     // OpenAI 兼容模型走标准端点
-    const body = { model: s.model, prompt, n: 1, size: s.size };
+    const body = { model: s.model, prompt: fullPrompt, n: 1, size: s.size };
     if (s.quality && s.quality !== 'auto') body.quality = s.quality;
+    if (negative) body.negative_prompt = negative;
 
     const resp = await fetch(`${base}/v1/images/generations`, {
         method: 'POST',
@@ -1434,6 +1445,8 @@ jQuery(async () => {
         $('#st_gpt_image_save_history').prop('checked', s.saveHistory);
         $('#st_gpt_image_auto_inject_prompt').prop('checked', s.autoInjectPrompt);
         $('#st_gpt_image_system_prompt_text').val(s.systemPrompt || '');
+        $('#st_gpt_image_extra_prompt').val(s.extraPrompt || '');
+        $('#st_gpt_image_negative_prompt').val(s.negativePrompt || '');
 
         const bindSetting = (id, key, type) => {
             $(id).on(type === 'check' ? 'change' : 'input', function () {
@@ -1451,6 +1464,8 @@ jQuery(async () => {
         bindSetting('#st_gpt_image_save_history', 'saveHistory', 'check');
         bindSetting('#st_gpt_image_auto_inject_prompt', 'autoInjectPrompt', 'check');
         bindSetting('#st_gpt_image_system_prompt_text', 'systemPrompt', 'text');
+        bindSetting('#st_gpt_image_extra_prompt', 'extraPrompt', 'text');
+        bindSetting('#st_gpt_image_negative_prompt', 'negativePrompt', 'text');
         $('#st_gpt_image_auto_inject_prompt').on('change', registerSystemExtensionPrompt);
         $('#st_gpt_image_enabled').on('change', registerSystemExtensionPrompt);
         $('#st_gpt_image_system_prompt_text').on('input', registerSystemExtensionPrompt);
