@@ -1242,19 +1242,21 @@ function startInlineScanInterval(durationMs = 30000) {
 let inlineObserver = null;
 let inlineScanEventsBound = false;
 
-// [AI 自动图文出图] 通过 SillyTavern 内置 addExtensionPrompt 后台自动提示 AI 在文中输出 [image] 标签
+// [AI 自动图文出图] 通过 SillyTavern 内置 setExtensionPrompt 后台自动提示 AI 在文中输出 [image] 标签
+// position 枚举: -1=NONE, 0=IN_PROMPT, 1=IN_CHAT, 2=BEFORE_PROMPT
+// role 枚举: 0=SYSTEM, 1=USER, 2=ASSISTANT
 function registerSystemExtensionPrompt() {
     const ctx = getSillyTavernContext();
-    if (!ctx || typeof ctx.addExtensionPrompt !== "function") return;
+    if (!ctx || typeof ctx.setExtensionPrompt !== "function") return;
 
     const s = getSettings();
     const systemInstruction = String(s.systemPrompt || "").trim();
 
     if (s.enabled && s.autoInjectPrompt && systemInstruction) {
-        ctx.addExtensionPrompt("st-ai-image", "auto-image-prompt", systemInstruction, "system", "before_char", 0);
+        ctx.setExtensionPrompt("st-ai-image", systemInstruction, 2, 0, false, 0);
         console.log("[st-ai-image] System extension prompt successfully injected!");
     } else {
-        ctx.addExtensionPrompt("st-ai-image", "auto-image-prompt", "", "system", "before_char", 0);
+        ctx.setExtensionPrompt("st-ai-image", "", 2, 0, false, 0);
     }
 }
 
