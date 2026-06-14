@@ -1301,10 +1301,10 @@ function registerSystemExtensionPrompt() {
     const systemInstruction = String(s.systemPrompt || "").trim();
 
     if (s.enabled && s.autoInjectPrompt && systemInstruction) {
-        ctx.setExtensionPrompt("st-ai-image", systemInstruction, 2, 0, false, 0);
+        ctx.setExtensionPrompt("st-ai-image", systemInstruction, 1, 2, false, 0);
         console.log("[st-ai-image] System extension prompt successfully injected!");
     } else {
-        ctx.setExtensionPrompt("st-ai-image", "", 2, 0, false, 0);
+        ctx.setExtensionPrompt("st-ai-image", "", 1, 2, false, 0);
     }
 }
 
@@ -1349,6 +1349,12 @@ function initAutoDetect() {
             const eventName = eventTypes?.[name];
             if (eventName && typeof eventSource?.on === 'function') eventSource.on(eventName, scanInlineMessagesBurst);
         });
+
+        // 每次生成前重新注入系统提示词，防止被 ST 内部清空
+        const genStartedEvent = eventTypes?.GENERATION_STARTED;
+        if (genStartedEvent && typeof eventSource?.on === 'function') {
+            eventSource.on(genStartedEvent, registerSystemExtensionPrompt);
+        }
     }
 
     console.log('[st-ai-image] inline scanner attached');
