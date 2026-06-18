@@ -13,6 +13,17 @@ const IMAGE_TAG_QUICK_RE = /\[\s*\/?\s*(?:image|图片|图像|画图|生图)\s*\
 const INLINE_IMAGE_MARKER_RE = /\[st-ai-image\b[^\]]*\]/g;
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\((<([^>]+)>|([^)]+))\)/g;
 
+// ===== 命名常量（提取魔法数字） =====
+const MAX_HISTORY_ITEMS = 200;           // 历史记录最大条数
+const FETCH_TIMEOUT_MS = 30000;          // fetch 请求超时时间（毫秒）
+const INLINE_SCAN_INTERVAL_MS = 3000;     // 内联扫描间隔（毫秒）
+const INLINE_SCAN_DURATION_MS = 30000;   // 内联扫描持续时间（毫秒）
+const SCAN_DEBOUNCE_MS = 150;            // 扫描防抖延迟（毫秒）
+const ERROR_DISPLAY_DURATION_MS = 5000;  // 错误提示显示时长（毫秒）
+const MAX_PROMPT_LENGTH = 1200;          // 楼层提示词最大长度
+const API_ERROR_SUMMARY_LENGTH = 340;    // API 错误摘要最大长度
+const VALID_URL_PROTOCOL_RE = /^https?:\/\//i; // 合法 URL 协议校验
+
 const defaultSettings = {
     enabled: true,
     autoDetect: true,
@@ -52,6 +63,25 @@ function getSettings() {
 
 function saveSettings(s) {
     localStorage.setItem(`${extensionName}_settings`, JSON.stringify(s));
+}
+
+// ===== 带超时的 fetch 工具 =====
+function fetchWithTimeout(url, options = {}) {
+    const { timeout = FETCH_TIMEOUT_MS, signal, ...rest } = options;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(new Error('请求超时')), timeout);
+    // 如果外部传入了 signal，监听其 abort
+    if (signal) {
+        signal.addEventListener('abort', () => controller.abort(signal.reason));
+    }
+    return fetch(url, { ...rest, signal: controller.signal }).finally(() => clearTimeout(timeoutId));
+}
+
+// ===== API Base URL 校验 =====
+function isValidApiBaseUrl(url) {
+    const trimmed = String(url ?? '').trim();
+    if (!trimmed) return true; // 空值允许（未配置时）
+    return VALID_URL_PROTOCOL_RE.test(trimmed);
 }
 
 // ===== API 预设 =====
@@ -173,7 +203,7 @@ function saveFallbackHistoryEntry(entry) {
     const item = normalizeHistoryEntry(entry, entry?.id || `fallback-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
     if (!item.imageUrl) return null;
     try {
-        const items = mergeHistoryItems([item, ...getFallbackHistory()]).slice(0, 200);
+        const items = mergeHistoryItems([item, ...getFallbackHistory()]).slice(0, MAX_HISTORY_ITEMS);
         localStorage.setItem(FALLBACK_HISTORY_KEY, JSON.stringify(items));
         return item;
     } catch (e) {
@@ -277,7 +307,7 @@ function blobToDataUrl(blob) {
 async function fetchImageAsDataUrl(imageUrl) {
     const safeUrl = sanitizeImageUrl(imageUrl);
     if (!/^https?:/i.test(safeUrl)) return '';
-    const response = await fetch(safeUrl);
+    const response = await fetchWithTimeout(safeUrl);
     if (!response.ok) throw new Error(`图片下载失败: ${response.status}`);
     const blob = await response.blob();
     if (!blob.type.startsWith('image/')) throw new Error('远程地址不是图片');
@@ -357,7 +387,7 @@ async function uploadImageToSillyTavernGallery(imageUrl) {
         filename: `st-ai-image-${Date.now()}`,
     });
 
-    let response = await fetch('/api/images/upload', {
+    let response = await fetchWithTimeout('/api/images/upload', {
         method: 'POST',
         headers: await getRequestHeadersWithCsrf(),
         body,
@@ -365,7 +395,7 @@ async function uploadImageToSillyTavernGallery(imageUrl) {
 
     if (response.status === 403) {
         _csrfTokenCache = null;
-        response = await fetch('/api/images/upload', {
+        response = await fetchWithTimeout('/api/images/upload', {
             method: 'POST',
             headers: await getRequestHeadersWithCsrf(),
             body,
@@ -481,17 +511,30 @@ async function syncMarkdownImagesInChatToHistory() {
     }
 }
 
-async function trimHistory() {
+async function trimHistory(retryCount = 0) {
     try {
         const items = await getHistory();
-        if (items.length > 200) {
+        if (items.length > MAX_HISTORY_ITEMS) {
             const db = await openDB();
             const tx = db.transaction(STORE_NAME, 'readwrite');
             const store = tx.objectStore(STORE_NAME);
-            const toDelete = items.slice(200);
+            const toDelete = items.slice(MAX_HISTORY_ITEMS);
             for (const item of toDelete) store.delete(item.id);
+            await new Promise((resolve, reject) => {
+                tx.oncomplete = resolve;
+                tx.onerror = () => reject(tx.error);
+                tx.onabort = () => reject(tx.error || new Error('trimHistory transaction aborted'));
+            });
         }
-    } catch (e) { console.warn('[st-ai-image] trimHistory error:', e); }
+    } catch (e) {
+        console.warn('[st-ai-image] trimHistory error:', e);
+        // 最多重试一次
+        if (retryCount < 1) {
+            setTimeout(() => trimHistory(retryCount + 1), 1000);
+        } else {
+            console.error('[st-ai-image] trimHistory failed after retry, history may exceed limit');
+        }
+    }
 }
 
 async function deleteHistoryItem(id) {
@@ -541,7 +584,7 @@ function sanitizeImageUrl(value) {
 
 function summarizeApiError(value) {
     const text = String(value ?? '').replace(/\s+/g, ' ').trim();
-    return text.length > 340 ? `${text.slice(0, 340)}...` : text;
+    return text.length > API_ERROR_SUMMARY_LENGTH ? `${text.slice(0, API_ERROR_SUMMARY_LENGTH)}...` : text;
 }
 
 function ensureSafeImageUrl(value) {
@@ -726,7 +769,7 @@ async function callImageAPI(prompt, { signal } = {}) {
             contents: [{ role: 'user', parts: [{ text: geminiText }] }],
             generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
         };
-        const resp = await fetch(url, {
+        const resp = await fetchWithTimeout(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.apiKey },
             body: JSON.stringify(body),
@@ -749,7 +792,7 @@ async function callImageAPI(prompt, { signal } = {}) {
     if (s.quality && s.quality !== 'auto') body.quality = s.quality;
     if (negative) body.negative_prompt = negative;
 
-    const resp = await fetch(`${base}/v1/images/generations`, {
+    const resp = await fetchWithTimeout(`${base}/v1/images/generations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.apiKey}` },
         body: JSON.stringify(body),
@@ -781,7 +824,7 @@ async function fetchModels() {
 
         // 先尝试 OpenAI 格式
         try {
-            const resp = await fetch(`${base}/v1/models`, {
+            const resp = await fetchWithTimeout(`${base}/v1/models`, {
                 headers: { 'Authorization': `Bearer ${s.apiKey}` },
             });
             if (resp.ok) {
@@ -792,7 +835,7 @@ async function fetchModels() {
 
         // 没结果再尝试 Gemini 格式
         if (!models.length) {
-            const resp = await fetch(`${base}/v1beta/models`, {
+            const resp = await fetchWithTimeout(`${base}/v1beta/models`, {
                 headers: { 'x-goog-api-key': s.apiKey },
             });
             if (resp.ok) {
@@ -1048,7 +1091,7 @@ function getPromptFromImageTagText(text) {
 function buildPromptFromFloorText(text) {
     const clean = stripGeneratedImageArtifacts(text);
     if (!clean) return '';
-    return clean.length > 1200 ? `${clean.slice(0, 1200)}...` : clean;
+    return clean.length > MAX_PROMPT_LENGTH ? `${clean.slice(0, MAX_PROMPT_LENGTH)}...` : clean;
 }
 
 function getCurrentFloorPrompt() {
@@ -1311,7 +1354,7 @@ function scanInlineMessages() {
 }
 
 let scanTimer = null;
-function scheduleScan(delay = 150) {
+function scheduleScan(delay = SCAN_DEBOUNCE_MS) {
     if (scanTimer) clearTimeout(scanTimer);
     scanTimer = setTimeout(() => {
         scanTimer = null;
@@ -1324,7 +1367,7 @@ function scanInlineMessagesBurst() {
     startInlineScanInterval();
 }
 
-function startInlineScanInterval(durationMs = 30000) {
+function startInlineScanInterval(durationMs = INLINE_SCAN_DURATION_MS) {
     inlineScanIntervalStopAt = Math.max(inlineScanIntervalStopAt, Date.now() + durationMs);
     if (inlineScanInterval) return;
     inlineScanInterval = setInterval(() => {
@@ -1333,7 +1376,7 @@ function startInlineScanInterval(durationMs = 30000) {
             clearInterval(inlineScanInterval);
             inlineScanInterval = null;
         }
-    }, 3000);
+    }, INLINE_SCAN_INTERVAL_MS);
 }
 
 let inlineObserver = null;
@@ -1359,6 +1402,20 @@ function registerSystemExtensionPrompt() {
 
 function initAutoDetect() {
     console.log('[st-ai-image] initAutoDetect called');
+
+    // 清理旧的定时器和 observer，防止多次加载时资源泄露
+    if (inlineScanInterval) {
+        clearInterval(inlineScanInterval);
+        inlineScanInterval = null;
+    }
+    inlineScanIntervalStopAt = 0;
+    if (scanTimer) {
+        clearTimeout(scanTimer);
+        scanTimer = null;
+    }
+    inlineObserver?.disconnect?.();
+    inlineObserver = null;
+
     registerSystemExtensionPrompt();
     scanInlineMessagesBurst();
     [0, 1000, 3000].forEach((delay) => setTimeout(() => migrateInlineMarkersInChat(), delay));
@@ -1450,7 +1507,13 @@ jQuery(async () => {
 
         const bindSetting = (id, key, type) => {
             $(id).on(type === 'check' ? 'change' : 'input', function () {
-                s[key] = type === 'check' ? !!$(this).prop('checked') : String($(this).val()).trim();
+                const val = type === 'check' ? !!$(this).prop('checked') : String($(this).val()).trim();
+                // API Base URL 协议校验
+                if (key === 'apiBase' && val && !isValidApiBaseUrl(val)) {
+                    toastr.warning('API 地址必须以 http:// 或 https:// 开头');
+                    return;
+                }
+                s[key] = val;
                 saveSettings(s);
             });
         };
@@ -1708,7 +1771,7 @@ jQuery(async () => {
                 err.className = 'st_gpt_inline_error';
                 err.textContent = e.message || '生成失败';
                 btn.after(err);
-                setTimeout(() => err.remove(), 5000);
+                setTimeout(() => err.remove(), ERROR_DISPLAY_DURATION_MS);
 
                 toastr.error(e.message, '生图失败');
             } finally {
