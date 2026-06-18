@@ -15,7 +15,8 @@ const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\((<([^>]+)>|([^)]+))\)/g;
 
 // ===== 命名常量（提取魔法数字） =====
 const MAX_HISTORY_ITEMS = 200;           // 历史记录最大条数
-const FETCH_TIMEOUT_MS = 30000;          // fetch 请求超时时间（毫秒）
+const FETCH_TIMEOUT_MS = 60000;          // fetch 请求默认超时时间（毫秒）
+const IMAGE_GEN_TIMEOUT_MS = 120000;     // 生图 API 超时时间（毫秒），谷歌 Imagen 等模型生成较慢
 const INLINE_SCAN_INTERVAL_MS = 3000;     // 内联扫描间隔（毫秒）
 const INLINE_SCAN_DURATION_MS = 30000;   // 内联扫描持续时间（毫秒）
 const SCAN_DEBOUNCE_MS = 150;            // 扫描防抖延迟（毫秒）
@@ -774,6 +775,7 @@ async function callImageAPI(prompt, { signal } = {}) {
             headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.apiKey },
             body: JSON.stringify(body),
             signal,
+            timeout: IMAGE_GEN_TIMEOUT_MS,
         });
         if (!resp.ok) throw new Error(`Gemini API ${resp.status}: ${summarizeApiError(await resp.text())}`);
         const data = await resp.json();
@@ -797,6 +799,7 @@ async function callImageAPI(prompt, { signal } = {}) {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.apiKey}` },
         body: JSON.stringify(body),
         signal,
+        timeout: IMAGE_GEN_TIMEOUT_MS,
     });
     if (!resp.ok) throw new Error(`API ${resp.status}: ${summarizeApiError(await resp.text())}`);
     const data = await resp.json();
