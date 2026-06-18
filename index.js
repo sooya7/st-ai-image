@@ -746,10 +746,6 @@ function extractImageFromResponse(data) {
     return null;
 }
 
-function isGeminiModel(model) {
-    return /gemini/i.test(model);
-}
-
 async function callImageAPI(prompt, { signal } = {}) {
     const s = getSettings();
     let base = s.apiBase.replace(/\/+$/, '');
@@ -761,35 +757,7 @@ async function callImageAPI(prompt, { signal } = {}) {
     let fullPrompt = prompt;
     if (extra) fullPrompt = `${extra}, ${fullPrompt}`;
 
-    // Gemini 模型走原生端点（需要 responseModalities 才能出图）
-    if (isGeminiModel(s.model)) {
-        const url = `${base}/v1beta/models/${s.model}:generateContent`;
-        let geminiText = `Generate an image: ${fullPrompt}`;
-        if (negative) geminiText += `. Avoid: ${negative}`;
-        const body = {
-            contents: [{ role: 'user', parts: [{ text: geminiText }] }],
-            generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-        };
-        const resp = await fetchWithTimeout(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.apiKey },
-            body: JSON.stringify(body),
-            signal,
-            timeout: IMAGE_GEN_TIMEOUT_MS,
-        });
-        if (!resp.ok) throw new Error(`Gemini API ${resp.status}: ${summarizeApiError(await resp.text())}`);
-        const data = await resp.json();
-
-        const img = extractImageFromResponse(data);
-        if (img) return ensureSafeImageUrl(img);
-
-        // 给出更明确的错误信息
-        const parts = data.candidates?.[0]?.content?.parts;
-        const text = parts?.filter(p => p.text).map(p => p.text).join('') || '';
-        throw new Error('模型未返回图片。' + (text ? '回复文本: ' + summarizeApiError(text) : summarizeApiError(JSON.stringify(data))));
-    }
-
-    // OpenAI 兼容模型走标准端点
+    // 统一使用 OpenAI 兼容格式（中转站均支持此格式）
     const body = { model: s.model, prompt: fullPrompt, n: 1, size: s.size };
     if (s.quality && s.quality !== 'auto') body.quality = s.quality;
     if (negative) body.negative_prompt = negative;
@@ -825,7 +793,7 @@ async function fetchModels() {
         let base = s.apiBase.replace(/\/+$/, '');
         if (base.endsWith('/v1')) base = base.slice(0, -3);
 
-        // 先尝试 OpenAI 格式
+        // 使用 OpenAI 兼容格式获取模型列表
         try {
             const resp = await fetchWithTimeout(`${base}/v1/models`, {
                 headers: { 'Authorization': `Bearer ${s.apiKey}` },
@@ -835,20 +803,6 @@ async function fetchModels() {
                 models = (data.data || []).map(m => ({ id: m.id, name: m.id }));
             }
         } catch {}
-
-        // 没结果再尝试 Gemini 格式
-        if (!models.length) {
-            const resp = await fetchWithTimeout(`${base}/v1beta/models`, {
-                headers: { 'x-goog-api-key': s.apiKey },
-            });
-            if (resp.ok) {
-                const data = await resp.json();
-                models = (data.models || []).map(m => ({
-                    id: m.name.replace('models/', ''),
-                    name: m.displayName,
-                }));
-            }
-        }
 
         if (!models.length) {
             toastr.warning('未获取到模型列表');
