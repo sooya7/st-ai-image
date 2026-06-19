@@ -784,11 +784,13 @@ function buildImageActionsHtml(context, prompt, imageUrl, options = {}) {
     const disabled = safeUrl ? '' : ' disabled';
     const allowSave = context !== 'gallery' && options.allowSave !== false;
     const historyId = options.historyId ? escapeAttr(options.historyId) : '';
-    const saveDisabled = safeUrl && !historyId ? '' : ' disabled';
-    const saveTitle = historyId ? '已在图库' : '存入图库';
+    // 存入图库按钮：只要有 URL 就启用（已存入时切换为查看图库）
+    const saveDisabled = safeUrl ? '' : ' disabled';
+    const saveTitle = historyId ? '查看图库' : '存入图库';
+    const saveIcon = historyId ? 'fa-bookmark' : 'fa-folder-plus';
     return `
         <button type="button" class="st_gpt_image_btn" data-action="download-image" data-context="${escapeAttr(context)}" data-url="${safeUrl}" title="下载图片" aria-label="下载图片"${disabled}><i class="fa-solid fa-download"></i></button>
-        ${allowSave ? `<button type="button" class="st_gpt_image_btn" data-action="save-image" data-context="${escapeAttr(context)}" data-url="${safeUrl}" data-prompt="${escapeAttr(prompt)}" data-history-id="${historyId}" title="${saveTitle}" aria-label="${saveTitle}"${saveDisabled}><i class="fa-solid ${historyId ? 'fa-bookmark' : 'fa-folder-plus'}"></i></button>` : ''}
+        ${allowSave ? `<button type="button" class="st_gpt_image_btn" data-action="${historyId ? 'view-gallery' : 'save-image'}" data-context="${escapeAttr(context)}" data-url="${safeUrl}" data-prompt="${escapeAttr(prompt)}" data-history-id="${historyId}" title="${saveTitle}" aria-label="${saveTitle}"${saveDisabled}><i class="fa-solid ${saveIcon}"></i></button>` : ''}
     `;
 }
 
@@ -1845,6 +1847,11 @@ jQuery(async () => {
                 btn.innerHTML = '<i class="fa-solid fa-folder-plus"></i>';
                 toastr.error('保存到图库失败');
             }
+        });
+        $(document).on('click', '[data-action="view-gallery"]', function (e) {
+            e.stopPropagation();
+            // 切换到图库标签页
+            activateTab('gallery');
         });
         $(document).on('click', '.st_gpt_inline_img', function (e) {
             e.stopPropagation();
