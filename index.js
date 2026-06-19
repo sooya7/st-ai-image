@@ -80,7 +80,8 @@ function fetchWithTimeout(url, options = {}) {
 
 // ===== 通过 SillyTavern 后端代理转发外部请求 =====
 // 浏览器安全策略会阻止从 localhost 直接请求外部 HTTP/HTTPS 地址，
-// 通过 SillyTavern Node.js 后端代理转发来绕过此限制
+// 通过 SillyTavern Node.js 后端 CORS 代理转发来绕过此限制
+// SillyTavern 代理端点: /proxy/<url>（需启用 --corsProxy）
 async function serverProxyFetch(url, options = {}) {
     const { timeout = FETCH_TIMEOUT_MS, signal, method = 'GET', headers = {}, body } = options;
     const controller = new AbortController();
@@ -90,16 +91,21 @@ async function serverProxyFetch(url, options = {}) {
     }
 
     try {
-        // SillyTavern 内置 CORS 代理端点
-        const resp = await fetch('/api/image/proxy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, method, headers, body: body || null }),
+        // SillyTavern CORS 代理: /proxy/<full_url>
+        const proxyUrl = `/proxy/${url}`;
+
+        const fetchOptions = {
+            method,
+            headers,
             signal: controller.signal,
-        });
+        };
+        if (body && ['POST', 'PUT', 'PATCH'].includes(method.toUpperCase())) {
+            fetchOptions.body = body;
+        }
+
+        const resp = await fetch(proxyUrl, fetchOptions);
 
         if (!resp.ok) {
-            // 代理失败，返回错误
             const errText = await resp.text().catch(() => '');
             throw new Error(`代理请求失败: HTTP ${resp.status} ${errText.substring(0, 100)}`);
         }
@@ -124,8 +130,27 @@ function needsProxy(url) {
 }
 
 // 智能选择直连或代理的 fetch
-function smartFetch(url, options = {}) {
-    return needsProxy(url) ? serverProxyFetch(url, options) : fetchWithTimeout(url, options);
+async function smartFetch(url, options = {}) {
+    if (!needsProxy(url)) return fetchWithTimeout(url, options);
+
+    // 外部地址：先尝试直连，失败后走代理
+    try {
+        const resp = await fetchWithTimeout(url, options);
+        return resp;
+    } catch (directErr) {
+        // 直连失败（CORS/混合内容/网络错误），尝试 SillyTavern CORS 代理
+        console.warn('[st-ai-image] 直连失败，尝试 CORS 代理:', directErr.message);
+        try {
+            return await serverProxyFetch(url, options);
+        } catch (proxyErr) {
+            // 代理也失败，给出明确提示
+            const msg = proxyErr.message || String(proxyErr);
+            if (msg.includes('CORS proxy is disabled')) {
+                throw new Error('需要在 SillyTavern 中启用 CORS 代理：在 config.yaml 设置 enableCorsProxy: true，或启动时加 --corsProxy 参数');
+            }
+            throw new Error(`外部请求失败（直连: ${directErr.message}，代理: ${msg}）。请在 SillyTavern 启用 CORS 代理或确保 API 地址可访问。`);
+        }
+    }
 }
 
 // ===== API Base URL 校验 =====
