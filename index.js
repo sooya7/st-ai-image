@@ -820,6 +820,52 @@ function extractImageFromResponse(data) {
     return null;
 }
 
+// 从 chat/completions 响应中提取图片（Gemini 生图走此路径）
+function extractImageFromChatResponse(data) {
+    // 1. OpenAI 格式：choices[0].message.content 中的 inline_data
+    const content = data.choices?.[0]?.message?.content;
+    if (content) {
+        // content 可能是字符串，也可能包含 base64 图片
+        // 部分 OpenAI 兼容中转会在 content 中直接返回 base64
+        if (typeof content === 'string') {
+            // 检查 markdown 图片格式 ![...](data:image/...)
+            const mdMatch = content.match(/!\[.*?\]\((data:image\/[^;]+;base64,[^\s)]+)\)/);
+            if (mdMatch) return mdMatch[1];
+            // 检查纯 base64 data URL
+            const dataUrlMatch = content.match(/(data:image\/[^;]+;base64,[A-Za-z0-9+/=]+)/);
+            if (dataUrlMatch) return dataUrlMatch[1];
+        }
+        // content 可能是数组（多模态响应）
+        if (Array.isArray(content)) {
+            for (const part of content) {
+                if (part.type === 'image_url' && part.image_url?.url) return part.image_url.url;
+                if (part.type === 'image' && part.source?.data) {
+                    const mime = part.source.media_type || 'image/png';
+                    return `data:${mime};base64,${part.source.data}`;
+                }
+                if (part.inlineData?.data) {
+                    const mime = part.inlineData.mimeType || 'image/png';
+                    return `data:${mime};base64,${part.inlineData.data}`;
+                }
+            }
+        }
+    }
+
+    // 2. Gemini 原生格式：candidates[0].content.parts[]
+    const parts = data.candidates?.[0]?.content?.parts;
+    if (parts) {
+        for (const part of parts) {
+            if (part.inlineData?.data) {
+                const mime = part.inlineData.mimeType || 'image/png';
+                return `data:${mime};base64,${part.inlineData.data}`;
+            }
+        }
+    }
+
+    // 3. 尝试从 extractImageFromResponse 复用
+    return extractImageFromResponse(data);
+}
+
 async function callImageAPI(prompt, { signal } = {}) {
     const s = getSettings();
     let base = s.apiBase.replace(/\/+$/, '');
@@ -831,12 +877,45 @@ async function callImageAPI(prompt, { signal } = {}) {
     let fullPrompt = prompt;
     if (extra) fullPrompt = `${extra}, ${fullPrompt}`;
 
-    // 统一使用 OpenAI 兼容格式（中转站均支持此格式）
+    // 判断是否为 Gemini 图片模型（需要走 chat/completions 端点）
+    const isGeminiImage = /gemini.*image/i.test(s.model);
+
+    let resp;
+    if (isGeminiImage) {
+        // Gemini 图片模型：走 /v1/chat/completions，返回 base64 图片
+        const body = {
+            model: s.model,
+            stream: false,
+            messages: [
+                { role: 'user', content: fullPrompt },
+            ],
+        };
+        // Gemini 生图需要通过 modalities 指定输出图片
+        // 部分中转站支持，不支持的会忽略
+        body.modalities = ['text', 'image'];
+
+        resp = await apiFetch(`${base}/v1/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.apiKey}` },
+            body: JSON.stringify(body),
+            signal,
+            timeout: IMAGE_GEN_TIMEOUT_MS,
+        });
+        if (!resp.ok) throw new Error(`API ${resp.status}: ${summarizeApiError(await resp.text())}`);
+        const data = await resp.json();
+
+        // 从 chat completions 响应中提取图片
+        const img = extractImageFromChatResponse(data);
+        if (img) return ensureSafeImageUrl(img);
+        throw new Error('未返回图片数据。响应: ' + summarizeApiError(JSON.stringify(data)));
+    }
+
+    // 非 Gemini 模型：走标准 /v1/images/generations 端点
     const body = { model: s.model, prompt: fullPrompt, n: 1, size: s.size };
     if (s.quality && s.quality !== 'auto') body.quality = s.quality;
     if (negative) body.negative_prompt = negative;
 
-    const resp = await apiFetch(`${base}/v1/images/generations`, {
+    resp = await apiFetch(`${base}/v1/images/generations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.apiKey}` },
         body: JSON.stringify(body),
