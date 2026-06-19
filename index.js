@@ -801,8 +801,15 @@ async function fetchModels() {
             if (resp.ok) {
                 const data = await resp.json();
                 models = (data.data || []).map(m => ({ id: m.id, name: m.id }));
+            } else {
+                const errText = await resp.text().catch(() => '');
+                console.warn('[st-ai-image] fetchModels HTTP error:', resp.status, errText);
+                toastr.warning(`获取模型列表失败: HTTP ${resp.status} - ${errText.substring(0, 100)}`);
             }
-        } catch {}
+        } catch (fetchErr) {
+            console.warn('[st-ai-image] fetchModels network error:', fetchErr);
+            toastr.warning(`获取模型列表网络错误: ${fetchErr.message}`);
+        }
 
         if (!models.length) {
             toastr.warning('未获取到模型列表');
