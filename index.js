@@ -47,6 +47,23 @@ let inlineScanInterval = null;
 let inlineScanIntervalStopAt = 0;
 let currentFloorMessageElement = null;
 
+// ===== SillyTavern 代理转发 =====
+// 浏览器安全策略阻止从 localhost 直接请求外部 HTTP 地址，
+// 通过 SillyTavern 后端代理转发请求来绕过此限制
+function proxiedUrl(url) {
+    try {
+        // 仅对外部 HTTP/HTTPS 地址使用代理
+        if (!/^https?:\/\//i.test(url)) return url;
+        const parsed = new URL(url);
+        // localhost / 127.0.0.1 不需要代理
+        if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') return url;
+        // 通过 SillyTavern 后端代理转发
+        return `${location.origin}/proxy/${url}`;
+    } catch {
+        return url;
+    }
+}
+
 
 // localStorage 存储设置（设置很小，不需要 IndexedDB）
 function getSettings() {
@@ -308,7 +325,7 @@ function blobToDataUrl(blob) {
 async function fetchImageAsDataUrl(imageUrl) {
     const safeUrl = sanitizeImageUrl(imageUrl);
     if (!/^https?:/i.test(safeUrl)) return '';
-    const response = await fetchWithTimeout(safeUrl);
+    const response = await fetchWithTimeout(proxiedUrl(safeUrl));
     if (!response.ok) throw new Error(`图片下载失败: ${response.status}`);
     const blob = await response.blob();
     if (!blob.type.startsWith('image/')) throw new Error('远程地址不是图片');
@@ -762,7 +779,7 @@ async function callImageAPI(prompt, { signal } = {}) {
     if (s.quality && s.quality !== 'auto') body.quality = s.quality;
     if (negative) body.negative_prompt = negative;
 
-    const resp = await fetchWithTimeout(`${base}/v1/images/generations`, {
+    const resp = await fetchWithTimeout(proxiedUrl(`${base}/v1/images/generations`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.apiKey}` },
         body: JSON.stringify(body),
@@ -795,7 +812,7 @@ async function fetchModels() {
 
         // 使用 OpenAI 兼容格式获取模型列表
         try {
-            const resp = await fetchWithTimeout(`${base}/v1/models`, {
+            const resp = await fetchWithTimeout(proxiedUrl(`${base}/v1/models`), {
                 headers: { 'Authorization': `Bearer ${s.apiKey}` },
             });
             if (resp.ok) {
