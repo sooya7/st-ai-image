@@ -138,18 +138,18 @@ function parseResponseHeaders(headerStr) {
     return headers;
 }
 
-// 判断是否为外部地址
-function isExternalUrl(url) {
+// 判断是否为需要 $.ajax 的外部地址（仅 HTTP 外部地址需要，HTTPS 可正常 fetch）
+function needsAjaxFallback(url) {
     try {
-        if (!/^https?:\/\//i.test(url)) return false;
+        if (!/^http:\/\//i.test(url)) return false; // HTTPS 或非 HTTP 不需要
         const parsed = new URL(url);
         return parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1';
     } catch { return false; }
 }
 
-// 统一请求入口：外部地址用 $.ajax，本地用 fetch
+// 统一请求入口：HTTP 外部地址用 $.ajax，其他用 fetch
 function apiFetch(url, options = {}) {
-    return isExternalUrl(url) ? externalApiRequest(url, options) : fetchWithTimeout(url, options);
+    return needsAjaxFallback(url) ? externalApiRequest(url, options) : fetchWithTimeout(url, options);
 }
 
 // ===== API Base URL 校验 =====
