@@ -78,6 +78,80 @@ function fetchWithTimeout(url, options = {}) {
     return fetch(url, { ...rest, signal: controller.signal }).finally(() => clearTimeout(timeoutId));
 }
 
+// ===== 外部 API 请求（绕过 iOS ATS/混合内容限制）=====
+// iOS WebView 中 fetch() 对外部 HTTP 请求有 ATS 限制，
+// 使用 jQuery $.ajax 可以绕过此限制（走不同的网络栈）
+function externalApiRequest(url, options = {}) {
+    const { method = 'GET', headers = {}, body, timeout = FETCH_TIMEOUT_MS } = options;
+
+    return new Promise((resolve, reject) => {
+        const ajaxOpts = {
+            url,
+            method,
+            headers,
+            timeout,
+            success: (data, textStatus, jqXHR) => {
+                // 模拟 Response 对象
+                const resp = new Response(
+                    typeof data === 'string' ? data : JSON.stringify(data),
+                    {
+                        status: jqXHR.status,
+                        statusText: textStatus,
+                        headers: new Headers(parseResponseHeaders(jqXHR.getAllResponseHeaders())),
+                    }
+                );
+                resolve(resp);
+            },
+            error: (jqXHR, textStatus, errorThrown) => {
+                if (textStatus === 'timeout') {
+                    reject(new Error('请求超时'));
+                } else {
+                    reject(new Error(errorThrown || textStatus || '请求失败'));
+                }
+            },
+        };
+
+        if (body && ['POST', 'PUT', 'PATCH'].includes(method.toUpperCase())) {
+            ajaxOpts.data = body;
+            if (typeof body === 'string') {
+                try { ajaxOpts.dataType = 'json'; } catch {}
+            }
+        }
+
+        $.ajax(ajaxOpts);
+    });
+}
+
+// 解析 XHR 响应头字符串为对象
+function parseResponseHeaders(headerStr) {
+    const headers = {};
+    if (!headerStr) return headers;
+    const lines = headerStr.trim().split(/[\r\n]+/);
+    for (const line of lines) {
+        const idx = line.indexOf(': ');
+        if (idx > 0) {
+            const key = line.substring(0, idx).trim().toLowerCase();
+            const val = line.substring(idx + 2).trim();
+            headers[key] = val;
+        }
+    }
+    return headers;
+}
+
+// 判断是否为外部地址
+function isExternalUrl(url) {
+    try {
+        if (!/^https?:\/\//i.test(url)) return false;
+        const parsed = new URL(url);
+        return parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1';
+    } catch { return false; }
+}
+
+// 统一请求入口：外部地址用 $.ajax，本地用 fetch
+function apiFetch(url, options = {}) {
+    return isExternalUrl(url) ? externalApiRequest(url, options) : fetchWithTimeout(url, options);
+}
+
 // ===== API Base URL 校验 =====
 function isValidApiBaseUrl(url) {
     const trimmed = String(url ?? '').trim();
@@ -308,7 +382,7 @@ function blobToDataUrl(blob) {
 async function fetchImageAsDataUrl(imageUrl) {
     const safeUrl = sanitizeImageUrl(imageUrl);
     if (!/^https?:/i.test(safeUrl)) return '';
-    const response = await fetchWithTimeout(safeUrl);
+    const response = await apiFetch(safeUrl);
     if (!response.ok) throw new Error(`图片下载失败: ${response.status}`);
     const blob = await response.blob();
     if (!blob.type.startsWith('image/')) throw new Error('远程地址不是图片');
@@ -762,7 +836,7 @@ async function callImageAPI(prompt, { signal } = {}) {
     if (s.quality && s.quality !== 'auto') body.quality = s.quality;
     if (negative) body.negative_prompt = negative;
 
-    const resp = await fetchWithTimeout(`${base}/v1/images/generations`, {
+    const resp = await apiFetch(`${base}/v1/images/generations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.apiKey}` },
         body: JSON.stringify(body),
@@ -795,7 +869,7 @@ async function fetchModels() {
 
         // 使用 OpenAI 兼容格式获取模型列表
         try {
-            const resp = await fetchWithTimeout(`${base}/v1/models`, {
+            const resp = await apiFetch(`${base}/v1/models`, {
                 headers: { 'Authorization': `Bearer ${s.apiKey}` },
             });
             if (resp.ok) {
