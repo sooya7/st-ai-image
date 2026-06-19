@@ -877,58 +877,88 @@ async function callImageAPI(prompt, { signal } = {}) {
     let fullPrompt = prompt;
     if (extra) fullPrompt = `${extra}, ${fullPrompt}`;
 
-    // 判断是否为 Gemini 图片模型（需要走 chat/completions 端点）
+    // 判断是否为 Gemini 图片模型
     const isGeminiImage = /gemini.*image/i.test(s.model);
 
-    let resp;
-    if (isGeminiImage) {
-        // Gemini 图片模型：走 /v1/chat/completions，返回 base64 图片
-        const body = {
-            model: s.model,
-            stream: false,
-            messages: [
-                { role: 'user', content: fullPrompt },
-            ],
-        };
-        // Gemini 生图需要通过 modalities 指定输出图片
-        // 部分中转站支持，不支持的会忽略
-        body.modalities = ['text', 'image'];
+    // ========== 策略1: /v1/images/generations（标准端点）==========
+    try {
+        const body = { model: s.model, prompt: fullPrompt, n: 1, size: s.size };
+        if (s.quality && s.quality !== 'auto') body.quality = s.quality;
+        if (negative) body.negative_prompt = negative;
 
-        resp = await apiFetch(`${base}/v1/chat/completions`, {
+        const resp = await apiFetch(`${base}/v1/images/generations`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.apiKey}` },
             body: JSON.stringify(body),
             signal,
             timeout: IMAGE_GEN_TIMEOUT_MS,
         });
-        if (!resp.ok) throw new Error(`API ${resp.status}: ${summarizeApiError(await resp.text())}`);
-        const data = await resp.json();
-
-        // 从 chat completions 响应中提取图片
-        const img = extractImageFromChatResponse(data);
-        if (img) return ensureSafeImageUrl(img);
-        throw new Error('未返回图片数据。响应: ' + summarizeApiError(JSON.stringify(data)));
+        if (resp.ok) {
+            const data = await resp.json();
+            const img = extractImageFromResponse(data);
+            if (img) return ensureSafeImageUrl(img);
+            // 响应中没有图片，继续尝试下一种方式
+        }
+    } catch (e) {
+        console.warn('[st-ai-image] images/generations 失败:', e.message);
     }
 
-    // 非 Gemini 模型：走标准 /v1/images/generations 端点
-    const body = { model: s.model, prompt: fullPrompt, n: 1, size: s.size };
-    if (s.quality && s.quality !== 'auto') body.quality = s.quality;
-    if (negative) body.negative_prompt = negative;
+    // ========== 策略2: /v1/chat/completions（Gemini 图片模型）==========
+    if (isGeminiImage) {
+        try {
+            const body = {
+                model: s.model,
+                stream: false,
+                messages: [{ role: 'user', content: fullPrompt }],
+            };
 
-    resp = await apiFetch(`${base}/v1/images/generations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.apiKey}` },
-        body: JSON.stringify(body),
-        signal,
-        timeout: IMAGE_GEN_TIMEOUT_MS,
-    });
-    if (!resp.ok) throw new Error(`API ${resp.status}: ${summarizeApiError(await resp.text())}`);
-    const data = await resp.json();
+            const resp = await apiFetch(`${base}/v1/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.apiKey}` },
+                body: JSON.stringify(body),
+                signal,
+                timeout: IMAGE_GEN_TIMEOUT_MS,
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                const img = extractImageFromChatResponse(data);
+                if (img) return ensureSafeImageUrl(img);
+            }
+        } catch (e) {
+            console.warn('[st-ai-image] chat/completions 失败:', e.message);
+        }
 
-    const img = extractImageFromResponse(data);
-    if (img) return ensureSafeImageUrl(img);
+        // ========== 策略3: chat/completions + modalities ==========
+        try {
+            const body = {
+                model: s.model,
+                stream: false,
+                messages: [{ role: 'user', content: fullPrompt }],
+                modalities: ['text', 'image'],
+            };
 
-    throw new Error('No image data. Response: ' + summarizeApiError(JSON.stringify(data)));
+            const resp = await apiFetch(`${base}/v1/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.apiKey}` },
+                body: JSON.stringify(body),
+                signal,
+                timeout: IMAGE_GEN_TIMEOUT_MS,
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                const img = extractImageFromChatResponse(data);
+                if (img) return ensureSafeImageUrl(img);
+            } else {
+                const errText = await resp.text().catch(() => '');
+                throw new Error(`API ${resp.status}: ${summarizeApiError(errText)}`);
+            }
+        } catch (e) {
+            console.warn('[st-ai-image] chat/completions+modalities 失败:', e.message);
+            throw e;
+        }
+    }
+
+    throw new Error('所有生图方式均失败，请检查模型名称和 API 配置');
 }
 
 // ===== 获取模型列表 (自动尝试两种格式) =====
