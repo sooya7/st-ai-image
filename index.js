@@ -1139,7 +1139,7 @@ async function activateTab(tab) {
 
 // ===== 图库 =====
 async function renderGallery() {
-    const $c = $('#st_ai_image_history_list');
+    const $c = $('#st_gpt_image_history_list');
     // 诊断A：函数是否被调用 + 容器是否存在
     toastr.info(`renderGallery被调用, 容器${$c.length ? '存在' : '不存在'}`, 'st-ai-image', { timeOut: 6000 });
     if (!$c.length) return;
