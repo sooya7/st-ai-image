@@ -1153,23 +1153,39 @@ async function renderGallery() {
     const container = $c[0];
     container.innerHTML = '';
     let rendered = 0;
+    let idx = 0;
     for (const e of history) {
         const safeUrl = sanitizeImageUrl(e.imageUrl);
         if (!safeUrl) continue;
+        idx++;
         const prompt = String(e.prompt ?? '');
         const item = document.createElement('div');
         item.className = 'st_ai_gallery_item';
         item.dataset.id = e.id ?? '';
         item.dataset.prompt = prompt;
+        // 可视化标记：左上角编号，便于确认结构是否渲染出来
+        const badge = document.createElement('div');
+        badge.textContent = String(idx);
+        badge.style.cssText = 'position:absolute;top:2px;left:2px;z-index:5;background:#3b82f6;color:#fff;font-size:12px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:4px;';
         const img = document.createElement('img');
         img.alt = prompt;
         img.loading = 'lazy';
+        // 加载失败时显示红底提示，区分"结构在但图加载失败"与"完全无结构"
+        img.style.background = '#7f1d1d';
+        img.addEventListener('error', () => {
+            img.style.background = '#7f1d1d';
+            img.alt = '加载失败';
+        });
+        img.addEventListener('load', () => {
+            img.style.background = '';
+        });
         const actions = document.createElement('div');
         actions.className = 'st_ai_gallery_actions';
         actions.innerHTML = buildImageActionsHtml('gallery', prompt, safeUrl)
             + `<button type="button" class="st_ai_btn st_gpt_regen" data-id="${escapeAttr(e.id)}" data-prompt="${escapeAttr(prompt)}" title="重新生成" aria-label="重新生成"><i class="fa-solid fa-rotate"></i></button>`
             + `<button type="button" class="st_ai_btn st_gpt_del" data-id="${escapeAttr(e.id)}" title="删除" aria-label="删除"><i class="fa-solid fa-trash"></i></button>`;
         item.appendChild(img);
+        item.appendChild(badge);
         item.appendChild(actions);
         container.appendChild(item);
         rendered++;
@@ -1178,10 +1194,11 @@ async function renderGallery() {
         setTimeout(() => { img.src = src; }, 0);
     }
 
-    // 仅在渲染异常时提示（正常出图不再弹窗打扰）
+    // 诊断提示：告诉用户结构渲染了几个（不依赖 console）
     console.log(`[st-ai-image] renderGallery: 读到 ${history.length} 条, 渲染 ${rendered} 个图项`);
+    toastr.info(`图库: ${rendered} 个图项已放入DOM`, 'st-ai-image', { timeOut: 6000 });
     if (rendered === 0) {
-        toastr.warning(`图库有 ${history.length} 条记录但全部无法渲染，请检查存储或反馈样例URL`, 'st-ai-image', { timeOut: 8000 });
+        toastr.warning(`图库有 ${history.length} 条记录但全部无法渲染`, 'st-ai-image', { timeOut: 8000 });
     }
 }
 
