@@ -1163,7 +1163,7 @@ async function renderGallery() {
         if (!safeUrl) return '';
         const prompt = String(e.prompt ?? '');
         return `
-            <div class="st_ai_gallery_item" data-id="${escapeAttr(e.id)}" data-prompt="${escapeAttr(prompt)}" data-url="${escapeAttr(safeUrl)}">
+            <div class="st_ai_gallery_item" data-id="${escapeAttr(e.id)}" data-prompt="${escapeAttr(prompt)}">
                 <img src="${escapeAttr(safeUrl)}" alt="${escapeAttr(prompt)}" loading="lazy">
                 <div class="st_ai_gallery_actions">
                     ${buildImageActionsHtml('gallery', prompt, safeUrl)}
@@ -1173,6 +1173,11 @@ async function renderGallery() {
             </div>
         `;
     }).join(''));
+
+    // 诊断：渲染后 DOM 实际有几个图项
+    const rendered = $c.find('.st_ai_gallery_item').length;
+    console.log(`[st-ai-image] renderGallery: 读到 ${history.length} 条, 渲染 ${rendered} 个图项`);
+    toastr.info(`渲染诊断: 读到 ${history.length} 条 / DOM渲染 ${rendered} 个`, 'st-ai-image', { timeOut: 8000 });
 }
 
 // ===== 自动检测：替换聊天中的 [image]...[/image] 或持久图片标记 =====
