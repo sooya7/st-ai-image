@@ -356,7 +356,12 @@ async function saveToHistory(entry, { force = false } = {}) {
     } catch (e) {
         console.error('[st-ai-image] saveToHistory error:', e);
         const fallback = saveFallbackHistoryEntry(entry);
-        if (fallback) renderGallery();
+        if (fallback) {
+            renderGallery();
+        } else {
+            // IndexedDB 与 localStorage 均失败：把真实原因弹出来，便于排查（手机端无 console）
+            toastr.error(`图库保存失败: ${e?.message || e}`, 'st-ai-image', { timeOut: 8000 });
+        }
         return fallback;
     }
 }
@@ -1045,6 +1050,7 @@ async function generateImage(prompt) {
         `);
 
         $result.find('img').on('click', () => showPreview(imageUrl, cleanPrompt));
+        if (!saved) toastr.warning('图片已生成，但保存到图库失败，请检查存储权限或清理空间');
         toastr.success('图片生成完成', 'GPT Image');
         return imageUrl;
     } catch (e) {
@@ -1904,6 +1910,7 @@ jQuery(async () => {
                 wrapper.className = 'st_gpt_inline_img_wrap';
                 renderInlineImageContent(wrapper, saved || { prompt, imageUrl, timestamp: Date.now() });
                 btn.replaceWith(wrapper);
+                if (!saved) toastr.warning('图片已生成，但保存到图库失败，请检查存储权限或清理空间');
                 const markerUrl = getStableInlineImageUrl(serverImageUrl || imageUrl);
                 if (markerUrl) {
                     await ensureHistoryEntryForImageUrl(markerUrl, { prompt, model: s.model, size: s.size });
