@@ -1140,9 +1140,19 @@ async function activateTab(tab) {
 // ===== 图库 =====
 async function renderGallery() {
     const $c = $('#st_ai_image_history_list');
+    // 诊断A：函数是否被调用 + 容器是否存在
+    toastr.info(`renderGallery被调用, 容器${$c.length ? '存在' : '不存在'}`, 'st-ai-image', { timeOut: 6000 });
     if (!$c.length) return;
-    const history = await getHistory();
+    const history = await getHistory().catch((e) => {
+        toastr.error(`getHistory失败: ${e?.message || e}`, 'st-ai-image', { timeOut: 10000 });
+        return [];
+    });
+    // 诊断B：读到了几条
+    toastr.info(`getHistory返回 ${history.length} 条`, 'st-ai-image', { timeOut: 6000 });
     $('#st_gpt_gallery_count').text(`${history.length} 张图片`);
+
+    // 诊断C：强制写入可见标记，确认容器可写
+    $c[0].innerHTML = `<div style="color:#3b82f6;padding:10px;font-size:13px;">[诊断] 容器可写，准备渲染 ${history.length} 条…</div>`;
 
     if (!history.length) {
         $c.html('<div class="st_ai_image_empty">暂无生成记录</div>');
