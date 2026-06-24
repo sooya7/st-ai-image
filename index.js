@@ -793,9 +793,14 @@ function buildImageActionsHtml(context, prompt, imageUrl, options = {}) {
     const saveDisabled = safeUrl ? '' : ' disabled';
     const saveTitle = historyId ? '查看图库' : '存入图库';
     const saveIcon = historyId ? 'fa-bookmark' : 'fa-folder-plus';
+    // 正文内联图额外提供"重新生成"按钮：用同一提示词原位重新生成
+    const regenBtn = context === 'inline'
+        ? `<button type="button" class="st_gpt_image_btn" data-action="regen-inline" data-context="${escapeAttr(context)}" data-prompt="${escapeAttr(prompt)}" title="重新生成" aria-label="重新生成"><i class="fa-solid fa-rotate"></i></button>`
+        : '';
     return `
         <button type="button" class="st_gpt_image_btn" data-action="download-image" data-context="${escapeAttr(context)}" data-url="${safeUrl}" title="下载图片" aria-label="下载图片"${disabled}><i class="fa-solid fa-download"></i></button>
         ${allowSave ? `<button type="button" class="st_gpt_image_btn" data-action="${historyId ? 'view-gallery' : 'save-image'}" data-context="${escapeAttr(context)}" data-url="${safeUrl}" data-prompt="${escapeAttr(prompt)}" data-history-id="${historyId}" title="${saveTitle}" aria-label="${saveTitle}"${saveDisabled}><i class="fa-solid ${saveIcon}"></i></button>` : ''}
+        ${regenBtn}
     `;
 }
 
@@ -1038,19 +1043,19 @@ async function generateImage(prompt) {
     try {
         const cleanPrompt = prompt.trim();
         const url = await callImageAPI(cleanPrompt, { signal: _currentGenAbortController.signal });
-        const { saved, imageUrl } = await saveGeneratedImage({ prompt: cleanPrompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size });
+        const imageUrl = ensureSafeImageUrl(url);
 
+        // 不自动保存：仅展示，由用户点击"存入图库"决定是否保存
         $result.html(`
             <img src="${escapeAttr(imageUrl)}" alt="${escapeAttr(cleanPrompt)}" class="st_gpt_gen_img" data-prompt="${escapeAttr(cleanPrompt)}">
             <div class="st_gpt_gen_result_info">
                 <div class="st_ai_action_row">
-                    ${buildImageActionsHtml('result', cleanPrompt, imageUrl, { historyId: saved?.id })}
+                    ${buildImageActionsHtml('result', cleanPrompt, imageUrl)}
                 </div>
             </div>
         `);
 
         $result.find('img').on('click', () => showPreview(imageUrl, cleanPrompt));
-        if (!saved) toastr.warning('图片已生成，但保存到图库失败，请检查存储权限或清理空间');
         toastr.success('图片生成完成', 'GPT Image');
         return imageUrl;
     } catch (e) {
@@ -1140,62 +1145,40 @@ async function activateTab(tab) {
 // ===== 图库 =====
 async function renderGallery() {
     const $c = $('#st_gpt_image_history_list');
-    // 诊断A：函数是否被调用 + 容器是否存在
-    toastr.info(`renderGallery被调用, 容器${$c.length ? '存在' : '不存在'}`, 'st-ai-image', { timeOut: 6000 });
     if (!$c.length) return;
     const history = await getHistory().catch((e) => {
-        toastr.error(`getHistory失败: ${e?.message || e}`, 'st-ai-image', { timeOut: 10000 });
+        console.error('[st-ai-image] getHistory error:', e);
         return [];
     });
-    // 诊断B：读到了几条
-    toastr.info(`getHistory返回 ${history.length} 条`, 'st-ai-image', { timeOut: 6000 });
     $('#st_gpt_gallery_count').text(`${history.length} 张图片`);
 
-    // 诊断C：强制写入可见标记，确认容器可写
-    $c[0].innerHTML = `<div style="color:#3b82f6;padding:10px;font-size:13px;">[诊断] 容器可写，准备渲染 ${history.length} 条…</div>`;
-
+    const container = $c[0];
     if (!history.length) {
-        $c.html('<div class="st_ai_image_empty">暂无生成记录</div>');
+        container.innerHTML = '<div class="st_ai_image_empty">暂无生成记录</div>';
         return;
     }
 
     // 逐个创建 DOM 元素并分批设置 img.src，避免一次性拼接超大 base64 HTML 撑爆手机 WebView
-    const container = $c[0];
     container.innerHTML = '';
     let rendered = 0;
-    let idx = 0;
     for (const e of history) {
         const safeUrl = sanitizeImageUrl(e.imageUrl);
         if (!safeUrl) continue;
-        idx++;
         const prompt = String(e.prompt ?? '');
         const item = document.createElement('div');
         item.className = 'st_ai_gallery_item';
         item.dataset.id = e.id ?? '';
         item.dataset.prompt = prompt;
-        // 可视化标记：左上角编号，便于确认结构是否渲染出来
-        const badge = document.createElement('div');
-        badge.textContent = String(idx);
-        badge.style.cssText = 'position:absolute;top:2px;left:2px;z-index:5;background:#3b82f6;color:#fff;font-size:12px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:4px;';
         const img = document.createElement('img');
         img.alt = prompt;
         img.loading = 'lazy';
-        // 加载失败时显示红底提示，区分"结构在但图加载失败"与"完全无结构"
-        img.style.background = '#7f1d1d';
-        img.addEventListener('error', () => {
-            img.style.background = '#7f1d1d';
-            img.alt = '加载失败';
-        });
-        img.addEventListener('load', () => {
-            img.style.background = '';
-        });
+        img.addEventListener('error', () => { img.alt = '加载失败'; });
         const actions = document.createElement('div');
         actions.className = 'st_ai_gallery_actions';
         actions.innerHTML = buildImageActionsHtml('gallery', prompt, safeUrl)
             + `<button type="button" class="st_ai_btn st_gpt_regen" data-id="${escapeAttr(e.id)}" data-prompt="${escapeAttr(prompt)}" title="重新生成" aria-label="重新生成"><i class="fa-solid fa-rotate"></i></button>`
             + `<button type="button" class="st_ai_btn st_gpt_del" data-id="${escapeAttr(e.id)}" title="删除" aria-label="删除"><i class="fa-solid fa-trash"></i></button>`;
         item.appendChild(img);
-        item.appendChild(badge);
         item.appendChild(actions);
         container.appendChild(item);
         rendered++;
@@ -1204,11 +1187,9 @@ async function renderGallery() {
         setTimeout(() => { img.src = src; }, 0);
     }
 
-    // 诊断提示：告诉用户结构渲染了几个（不依赖 console）
-    console.log(`[st-ai-image] renderGallery: 读到 ${history.length} 条, 渲染 ${rendered} 个图项`);
-    toastr.info(`图库: ${rendered} 个图项已放入DOM`, 'st-ai-image', { timeOut: 6000 });
     if (rendered === 0) {
-        toastr.warning(`图库有 ${history.length} 条记录但全部无法渲染`, 'st-ai-image', { timeOut: 8000 });
+        container.innerHTML = '<div class="st_ai_image_empty">记录存在但无法渲染</div>';
+        console.warn(`[st-ai-image] renderGallery: ${history.length} 条记录全部无法渲染`);
     }
 }
 
@@ -1889,19 +1870,37 @@ jQuery(async () => {
             const btn = this;
             const imageUrl = $(btn).data('url');
             const prompt = String($(btn).data('prompt') || '');
+            const context = String($(btn).data('context') || '');
             const safeUrl = sanitizeImageUrl(imageUrl);
             if (!safeUrl) return toastr.error('图片地址无效，无法保存');
 
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
             const s = getSettings();
-            const { saved, imageUrl: savedUrl } = await saveGeneratedImage({ prompt, imageUrl: safeUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true });
+            const { saved, imageUrl: savedUrl, serverImageUrl } = await saveGeneratedImage({ prompt, imageUrl: safeUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true });
             if (saved?.id) {
                 btn.dataset.historyId = saved.id;
                 btn.dataset.url = savedUrl;
-                btn.title = '已在图库';
-                btn.setAttribute('aria-label', '已在图库');
+                btn.dataset.action = 'view-gallery';
+                btn.title = '查看图库';
+                btn.setAttribute('aria-label', '查看图库');
                 btn.innerHTML = '<i class="fa-solid fa-bookmark"></i>';
+
+                // 正文内联图：保存成功后写回聊天记录，使其刷新后仍在
+                if (context === 'inline') {
+                    const $wrap = $(btn).closest('.st_gpt_inline_img_wrap');
+                    const wrapper = $wrap[0];
+                    const markerUrl = getStableInlineImageUrl(serverImageUrl || savedUrl);
+                    if (wrapper && markerUrl) {
+                        const messageId = Number(wrapper.dataset.messageId);
+                        const originalTag = wrapper.dataset.originalTag || '';
+                        wrapper.dataset.historyId = String(saved.id);
+                        wrapper.dataset.url = markerUrl;
+                        wrapper.querySelector('img').src = markerUrl;
+                        const persisted = await persistInlineImageInMessage(Number.isInteger(messageId) ? messageId : null, originalTag, { id: saved.id, imageUrl: markerUrl, prompt });
+                        if (!persisted) toastr.warning('已存入图库，但当前消息未能写回聊天记录');
+                    }
+                }
                 toastr.success('已保存到图库');
             } else {
                 btn.disabled = false;
@@ -1918,6 +1917,36 @@ jQuery(async () => {
             e.stopPropagation();
             const $wrap = $(this).closest('.st_gpt_inline_img_wrap');
             showPreview($(this).attr('src'), $wrap.data('prompt') || '');
+        });
+        // 正文内联图：原位重新生成（产生新的未保存临时图，刷新后需重新保存）
+        $(document).on('click', '[data-action="regen-inline"]', async function (e) {
+            e.stopPropagation();
+            const btn = this;
+            const wrapper = btn.closest('.st_gpt_inline_img_wrap');
+            const prompt = String($(btn).data('prompt') || '');
+            if (!prompt || !wrapper) return;
+            const s = getSettings();
+            if (!s.apiKey) return toastr.error('请先在设置中填写 API Key');
+
+            const $icon = $(btn).find('i');
+            const oldIconClass = $icon.attr('class') || 'fa-solid fa-rotate';
+            const img = wrapper.querySelector('img');
+            btn.disabled = true;
+            $icon.attr('class', 'fa-solid fa-spinner fa-spin');
+            if (img) img.style.opacity = '0.4';
+
+            try {
+                const url = await callImageAPI(prompt);
+                const imageUrl = ensureSafeImageUrl(url);
+                // 原位渲染新的临时图片（未保存状态）
+                renderInlineImageContent(wrapper, { prompt, imageUrl, timestamp: Date.now() });
+            } catch (err) {
+                console.error('[st-ai-image] regen-inline error:', err);
+                toastr.error(err.message || '生成失败', '生图失败');
+                btn.disabled = false;
+                $icon.attr('class', oldIconClass);
+                if (img) img.style.opacity = '';
+            }
         });
         $(document).on('click', '.st_gpt_regen', async function (e) {
             e.stopPropagation();
@@ -1960,22 +1989,16 @@ jQuery(async () => {
 
             try {
                 const url = await callImageAPI(prompt);
-                const { saved, imageUrl, serverImageUrl } = await saveGeneratedImage({ prompt, imageUrl: url, timestamp: Date.now(), model: s.model, size: s.size }, { force: true });
+                const imageUrl = ensureSafeImageUrl(url);
 
-                // 用图片替换按钮
+                // 不自动保存：仅临时展示，由用户点击"存入图库"决定是否保存与持久化
                 const wrapper = document.createElement('span');
                 wrapper.className = 'st_gpt_inline_img_wrap';
-                renderInlineImageContent(wrapper, saved || { prompt, imageUrl, timestamp: Date.now() });
+                renderInlineImageContent(wrapper, { prompt, imageUrl, timestamp: Date.now() });
+                // 记录上下文，供"存入图库"时写回聊天记录
+                wrapper.dataset.messageId = Number.isInteger(messageId) ? String(messageId) : '';
+                wrapper.dataset.originalTag = originalTag || '';
                 btn.replaceWith(wrapper);
-                if (!saved) toastr.warning('图片已生成，但保存到图库失败，请检查存储权限或清理空间');
-                const markerUrl = getStableInlineImageUrl(serverImageUrl || imageUrl);
-                if (markerUrl) {
-                    await ensureHistoryEntryForImageUrl(markerUrl, { prompt, model: s.model, size: s.size });
-                    const persisted = await persistInlineImageInMessage(Number.isInteger(messageId) ? messageId : null, originalTag, { id: saved?.id, imageUrl: markerUrl, prompt });
-                    if (!persisted) toastr.warning('图片已进图库，但当前消息没有写回聊天记录');
-                } else {
-                    toastr.warning('图片已显示，但没有可持久保存的地址，刷新后需要重新生成');
-                }
             } catch (e) {
                 console.error('[st-ai-image] inline gen error:', e);
                 btn.innerHTML = '<i class="fa-solid fa-rotate-right"></i> 重试';
