@@ -33,7 +33,6 @@ const defaultSettings = {
     model: 'ai-image-2',
     size: '1024x1024',
     quality: 'auto',
-    saveHistory: true,
     extraPrompt: '',
     negativePrompt: '',
     autoInjectPrompt: true,
@@ -347,8 +346,7 @@ async function addHistoryEntry(entry) {
 }
 
 async function saveToHistory(entry, { force = false } = {}) {
-    const s = getSettings();
-    if (!s.saveHistory && !force) return null;
+    if (!force) return null;
     try {
         const saved = await addHistoryEntry(entry);
         renderGallery();
@@ -1690,7 +1688,6 @@ jQuery(async () => {
         $('#st_gpt_image_quality').val(s.quality);
         $('#st_gpt_image_enabled').prop('checked', s.enabled);
         $('#st_gpt_image_auto_detect').prop('checked', s.autoDetect);
-        $('#st_gpt_image_save_history').prop('checked', s.saveHistory);
         $('#st_gpt_image_auto_inject_prompt').prop('checked', s.autoInjectPrompt);
         $('#st_gpt_image_system_prompt_text').val(s.systemPrompt || '');
         $('#st_gpt_image_extra_prompt').val(s.extraPrompt || '');
@@ -1715,7 +1712,6 @@ jQuery(async () => {
         bindSetting('#st_gpt_image_quality', 'quality', 'text');
         bindSetting('#st_gpt_image_enabled', 'enabled', 'check');
         bindSetting('#st_gpt_image_auto_detect', 'autoDetect', 'check');
-        bindSetting('#st_gpt_image_save_history', 'saveHistory', 'check');
         bindSetting('#st_gpt_image_auto_inject_prompt', 'autoInjectPrompt', 'check');
         bindSetting('#st_gpt_image_system_prompt_text', 'systemPrompt', 'text');
         bindSetting('#st_gpt_image_extra_prompt', 'extraPrompt', 'text');
