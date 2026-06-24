@@ -1116,9 +1116,29 @@ function downloadImage(imageUrl) {
 }
 
 async function refreshGalleryFromChat() {
-    await syncMarkdownImagesInChatToHistory();
-    await syncRenderedChatImagesToHistory();
+    try {
+        await syncMarkdownImagesInChatToHistory();
+    } catch (e) {
+        console.error('[st-ai-image] syncMarkdownImages error:', e);
+    }
+    try {
+        await syncRenderedChatImagesToHistory();
+    } catch (e) {
+        console.error('[st-ai-image] syncRenderedImages error:', e);
+    }
     await renderGallery();
+
+    // 诊断：弹出现有存储的真实状态，便于排查图库空白
+    try {
+        const idb = await getIndexedDbHistory();
+        const fb = getFallbackHistory();
+        const sample = (idb[0] || fb[0]);
+        const sampleUrl = sample ? String(sample.imageUrl || '').slice(0, 60) : '(无)';
+        console.log(`[st-ai-image] 诊断: IndexedDB=${idb.length} localStorage=${fb.length} 样例URL=${sampleUrl}`);
+        toastr.info(`图库诊断: IndexedDB ${idb.length} 条 / localStorage ${fb.length} 条 | 样例: ${sampleUrl}`, 'st-ai-image', { timeOut: 10000, extendedTimeOut: 5000 });
+    } catch (e) {
+        toastr.error(`图库诊断失败: ${e?.message || e}`, 'st-ai-image', { timeOut: 10000 });
+    }
 }
 
 async function activateTab(tab) {
