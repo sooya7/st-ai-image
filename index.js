@@ -1156,26 +1156,42 @@ async function renderGallery() {
     const history = await getHistory();
     $('#st_gpt_gallery_count').text(`${history.length} 张图片`);
 
-    if (!history.length) return $c.html('<div class="st_ai_image_empty">暂无生成记录</div>');
+    if (!history.length) {
+        $c.html('<div class="st_ai_image_empty">暂无生成记录</div>');
+        toastr.info(`渲染诊断: 读到 0 条（getHistory 为空）`, 'st-ai-image', { timeOut: 8000 });
+        return;
+    }
 
-    $c.html(history.map((e) => {
+    // 逐个创建 DOM 元素并分批设置 img.src，避免一次性拼接超大 base64 HTML 撑爆手机 WebView
+    const container = $c[0];
+    container.innerHTML = '';
+    let rendered = 0;
+    for (const e of history) {
         const safeUrl = sanitizeImageUrl(e.imageUrl);
-        if (!safeUrl) return '';
+        if (!safeUrl) continue;
         const prompt = String(e.prompt ?? '');
-        return `
-            <div class="st_ai_gallery_item" data-id="${escapeAttr(e.id)}" data-prompt="${escapeAttr(prompt)}">
-                <img src="${escapeAttr(safeUrl)}" alt="${escapeAttr(prompt)}" loading="lazy">
-                <div class="st_ai_gallery_actions">
-                    ${buildImageActionsHtml('gallery', prompt, safeUrl)}
-                    <button type="button" class="st_ai_btn st_gpt_regen" data-id="${escapeAttr(e.id)}" data-prompt="${escapeAttr(prompt)}" title="重新生成" aria-label="重新生成"><i class="fa-solid fa-rotate"></i></button>
-                    <button type="button" class="st_ai_btn st_gpt_del" data-id="${escapeAttr(e.id)}" title="删除" aria-label="删除"><i class="fa-solid fa-trash"></i></button>
-                </div>
-            </div>
-        `;
-    }).join(''));
+        const item = document.createElement('div');
+        item.className = 'st_ai_gallery_item';
+        item.dataset.id = e.id ?? '';
+        item.dataset.prompt = prompt;
+        const img = document.createElement('img');
+        img.alt = prompt;
+        img.loading = 'lazy';
+        const actions = document.createElement('div');
+        actions.className = 'st_ai_gallery_actions';
+        actions.innerHTML = buildImageActionsHtml('gallery', prompt, safeUrl)
+            + `<button type="button" class="st_ai_btn st_gpt_regen" data-id="${escapeAttr(e.id)}" data-prompt="${escapeAttr(prompt)}" title="重新生成" aria-label="重新生成"><i class="fa-solid fa-rotate"></i></button>`
+            + `<button type="button" class="st_ai_btn st_gpt_del" data-id="${escapeAttr(e.id)}" title="删除" aria-label="删除"><i class="fa-solid fa-trash"></i></button>`;
+        item.appendChild(img);
+        item.appendChild(actions);
+        container.appendChild(item);
+        rendered++;
+        // 分批设置 src，让主线程有机会呼吸，避免大 base64 一次性阻塞
+        const src = safeUrl;
+        setTimeout(() => { img.src = src; }, 0);
+    }
 
     // 诊断：渲染后 DOM 实际有几个图项
-    const rendered = $c.find('.st_ai_gallery_item').length;
     console.log(`[st-ai-image] renderGallery: 读到 ${history.length} 条, 渲染 ${rendered} 个图项`);
     toastr.info(`渲染诊断: 读到 ${history.length} 条 / DOM渲染 ${rendered} 个`, 'st-ai-image', { timeOut: 8000 });
 }
