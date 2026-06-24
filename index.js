@@ -1127,18 +1127,6 @@ async function refreshGalleryFromChat() {
         console.error('[st-ai-image] syncRenderedImages error:', e);
     }
     await renderGallery();
-
-    // 诊断：弹出现有存储的真实状态，便于排查图库空白
-    try {
-        const idb = await getIndexedDbHistory();
-        const fb = getFallbackHistory();
-        const sample = (idb[0] || fb[0]);
-        const sampleUrl = sample ? String(sample.imageUrl || '').slice(0, 60) : '(无)';
-        console.log(`[st-ai-image] 诊断: IndexedDB=${idb.length} localStorage=${fb.length} 样例URL=${sampleUrl}`);
-        toastr.info(`图库诊断: IndexedDB ${idb.length} 条 / localStorage ${fb.length} 条 | 样例: ${sampleUrl}`, 'st-ai-image', { timeOut: 10000, extendedTimeOut: 5000 });
-    } catch (e) {
-        toastr.error(`图库诊断失败: ${e?.message || e}`, 'st-ai-image', { timeOut: 10000 });
-    }
 }
 
 async function activateTab(tab) {
@@ -1158,7 +1146,6 @@ async function renderGallery() {
 
     if (!history.length) {
         $c.html('<div class="st_ai_image_empty">暂无生成记录</div>');
-        toastr.info(`渲染诊断: 读到 0 条（getHistory 为空）`, 'st-ai-image', { timeOut: 8000 });
         return;
     }
 
@@ -1191,9 +1178,11 @@ async function renderGallery() {
         setTimeout(() => { img.src = src; }, 0);
     }
 
-    // 诊断：渲染后 DOM 实际有几个图项
+    // 仅在渲染异常时提示（正常出图不再弹窗打扰）
     console.log(`[st-ai-image] renderGallery: 读到 ${history.length} 条, 渲染 ${rendered} 个图项`);
-    toastr.info(`渲染诊断: 读到 ${history.length} 条 / DOM渲染 ${rendered} 个`, 'st-ai-image', { timeOut: 8000 });
+    if (rendered === 0) {
+        toastr.warning(`图库有 ${history.length} 条记录但全部无法渲染，请检查存储或反馈样例URL`, 'st-ai-image', { timeOut: 8000 });
+    }
 }
 
 // ===== 自动检测：替换聊天中的 [image]...[/image] 或持久图片标记 =====
