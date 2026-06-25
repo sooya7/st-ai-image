@@ -2062,7 +2062,10 @@ jQuery(async () => {
         $(document).on('click', '.st_gpt_regen', async function (e) {
             e.stopPropagation();
             const prompt = $(this).data('prompt');
-            if (prompt) await generateImage(prompt);
+            if (!prompt) return toastr.warning('提示词为空');
+            // 切换到生成标签页，让用户看到生成进度与结果
+            await activateTab('generate');
+            await generateImage(prompt);
         });
         $(document).on('click', '.st_gpt_del', function (e) {
             e.stopPropagation();
