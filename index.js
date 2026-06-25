@@ -1500,6 +1500,92 @@ async function persistInlineImageInMessage(messageId, originalTag, markerData) {
     }
 }
 
+// 编辑内联图提示词 → 替换正文中的 marker 为新 [image]tag[/image] → 重新生成 → 写回 marker
+async function regenerateInlineImageInMessage(triggerEl, newPrompt) {
+    const s = getSettings();
+    if (!s.apiKey) return toastr.error('请先在设置中填写 API Key');
+    const ctx = getSillyTavernContext();
+    if (!ctx) return toastr.error('无法获取 SillyTavern 上下文');
+
+    const $wrap = $(triggerEl).closest('.st_gpt_inline_img_wrap');
+    if (!$wrap.length) return toastr.error('未找到图片容器');
+    const oldHistoryId = String($wrap.data('history-id') || '');
+    const messageId = getMessageIdFromElement($wrap[0]);
+    if (!Number.isInteger(messageId) || !ctx.chat?.[messageId]) return toastr.error('未找到对应消息');
+
+    // 构造旧 marker（正文中存的形式）
+    const oldMarker = oldHistoryId ? createInlineImageMarker(oldHistoryId) : '';
+    const message = ctx.chat[messageId];
+    let currentMes = String(message.mes ?? '');
+    const swipeId = Number(message.swipe_id ?? 0);
+    let currentSwipe = Array.isArray(message.swipes) && typeof message.swipes[swipeId] === 'string' ? message.swipes[swipeId] : null;
+
+    // 1. 把正文中的旧 marker 替换成 [image]新prompt[/image]
+    const newTag = `[image]${newPrompt}[/image]`;
+    let replaced = false;
+    if (oldMarker && currentMes.includes(oldMarker)) {
+        currentMes = currentMes.replace(oldMarker, newTag);
+        replaced = true;
+    } else {
+        // fallback: 用正则替换第一个 image 标签
+        const next = currentMes.replace(IMAGE_TAG_FIRST_RE, newTag);
+        if (next !== currentMes) { currentMes = next; replaced = true; }
+    }
+    if (currentSwipe !== null && oldMarker && currentSwipe.includes(oldMarker)) {
+        currentSwipe = currentSwipe.replace(oldMarker, newTag);
+    } else if (currentSwipe !== null) {
+        const next = currentSwipe.replace(IMAGE_TAG_FIRST_RE, newTag);
+        if (next !== currentSwipe) currentSwipe = next;
+    }
+    if (!replaced) {
+        console.warn('[st-ai-image] 编辑提示词: 未在正文中找到旧 marker', { oldMarker, currentMes: currentMes.slice(0, 200) });
+    }
+
+    // 先把新 tag 写入消息文本（这样正文里的 prompt 就被替换了）
+    message.mes = currentMes;
+    if (currentSwipe !== null) message.swipes[swipeId] = currentSwipe;
+
+    // 2. 生成新图片
+    toastr.info('正在用新提示词生成图片...');
+    let newUrl;
+    try {
+        newUrl = ensureSafeImageUrl(await callImageAPI(newPrompt));
+    } catch (err) {
+        // 生成失败也要保存已经替换的正文
+        try { ctx.updateMessageBlock?.(messageId, message); await ctx.saveChat?.(); } catch {}
+        toastr.error(err.message || '生成失败', '生图失败');
+        return;
+    }
+
+    // 3. 存入图库，拿到新 id
+    const saved = await saveToHistory({ prompt: newPrompt, imageUrl: newUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true });
+    const newId = saved?.id ?? '';
+
+    // 4. 把正文中的 [image]新prompt[/image] 替换成新 marker
+    const newMarker = createInlineImageMarker({ id: newId, imageUrl: newUrl, prompt: newPrompt });
+    let finalMes = currentMes.replace(newTag, newMarker);
+    if (finalMes === currentMes) finalMes = currentMes.replace(IMAGE_TAG_FIRST_RE, newMarker);
+    message.mes = finalMes;
+    if (currentSwipe !== null) {
+        let finalSwipe = currentSwipe.replace(newTag, newMarker);
+        if (finalSwipe === currentSwipe) finalSwipe = currentSwipe.replace(IMAGE_TAG_FIRST_RE, newMarker);
+        message.swipes[swipeId] = finalSwipe;
+    }
+
+    // 5. 更新 DOM 并保存
+    try {
+        ctx.updateMessageBlock?.(messageId, message);
+        processMessageById(messageId, { allowImageRequests: false });
+        await ctx.saveChat?.();
+        await syncMarkdownImagesInChatToHistory();
+        scanInlineMessagesBurst();
+        toastr.success('已替换正文提示词并重新生成图片');
+    } catch (err) {
+        console.error('[st-ai-image] regenerateInlineImageInMessage save error:', err);
+        toastr.error('保存消息失败');
+    }
+}
+
 async function migrateInlineMarkersInChat() {
     const ctx = getSillyTavernContext();
     if (!ctx?.chat?.length) return false;
@@ -1968,23 +2054,14 @@ jQuery(async () => {
             const imageUrl = String($(this).data('url') || '');
             const historyId = String($(this).data('history-id') || '');
             const context = String($(this).data('context') || '');
+            const triggerEl = this;
             showPromptEditor({
                 prompt,
                 imageUrl,
                 historyId: historyId || null,
                 onRegen: context === 'inline'
                     ? async (newPrompt) => {
-                        const s = getSettings();
-                        if (!s.apiKey) return toastr.error('请先在设置中填写 API Key');
-                        const $wrap = $(this).closest('.st_gpt_inline_img_wrap');
-                        try {
-                            const url = await callImageAPI(newPrompt);
-                            const safe = ensureSafeImageUrl(url);
-                            if ($wrap.length) renderInlineImageContent($wrap[0], { prompt: newPrompt, imageUrl: safe, timestamp: Date.now() });
-                            toastr.success('已用新提示词重新生成');
-                        } catch (err) {
-                            toastr.error(err.message || '生成失败', '生图失败');
-                        }
+                        await regenerateInlineImageInMessage(triggerEl, newPrompt);
                     }
                     : (newPrompt) => generateImage(newPrompt),
             });
