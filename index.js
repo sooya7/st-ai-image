@@ -1521,7 +1521,7 @@ async function persistInlineImageInMessage(messageId, originalTag, markerData) {
     }
 }
 
-// 仅保存内联图的新提示词到正文（不重新生成图片）
+// 仅保存内联图的新提示词（更新 history + DOM，不动正文 marker）
 async function saveInlinePromptInMessage(triggerEl, newPrompt) {
     const ctx = getSillyTavernContext();
     if (!ctx) return toastr.error('无法获取 SillyTavern 上下文');
@@ -1529,64 +1529,26 @@ async function saveInlinePromptInMessage(triggerEl, newPrompt) {
     const $wrap = $(triggerEl).closest('.st_gpt_inline_img_wrap');
     if (!$wrap.length) return toastr.error('未找到图片容器');
     const oldHistoryId = String($wrap.data('history-id') || '');
-    const messageId = getMessageIdFromElement($wrap[0]);
-    if (!Number.isInteger(messageId) || !ctx.chat?.[messageId]) return toastr.error('未找到对应消息');
 
-    const message = ctx.chat[messageId];
-    let currentMes = String(message.mes ?? '');
-    const swipeId = Number(message.swipe_id ?? 0);
-    let currentSwipe = Array.isArray(message.swipes) && typeof message.swipes[swipeId] === 'string' ? message.swipes[swipeId] : null;
-
-    // 构造旧 marker
-    const oldMarker = oldHistoryId ? createInlineImageMarker(oldHistoryId) : '';
-    // 构造新 marker（带新 prompt，用 src 形式保存 prompt 进 marker 不合适，
-    // 这里用 [image]新prompt[/image] 临时占位，再把旧 marker 换成带 src 的新 marker）
-    // 实际上 marker 只存 id，prompt 存在 history 里。所以：
-    // 1. 更新 history 里的 prompt
-    // 2. 更新 wrapper 的 dataset.prompt 和 img alt
-    // 3. 如果正文中有 [image]旧prompt[/image] 形式，替换成 [image]新prompt[/image]
-
-    // 替换正文中的 [image]旧prompt[/image] → [image]新prompt[/image]
-    const oldPrompt = String($wrap.data('prompt') || '');
-    const newTag = `[image]${newPrompt}[/image]`;
-    let changed = false;
-    if (oldPrompt) {
-        const oldTag = `[image]${oldPrompt}[/image]`;
-        if (currentMes.includes(oldTag)) { currentMes = currentMes.split(oldTag).join(newTag); changed = true; }
-        if (currentSwipe !== null && currentSwipe.includes(oldTag)) { currentSwipe = currentSwipe.split(oldTag).join(newTag); changed = true; }
-    }
-    // 也尝试用正则匹配第一个 image 标签替换其内容
-    if (!changed) {
-        const replaced = currentMes.replace(IMAGE_TAG_FIRST_RE, newTag);
-        if (replaced !== currentMes) { currentMes = replaced; changed = true; }
+    // 1. 更新 IndexedDB history 里的 prompt
+    if (oldHistoryId) {
+        const r = await updateHistoryItemPrompt(oldHistoryId, newPrompt);
+        console.log('[st-ai-image] saveInlinePrompt: updateHistoryItemPrompt', r, 'id', oldHistoryId);
     }
 
-    if (changed) {
-        message.mes = currentMes;
-        if (currentSwipe !== null) message.swipes[swipeId] = currentSwipe;
-    }
-
-    // 更新 history 里的 prompt
-    if (oldHistoryId) await updateHistoryItemPrompt(oldHistoryId, newPrompt);
-
-    // 更新 DOM
-    $wrap.data('prompt', newPrompt);
+    // 2. 更新 DOM（wrapper + img + 所有按钮）
     $wrap.attr('data-prompt', newPrompt);
+    $wrap.data('prompt', newPrompt);
     $wrap.find('img').attr('alt', newPrompt);
-    // 更新编辑按钮的 data-prompt
     $wrap.find('[data-action="edit-prompt"]').attr('data-prompt', newPrompt).data('prompt', newPrompt);
+    // 保存按钮的 data-prompt 也更新
+    $wrap.find('[data-action="save-image"]').attr('data-prompt', newPrompt).data('prompt', newPrompt);
 
-    try {
-        if (changed) {
-            ctx.updateMessageBlock?.(messageId, message);
-            processMessageById(messageId, { allowImageRequests: false });
-            await ctx.saveChat?.();
-        }
-        toastr.success('提示词已保存到正文');
-    } catch (err) {
-        console.error('[st-ai-image] saveInlinePromptInMessage error:', err);
-        toastr.error('保存失败');
-    }
+    // 3. 不动 message.mes，不调 updateMessageBlock/processMessageById
+    //    因为 marker [st-ai-image id="x"] 只存 id，不含 prompt，
+    //    重新渲染反而会导致 marker 显示为文本
+
+    toastr.success('提示词已保存');
 }
 
 // 编辑内联图提示词 → 替换正文中的 marker 为新 [image]tag[/image] → 重新生成 → 写回 marker
