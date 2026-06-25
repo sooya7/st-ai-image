@@ -665,32 +665,6 @@ function escapeHtml(value) {
     }[ch]));
 }
 
-// 长按检测：移动端 touchstart 500ms / 桌面端右键 contextmenu
-function bindLongPress(root, selector, handler) {
-    const $root = $(root);
-    let timer = null;
-    let triggered = false;
-
-    $root.on('touchstart', selector, function (e) {
-        triggered = false;
-        timer = setTimeout(() => {
-            triggered = true;
-            e.preventDefault();
-            handler(this);
-        }, 500);
-    });
-    $root.on('touchmove touchend touchcancel', selector, () => {
-        if (timer) { clearTimeout(timer); timer = null; }
-    });
-    $root.on('click', selector, function (e) {
-        if (triggered) { e.preventDefault(); e.stopPropagation(); triggered = false; }
-    });
-    $root.on('contextmenu', selector, function (e) {
-        e.preventDefault();
-        handler(this);
-    });
-}
-
 function escapeAttr(value) {
     return escapeHtml(value);
 }
@@ -843,10 +817,13 @@ function buildImageActionsHtml(context, prompt, imageUrl, options = {}) {
     const regenBtn = context === 'inline'
         ? `<button type="button" class="st_gpt_image_btn" data-action="regen-inline" data-context="${escapeAttr(context)}" data-prompt="${escapeAttr(prompt)}" title="重新生成" aria-label="重新生成"><i class="fa-solid fa-rotate"></i></button>`
         : '';
+    // 编辑提示词按钮（所有场景通用）
+    const editBtn = `<button type="button" class="st_gpt_image_btn" data-action="edit-prompt" data-context="${escapeAttr(context)}" data-prompt="${escapeAttr(prompt)}" data-url="${safeUrl}" data-history-id="${historyId}" title="编辑提示词" aria-label="编辑提示词"><i class="fa-solid fa-pen"></i></button>`;
     return `
         <button type="button" class="st_gpt_image_btn" data-action="download-image" data-context="${escapeAttr(context)}" data-url="${safeUrl}" title="下载图片" aria-label="下载图片"${disabled}><i class="fa-solid fa-download"></i></button>
         ${allowSave ? `<button type="button" class="st_gpt_image_btn" data-action="${historyId ? 'view-gallery' : 'save-image'}" data-context="${escapeAttr(context)}" data-url="${safeUrl}" data-prompt="${escapeAttr(prompt)}" data-history-id="${historyId}" title="${saveTitle}" aria-label="${saveTitle}"${saveDisabled}><i class="fa-solid ${saveIcon}"></i></button>` : ''}
         ${regenBtn}
+        ${editBtn}
     `;
 }
 
@@ -1283,7 +1260,7 @@ async function renderGallery() {
         img.addEventListener('error', () => { img.alt = '加载失败'; });
         const actions = document.createElement('div');
         actions.className = 'st_ai_gallery_actions';
-        actions.innerHTML = buildImageActionsHtml('gallery', prompt, safeUrl)
+        actions.innerHTML = buildImageActionsHtml('gallery', prompt, safeUrl, { historyId: e.id })
             + `<button type="button" class="st_ai_btn st_gpt_regen" data-id="${escapeAttr(e.id)}" data-prompt="${escapeAttr(prompt)}" title="重新生成" aria-label="重新生成"><i class="fa-solid fa-rotate"></i></button>`
             + `<button type="button" class="st_ai_btn st_gpt_del" data-id="${escapeAttr(e.id)}" title="删除" aria-label="删除"><i class="fa-solid fa-trash"></i></button>`;
         item.appendChild(img);
@@ -1967,40 +1944,32 @@ jQuery(async () => {
             const $item = $(this).closest('.st_ai_gallery_item');
             showPreview($(this).attr('src'), $item.data('prompt') || '');
         });
-        // 长按图片编辑 tag（图库 + 正文内联图）
-        bindLongPress(document, '.st_ai_gallery_item img', (el) => {
-            const $item = $(el).closest('.st_ai_gallery_item');
-            const prompt = String($item.data('prompt') || '');
-            const id = $item.data('id') || '';
-            const src = $(el).attr('src') || '';
+        // 编辑提示词按钮（图库 + 正文内联图 + 结果图通用）
+        $(document).on('click', '[data-action="edit-prompt"]', function (e) {
+            e.stopPropagation();
+            const prompt = String($(this).data('prompt') || '');
+            const imageUrl = String($(this).data('url') || '');
+            const historyId = String($(this).data('history-id') || '');
+            const context = String($(this).data('context') || '');
             showPromptEditor({
                 prompt,
-                imageUrl: src,
-                historyId: id,
-                onRegen: (newPrompt) => generateImage(newPrompt),
-            });
-        });
-        bindLongPress(document, '.st_gpt_inline_img', (el) => {
-            const $wrap = $(el).closest('.st_gpt_inline_img_wrap');
-            const prompt = String($wrap.data('prompt') || '');
-            const src = $(el).attr('src') || '';
-            showPromptEditor({
-                prompt,
-                imageUrl: src,
-                historyId: null,
-                onRegen: async (newPrompt) => {
-                    // 原位重新生成
-                    const s = getSettings();
-                    if (!s.apiKey) return toastr.error('请先在设置中填写 API Key');
-                    try {
-                        const url = await callImageAPI(newPrompt);
-                        const imageUrl = ensureSafeImageUrl(url);
-                        renderInlineImageContent($wrap[0], { prompt: newPrompt, imageUrl, timestamp: Date.now() });
-                        toastr.success('已用新提示词重新生成');
-                    } catch (err) {
-                        toastr.error(err.message || '生成失败', '生图失败');
+                imageUrl,
+                historyId: historyId || null,
+                onRegen: context === 'inline'
+                    ? async (newPrompt) => {
+                        const s = getSettings();
+                        if (!s.apiKey) return toastr.error('请先在设置中填写 API Key');
+                        const $wrap = $(this).closest('.st_gpt_inline_img_wrap');
+                        try {
+                            const url = await callImageAPI(newPrompt);
+                            const safe = ensureSafeImageUrl(url);
+                            if ($wrap.length) renderInlineImageContent($wrap[0], { prompt: newPrompt, imageUrl: safe, timestamp: Date.now() });
+                            toastr.success('已用新提示词重新生成');
+                        } catch (err) {
+                            toastr.error(err.message || '生成失败', '生图失败');
+                        }
                     }
-                },
+                    : (newPrompt) => generateImage(newPrompt),
             });
         });
         $(document).on('click', '[data-action="download-image"]', function (e) {
