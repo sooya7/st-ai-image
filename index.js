@@ -1215,10 +1215,22 @@ function showPromptEditor({ prompt, imageUrl, historyId, onSave, onRegen }) {
         const newPrompt = String($ta.val() || '').trim();
         if (!newPrompt) return toastr.warning('提示词不能为空');
         let ok = true;
-        if (historyId) ok = await updateHistoryItemPrompt(historyId, newPrompt);
-        if (typeof onSave === 'function') onSave(newPrompt, ok);
-        if (ok) toastr.success('提示词已保存');
-        else toastr.error('保存失败');
+        try {
+            if (historyId) {
+                const r = await updateHistoryItemPrompt(historyId, newPrompt);
+                console.log('[st-ai-image] edit save: updateHistoryItemPrompt returned', r, 'for id', historyId);
+                // updateHistoryItemPrompt 返回 false 不代表失败（可能只是没找到记录）
+                // 正文更新才是关键，所以不阻断
+            }
+            if (typeof onSave === 'function') {
+                await onSave(newPrompt, ok);
+                console.log('[st-ai-image] edit save: onSave done');
+            }
+            toastr.success('提示词已保存');
+        } catch (err) {
+            console.error('[st-ai-image] edit save error:', err);
+            toastr.error('保存失败: ' + (err?.message || err));
+        }
         closeEditor();
     });
 
