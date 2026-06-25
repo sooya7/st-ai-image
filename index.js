@@ -858,6 +858,19 @@ function extractImageFromResponse(data) {
     // 部分中转: 顶层 url / b64_json
     if (data.b64_json) return `data:image/png;base64,${data.b64_json}`;
     if (data.url) return data.url;
+    // gpt-image-2 风格: data.result 或 data.output
+    if (data.result) {
+        if (typeof data.result === 'string') return data.result;
+        const r = pick(data.result); if (r) return r;
+        if (Array.isArray(data.result) && data.result.length) { const r2 = pick(data.result[0]); if (r2) return r2; }
+    }
+    if (data.output) {
+        if (typeof data.output === 'string') return data.output;
+        const r = pick(data.output); if (r) return r;
+        if (Array.isArray(data.output) && data.output.length) { const r2 = pick(data.output[0]); if (r2) return r2; }
+    }
+    // data.data[0] 可能直接是 URL 字符串
+    if (Array.isArray(data.data) && data.data.length && typeof data.data[0] === 'string') return data.data[0];
     // Gemini 格式: candidates[0].content.parts[].inlineData
     const parts = data.candidates?.[0]?.content?.parts;
     if (parts) {
@@ -982,9 +995,10 @@ async function callImageAPI(prompt, { signal } = {}) {
                 continue;
             }
             const data = await resp.json();
+            console.log('[st-ai-image] attempt=' + attempt + ' response:', data);
             const img = extractImageFromResponse(data) || extractImageFromChatResponse(data);
             if (img) return ensureSafeImageUrl(img);
-            errors.push(`${attempt}: 响应中未找到图片`);
+            errors.push(`${attempt}: 响应中未找到图片 (keys: ${Object.keys(data || {}).join(',')})`);
         } catch (e) {
             if (e?.name === 'AbortError') throw e;   // 用户主动取消，直接抛
             errors.push(`${attempt}: ${e.message}`);
