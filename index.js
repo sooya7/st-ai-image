@@ -958,7 +958,10 @@ async function callImageAPI(prompt, { signal } = {}) {
 
     const imageGenBody = { model: s.model, prompt: fullPrompt, n: 1, size: s.size };
     if (s.quality && s.quality !== 'auto') imageGenBody.quality = s.quality;
-    if (negative) imageGenBody.negative_prompt = negative;
+    // negative_prompt 非 OpenAI 标准字段，仅部分中转支持；
+    // 为兼容 gpt-image-2 等严格端点，images/generations 不发送此字段，
+    // 若需要负面提示词，请在 prompt 中用文字描述（如 "without ..."）
+    // if (negative) imageGenBody.negative_prompt = negative;
 
     const chatBase = { model: s.model, stream: false, messages: [{ role: 'user', content: fullPrompt }] };
     const chatModalitiesBody = { ...chatBase, modalities: ['text', 'image'] };
