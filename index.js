@@ -1548,10 +1548,10 @@ async function saveInlinePromptInMessage(triggerEl, newPrompt) {
 
     // 替换正文中的 [image]旧prompt[/image] → [image]新prompt[/image]
     const oldPrompt = String($wrap.data('prompt') || '');
+    const newTag = `[image]${newPrompt}[/image]`;
     let changed = false;
     if (oldPrompt) {
         const oldTag = `[image]${oldPrompt}[/image]`;
-        const newTag = `[image]${newPrompt}[/image]`;
         if (currentMes.includes(oldTag)) { currentMes = currentMes.split(oldTag).join(newTag); changed = true; }
         if (currentSwipe !== null && currentSwipe.includes(oldTag)) { currentSwipe = currentSwipe.split(oldTag).join(newTag); changed = true; }
     }
