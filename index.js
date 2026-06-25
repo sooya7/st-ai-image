@@ -1165,8 +1165,8 @@ function showPromptEditor({ prompt, imageUrl, historyId, onSave, onRegen }) {
             ${safeUrl ? `<img src="${escapeAttr(safeUrl)}" class="st_gpt_preview_img st_ai_edit_thumb" alt="预览">` : ''}
             <textarea id="st_gpt_edit_textarea" class="st_ai_textarea st_ai_edit_textarea" rows="5" placeholder="输入提示词...">${escapeHtml(prompt || '')}</textarea>
             <div class="st_ai_edit_actions">
-                <button type="button" class="st_gpt_image_btn st_ai_edit_regen" title="用新提示词重新生成"><i class="fa-solid fa-rotate"></i> 重新生成</button>
-                <button type="button" class="st_gpt_image_btn st_ai_edit_save" title="保存提示词"><i class="fa-solid fa-floppy-disk"></i> 保存</button>
+                <button type="button" id="st_gpt_edit_regen" class="st_gpt_image_btn st_ai_edit_regen" title="用新提示词重新生成"><i class="fa-solid fa-rotate"></i> 重新生成</button>
+                <button type="button" id="st_gpt_edit_save" class="st_gpt_image_btn st_ai_edit_save" title="保存提示词"><i class="fa-solid fa-floppy-disk"></i> 保存</button>
             </div>
         </div>
     `).addClass('st_gpt_preview_visible');
