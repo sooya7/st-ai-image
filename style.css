@@ -589,6 +589,49 @@
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
 }
 
+/* --- 长按编辑提示词模态框 --- */
+.st_ai_edit_content {
+    max-width: 600px;
+    width: 90vw;
+}
+
+.st_ai_edit_thumb {
+    max-height: 200px;
+    max-width: 100%;
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.st_ai_edit_textarea {
+    width: 100%;
+    min-height: 100px;
+    resize: vertical;
+    background: var(--SmartThemeBlurTintColor, rgba(30, 30, 40, 0.9));
+    color: var(--SmartThemeBodyColor, #e0e0e0);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.st_ai_edit_actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    justify-content: flex-end;
+}
+
+.st_ai_edit_actions .st_gpt_image_btn {
+    padding: 6px 14px;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
 /* --- 聊天内嵌生图按钮 --- */
 .st_gpt_inline_gen {
     display: inline-flex;

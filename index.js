@@ -624,6 +624,28 @@ async function deleteHistoryItem(id) {
     } catch (e) { console.warn('[st-ai-image] deleteHistoryItem error:', e); }
 }
 
+// 更新历史记录中的 prompt（用于长按编辑 tag）
+async function updateHistoryItemPrompt(id, newPrompt) {
+    try {
+        const db = await openDB();
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const item = await new Promise((resolve) => {
+            const req = store.get(Number(id));
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => resolve(null);
+        });
+        if (!item) { console.warn('[st-ai-image] updateHistoryItemPrompt: item not found', id); return false; }
+        item.prompt = newPrompt;
+        store.put(item, Number(id));
+        tx.oncomplete = () => renderGallery();
+        return true;
+    } catch (e) {
+        console.warn('[st-ai-image] updateHistoryItemPrompt error:', e);
+        return false;
+    }
+}
+
 async function clearHistory() {
     try {
         const db = await openDB();
@@ -641,6 +663,32 @@ function escapeHtml(value) {
         '"': '&quot;',
         "'": '&#39;',
     }[ch]));
+}
+
+// 长按检测：移动端 touchstart 500ms / 桌面端右键 contextmenu
+function bindLongPress(root, selector, handler) {
+    const $root = $(root);
+    let timer = null;
+    let triggered = false;
+
+    $root.on('touchstart', selector, function (e) {
+        triggered = false;
+        timer = setTimeout(() => {
+            triggered = true;
+            e.preventDefault();
+            handler(this);
+        }, 500);
+    });
+    $root.on('touchmove touchend touchcancel', selector, () => {
+        if (timer) { clearTimeout(timer); timer = null; }
+    });
+    $root.on('click', selector, function (e) {
+        if (triggered) { e.preventDefault(); e.stopPropagation(); triggered = false; }
+    });
+    $root.on('contextmenu', selector, function (e) {
+        e.preventDefault();
+        handler(this);
+    });
 }
 
 function escapeAttr(value) {
@@ -1116,6 +1164,68 @@ function downloadImage(imageUrl) {
     document.body.appendChild(a);
     a.click();
     a.remove();
+}
+
+// 长按图片 → 编辑 tag 模态框
+function showPromptEditor({ prompt, imageUrl, historyId, onSave, onRegen }) {
+    const safeUrl = sanitizeImageUrl(imageUrl);
+    const $p = $('#st_gpt_image_preview');
+    const closeEditor = () => {
+        $p.removeClass('st_gpt_preview_visible').off('.stAiEdit');
+        $(document).off('keydown.stAiEdit');
+    };
+
+    $p.off('.stAiEdit');
+    $(document).off('keydown.stAiEdit');
+    $p.html(`
+        <div class="st_gpt_preview_content st_ai_edit_content">
+            <div class="st_gpt_preview_header">
+                <span class="st_gpt_preview_title">编辑提示词</span>
+                <div class="st_ai_action_row">
+                    <button type="button" class="st_gpt_image_btn" id="st_gpt_edit_close" title="关闭" aria-label="关闭"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            ${safeUrl ? `<img src="${escapeAttr(safeUrl)}" class="st_gpt_preview_img st_ai_edit_thumb" alt="预览">` : ''}
+            <textarea id="st_gpt_edit_textarea" class="st_ai_textarea st_ai_edit_textarea" rows="5" placeholder="输入提示词...">${escapeHtml(prompt || '')}</textarea>
+            <div class="st_ai_edit_actions">
+                <button type="button" class="st_gpt_image_btn st_ai_edit_regen" title="用新提示词重新生成"><i class="fa-solid fa-rotate"></i> 重新生成</button>
+                <button type="button" class="st_gpt_image_btn st_ai_edit_save" title="保存提示词"><i class="fa-solid fa-floppy-disk"></i> 保存</button>
+            </div>
+        </div>
+    `).addClass('st_gpt_preview_visible');
+
+    const $ta = $('#st_gpt_edit_textarea');
+    $ta.focus();
+    // 将光标移到末尾
+    const len = $ta.val()?.length || 0;
+    $ta[0]?.setSelectionRange(len, len);
+
+    $('#st_gpt_edit_close').off('.stAiEdit').on('click.stAiEdit', closeEditor);
+    $p.on('click.stAiEdit', (e) => { if (e.target === $p[0]) closeEditor(); });
+    $(document).on('keydown.stAiEdit', (e) => {
+        if (e.key === 'Escape') closeEditor();
+        // Ctrl/Cmd + Enter 保存
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { $('#st_gpt_edit_save').trigger('click'); }
+    });
+
+    $('#st_gpt_edit_save').off('.stAiEdit').on('click.stAiEdit', async () => {
+        const newPrompt = String($ta.val() || '').trim();
+        if (!newPrompt) return toastr.warning('提示词不能为空');
+        let ok = true;
+        if (historyId) ok = await updateHistoryItemPrompt(historyId, newPrompt);
+        if (typeof onSave === 'function') onSave(newPrompt, ok);
+        if (ok) toastr.success('提示词已保存');
+        else toastr.error('保存失败');
+        closeEditor();
+    });
+
+    $('#st_gpt_edit_regen').off('.stAiEdit').on('click.stAiEdit', async () => {
+        const newPrompt = String($ta.val() || '').trim();
+        if (!newPrompt) return toastr.warning('提示词不能为空');
+        closeEditor();
+        if (typeof onRegen === 'function') onRegen(newPrompt);
+        else await generateImage(newPrompt);
+    });
 }
 
 async function refreshGalleryFromChat() {
@@ -1856,6 +1966,42 @@ jQuery(async () => {
         $(document).on('click', '.st_ai_gallery_item img', function () {
             const $item = $(this).closest('.st_ai_gallery_item');
             showPreview($(this).attr('src'), $item.data('prompt') || '');
+        });
+        // 长按图片编辑 tag（图库 + 正文内联图）
+        bindLongPress(document, '.st_ai_gallery_item img', (el) => {
+            const $item = $(el).closest('.st_ai_gallery_item');
+            const prompt = String($item.data('prompt') || '');
+            const id = $item.data('id') || '';
+            const src = $(el).attr('src') || '';
+            showPromptEditor({
+                prompt,
+                imageUrl: src,
+                historyId: id,
+                onRegen: (newPrompt) => generateImage(newPrompt),
+            });
+        });
+        bindLongPress(document, '.st_gpt_inline_img', (el) => {
+            const $wrap = $(el).closest('.st_gpt_inline_img_wrap');
+            const prompt = String($wrap.data('prompt') || '');
+            const src = $(el).attr('src') || '';
+            showPromptEditor({
+                prompt,
+                imageUrl: src,
+                historyId: null,
+                onRegen: async (newPrompt) => {
+                    // 原位重新生成
+                    const s = getSettings();
+                    if (!s.apiKey) return toastr.error('请先在设置中填写 API Key');
+                    try {
+                        const url = await callImageAPI(newPrompt);
+                        const imageUrl = ensureSafeImageUrl(url);
+                        renderInlineImageContent($wrap[0], { prompt: newPrompt, imageUrl, timestamp: Date.now() });
+                        toastr.success('已用新提示词重新生成');
+                    } catch (err) {
+                        toastr.error(err.message || '生成失败', '生图失败');
+                    }
+                },
+            });
         });
         $(document).on('click', '[data-action="download-image"]', function (e) {
             e.stopPropagation();
