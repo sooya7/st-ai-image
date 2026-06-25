@@ -1540,9 +1540,8 @@ async function saveInlinePromptInMessage(triggerEl, newPrompt) {
     $wrap.attr('data-prompt', newPrompt);
     $wrap.data('prompt', newPrompt);
     $wrap.find('img').attr('alt', newPrompt);
-    $wrap.find('[data-action="edit-prompt"]').attr('data-prompt', newPrompt).data('prompt', newPrompt);
-    // 保存按钮的 data-prompt 也更新
-    $wrap.find('[data-action="save-image"]').attr('data-prompt', newPrompt).data('prompt', newPrompt);
+    // 更新所有携带 data-prompt 的按钮（edit-prompt / regen-inline / save-image）
+    $wrap.find('[data-prompt]').attr('data-prompt', newPrompt).data('prompt', newPrompt);
 
     // 3. 不动 message.mes，不调 updateMessageBlock/processMessageById
     //    因为 marker [st-ai-image id="x"] 只存 id，不含 prompt，
@@ -2185,7 +2184,8 @@ jQuery(async () => {
             e.stopPropagation();
             const btn = this;
             const wrapper = btn.closest('.st_gpt_inline_img_wrap');
-            const prompt = String($(btn).data('prompt') || '');
+            // 从 wrapper 读取最新 prompt（编辑保存后会更新），而非按钮自己的 data-prompt
+            const prompt = String($(wrapper).data('prompt') || $(btn).data('prompt') || '');
             if (!prompt || !wrapper) return;
             const s = getSettings();
             if (!s.apiKey) return toastr.error('请先在设置中填写 API Key');
