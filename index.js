@@ -624,21 +624,31 @@ async function deleteHistoryItem(id) {
     } catch (e) { console.warn('[st-ai-image] deleteHistoryItem error:', e); }
 }
 
-// 更新历史记录中的 prompt（用于长按编辑 tag）
+// 更新历史记录中的 prompt（用于编辑 tag）
 async function updateHistoryItemPrompt(id, newPrompt) {
     try {
         const db = await openDB();
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-        const item = await new Promise((resolve) => {
-            const req = store.get(Number(id));
+        const numericId = Number(id);
+        const item = await new Promise((resolve, reject) => {
+            const req = store.get(numericId);
             req.onsuccess = () => resolve(req.result);
-            req.onerror = () => resolve(null);
+            req.onerror = () => reject(req.error);
         });
-        if (!item) { console.warn('[st-ai-image] updateHistoryItemPrompt: item not found', id); return false; }
+        if (!item) {
+            console.warn('[st-ai-image] updateHistoryItemPrompt: item not found', id);
+            // 找不到记录不算失败，正文更新仍可继续
+            return true;
+        }
         item.prompt = newPrompt;
-        store.put(item, Number(id));
-        tx.oncomplete = () => renderGallery();
+        await new Promise((resolve, reject) => {
+            const putReq = store.put(item, numericId);
+            putReq.onsuccess = () => resolve();
+            putReq.onerror = () => reject(putReq.error);
+        });
+        await new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+        renderGallery();
         return true;
     } catch (e) {
         console.warn('[st-ai-image] updateHistoryItemPrompt error:', e);
