@@ -33,7 +33,7 @@ const defaultSettings = {
     model: 'ai-image-2',
     size: '1024x1024',
     quality: 'auto',
-    extraPrompt: '',
+    extraPrompt: 'safe for work, no nsfw, fully clothed, appropriate clothing, natural pose',
     negativePrompt: '',
     autoInjectPrompt: true,
     systemPrompt: "[AI图文出图规则]\n1.强制指令:你的每一条回复都必须包含且仅包含一个[image]标签,不得跳过、省略或遗忘,即使用户消息很短或无实质内容也要生成。\n2.标签格式:[image]提示词[/image],标签必须放在整条回复的最末尾,在所有文字之后。提示词主体用中文描述,末尾固定追加英文画质词masterpiece, best quality, highly detailed, 8k。\n3.提示词七层结构(按顺序):①主体(年龄+性别+身份)②外貌(发色发型、瞳色、肤色、身材、服装材质与款式)③表情(与当前情绪相符的微表情)④动作(具体肢体动作和姿态)⑤场景(地点、时间、天气、光线来源)⑥氛围(情绪基调如温馨/紧张/暧昧/忧郁)⑦画质(masterpiece, best quality, highly detailed, 8k)。\n4.角色优先:默认生成女性角色,除非用户明确要求男性。\n5.剧情绑定:图片必须反映当前剧情——对话中提到的动作立即生成,场景切换时生成新环境,情绪转折时用画面强化氛围,禁止生成与剧情无关的摆拍图。\n6.描述要求:用具体词替代模糊词(如'如瀑布般的银白长发'而非'银发'),服装写明材质款式(如'黑色蕾丝吊带裙'而非'裙子'),光线写明来源色温(如'窗边洒落的午后暖阳')。\n7.内容限制:提示词中禁止出现任何NSFW元素,包括但不限于裸露、性暗示、过于暴露的服装、色情姿势、敏感部位特写等词汇。角色着装须得体,姿态须自然。若剧情涉及亲密场景,改为以氛围暗示为主。\n8.示例:[image]18岁的少女,齐肩的淡粉色短发,琥珀色瞳孔,白皙皮肤,穿着白色棉质睡裙,嘴角带着淡淡的忧伤浅笑,赤脚蜷缩在窗台上,窗外是雨夜的城市霓虹,忧郁而宁静的氛围,窗外冷蓝光与室内暖黄光交织,masterpiece, best quality, highly detailed, 8k[/image]",
