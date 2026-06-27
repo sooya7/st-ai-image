@@ -449,6 +449,9 @@
     font-size: 13px;
     box-sizing: border-box;
     transition: border-color 0.2s, box-shadow 0.2s;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .st_ai_input::placeholder {
