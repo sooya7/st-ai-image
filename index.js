@@ -1997,7 +1997,7 @@ function initAutoDetect() {
     inlineObserver?.disconnect?.();
     inlineObserver = null;
 
-    registerSystemExtensionPrompt();
+    await registerSystemExtensionPrompt();
     scanInlineMessagesBurst();
     [0, 1000, 3000].forEach((delay) => setTimeout(() => migrateInlineMarkersInChat(), delay));
     [1500, 4000].forEach((delay) => setTimeout(() => syncMarkdownImagesInChatToHistory(), delay));
