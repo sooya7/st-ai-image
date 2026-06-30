@@ -1108,7 +1108,7 @@ function extractImageFromChatResponse(data) {
  * @param {AbortSignal} [options.signal] - 取消信号
  * @returns {Promise<string>} 图片 URL（data: 或 https:）
  */
-async function callImageAPI(prompt, { signal } = {}) {
+async function callImageAPI(prompt, { signal, onProgress } = {}) {
     const s = await getSettings();
     let base = s.apiBase.replace(/\/+$/, '');
     if (base.endsWith('/v1')) base = base.slice(0, -3);
@@ -1127,20 +1127,19 @@ async function callImageAPI(prompt, { signal } = {}) {
 
     const imageGenBody = { model: s.model, prompt: fullPrompt, n: 1, size: s.size };
     if (s.quality && s.quality !== 'auto') imageGenBody.quality = s.quality;
-    // negative_prompt 非 OpenAI 标准字段，仅部分中转支持；
-    // 为兼容 gpt-image-2 等严格端点，images/generations 不发送此字段，
-    // 若需要负面提示词，请在 prompt 中用文字描述（如 "without ..."）
-    // if (negative) imageGenBody.negative_prompt = negative;
 
     const chatBase = { model: s.model, stream: false, messages: [{ role: 'user', content: fullPrompt }] };
     const chatModalitiesBody = { ...chatBase, modalities: ['text', 'image'] };
 
-    // Gemini 优先 chat/completions（带 modalities）；gpt-image 等优先 images/generations
     const order = isGemini
         ? ['chat_modalities', 'images_generations', 'chat_plain']
         : ['images_generations', 'chat_modalities', 'chat_plain'];
 
-    for (const attempt of order) {
+    for (let i = 0; i < order.length; i++) {
+        const attempt = order[i];
+        if (typeof onProgress === 'function') {
+            onProgress({ attempt: i + 1, total: order.length, method: attempt, errors: errors.length });
+        }
         try {
             let resp;
             if (attempt === 'images_generations') {
@@ -1257,7 +1256,17 @@ async function generateImage(prompt) {
 
     try {
         const cleanPrompt = prompt.trim();
-        const url = await callImageAPI(cleanPrompt, { signal: _currentGenAbortController.signal });
+        const url = await callImageAPI(cleanPrompt, {
+            signal: _currentGenAbortController.signal,
+            onProgress: ({ attempt, total, errors: errCount }) => {
+                const $loading = $result.find('.st_ai_loading');
+                if ($loading.length) {
+                    let text = `正在生成 (${attempt}/${total})`;
+                    if (errCount > 0) text += ` · ${errCount} 个接口失败`;
+                    $loading.html(`<div class="st_ai_spinner"></div> ${text}`);
+                }
+            },
+        });
         const imageUrl = ensureSafeImageUrl(url);
 
         // 不自动保存：仅展示，由用户点击"存入图库"决定是否保存
@@ -2469,7 +2478,13 @@ jQuery(async () => {
             inlineTasks.set(taskKey, { prompt, messageId, originalTag, startedAt: Date.now() });
 
             try {
-                const url = await callImageAPI(prompt);
+                const url = await callImageAPI(prompt, {
+                    onProgress: ({ attempt, total, errors: errCount }) => {
+                        let text = `生成中 (${attempt}/${total})`;
+                        if (errCount > 0) text += ` · ${errCount}失败`;
+                        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${text}`;
+                    },
+                });
                 const imageUrl = ensureSafeImageUrl(url);
 
                 // 不自动保存：仅临时展示，由用户点击"存入图库"决定是否保存与持久化
