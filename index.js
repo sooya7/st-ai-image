@@ -2109,24 +2109,11 @@ jQuery(async () => {
         // Wand 按钮 → 魔法棒菜单
         const wandBtn = tempDiv.querySelector('#st_ai_image_wand_button');
         const menu = document.getElementById('extensionsMenu');
-        if (wandBtn) {
-            if (menu) {
-                menu.appendChild(wandBtn);
-                console.log('[st-ai-image] Wand button added to extensionsMenu');
-            } else {
-                // 降级：找不到 extensionsMenu，尝试其他位置
-                const altMenu = document.querySelector('#extensionsMenuButton')?.parentElement;
-                if (altMenu) {
-                    altMenu.appendChild(wandBtn);
-                    console.warn('[st-ai-image] extensionsMenu not found, added to alternative location');
-                } else {
-                    console.error('[st-ai-image] Cannot find extensions menu, wand button not added. Please check SillyTavern version.');
-                    // 最后降级：添加到页面右下角
-                    wandBtn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;background:#2a2a2a;padding:10px;border-radius:8px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.5);';
-                    document.body.appendChild(wandBtn);
-                    console.warn('[st-ai-image] Wand button added to bottom-right corner as fallback');
-                }
-            }
+        if (menu && wandBtn) {
+            menu.appendChild(wandBtn);
+            console.log('[st-ai-image] Wand button added to extensionsMenu');
+        } else {
+            console.error('[st-ai-image] Cannot find extensionsMenu or wand button. Please check SillyTavern version.');
         }
 
         // 用 <dialog> 承载面板（渲染在 top layer，不受任何 CSS transform 影响）
@@ -2530,22 +2517,7 @@ jQuery(async () => {
         // 初始图库
         renderGallery();
 
-        // 全局快捷键：Ctrl+Shift+I 打开面板（备用方式）
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.shiftKey && e.key === 'I') {
-                e.preventDefault();
-                const dialog = document.getElementById('st_ai_dialog');
-                if (dialog) {
-                    if (dialog.open) {
-                        dialog.close();
-                    } else {
-                        dialog.showModal();
-                    }
-                }
-            }
-        });
-
-        console.log('[st-ai-image] loaded successfully (Press Ctrl+Shift+I to open panel)');
+        console.log('[st-ai-image] loaded successfully');
     } catch (e) {
         console.error('[st-ai-image] init failed:', e);
     }
