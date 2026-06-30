@@ -4,6 +4,15 @@
     <span>AI 生图</span>
 </div>
 
+<!-- IndexedDB 降级警告横幅 -->
+<div id="st_ai_fallback_banner" class="st_ai_fallback_banner st_ai_hidden">
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <span>图库存储已降级到 localStorage（容量有限），请检查浏览器设置。</span>
+    <button type="button" id="st_ai_fallback_banner_close" class="st_ai_banner_close" aria-label="关闭">
+        <i class="fa-solid fa-xmark"></i>
+    </button>
+</div>
+
 <!-- 悬浮窗面板 -->
 <div id="st_ai_float_panel" class="st_ai_hidden">
     <div class="st_ai_float_header">
@@ -82,6 +91,10 @@
                     <button type="button" id="st_gpt_fetch_models" class="st_ai_btn" title="获取模型列表" aria-label="获取模型列表"><i class="fa-solid fa-rotate"></i></button>
                 </div>
                 <select id="st_gpt_model_list" class="st_ai_input st_ai_model_list"></select>
+            </div>
+            <div class="st_ai_field">
+                <label for="st_gpt_image_timeout">生图超时时间（秒）</label>
+                <input type="number" id="st_gpt_image_timeout" class="st_ai_input" min="30" max="300" step="10" placeholder="120">
             </div>
             <div class="st_ai_field">
                 <label class="st_ai_checkbox">

@@ -36,6 +36,7 @@ const defaultSettings = {
     extraPrompt: '',
     negativePrompt: '',
     autoInjectPrompt: true,
+    imageTimeout: 120000, // 生图超时时间（毫秒）
     systemPrompt: "[AI图文出图规则]\n1.强制指令:你的每一条回复都必须包含且仅包含一个[image]标签,不得跳过、省略或遗忘,即使用户消息很短或无实质内容也要生成。\n2.标签格式:[image]提示词[/image],标签必须放在整条回复的最末尾,在所有文字之后。提示词主体用中文描述,末尾固定追加英文画质词masterpiece, best quality, highly detailed, 8k。\n3.提示词七层结构(按顺序):①主体(年龄+性别+身份)②外貌(发色发型、瞳色、肤色、身材、服装材质与款式)③表情(与当前情绪相符的微表情)④动作(具体肢体动作和姿态)⑤场景(地点、时间、天气、光线来源)⑥氛围(情绪基调如温馨/紧张/暧昧/忧郁)⑦画质(masterpiece, best quality, highly detailed, 8k)。\n4.角色优先:默认生成女性角色,除非用户明确要求男性。\n5.剧情绑定:图片必须反映当前剧情——对话中提到的动作立即生成,场景切换时生成新环境,情绪转折时用画面强化氛围,禁止生成与剧情无关的摆拍图。\n6.描述要求:用具体词替代模糊词(如'如瀑布般的银白长发'而非'银发'),服装写明材质款式(如'黑色蕾丝吊带裙'而非'裙子'),光线写明来源色温(如'窗边洒落的午后暖阳')。\n7.内容限制:提示词中禁止出现任何NSFW元素,包括但不限于裸露、性暗示、过于暴露的服装、色情姿势、敏感部位特写等词汇。角色着装须得体,姿态须自然。若剧情涉及亲密场景,改为以氛围暗示为主。\n8.示例:[image]18岁的少女,齐肩的淡粉色短发,琥珀色瞳孔,白皙皮肤,穿着白色棉质睡裙,嘴角带着淡淡的忧伤浅笑,赤脚蜷缩在窗台上,窗外是雨夜的城市霓虹,忧郁而宁静的氛围,窗外冷蓝光与室内暖黄光交织,masterpiece, best quality, highly detailed, 8k[/image]",
 };
 
@@ -45,6 +46,20 @@ const markdownGallerySyncTasks = new Map();
 let inlineScanInterval = null;
 let inlineScanIntervalStopAt = 0;
 let currentFloorMessageElement = null;
+
+const TASK_MAX_AGE_MS = 300000; // 5 分钟
+function cleanStaleInlineTasks() {
+    const now = Date.now();
+    for (const [key, task] of inlineTasks.entries()) {
+        if (now - task.startedAt > TASK_MAX_AGE_MS) {
+            console.warn('[st-ai-image] Cleaning stale inline task:', key);
+            inlineTasks.delete(key);
+        }
+    }
+}
+
+// 每分钟清理一次过期任务
+setInterval(cleanStaleInlineTasks, 60000);
 
 
 // localStorage 存储设置（设置很小，不需要 IndexedDB）
@@ -345,6 +360,17 @@ async function addHistoryEntry(entry) {
     });
 }
 
+/**
+ * 保存图片到历史记录
+ * @param {Object} entry - 历史记录条目
+ * @param {string} entry.prompt - 图片提示词
+ * @param {string} entry.imageUrl - 图片 URL（data: 或 https:）
+ * @param {number} [entry.timestamp] - 时间戳（毫秒）
+ * @param {string|number} [entry.id] - 条目 ID
+ * @param {Object} options - 选项
+ * @param {boolean} [options.force=false] - 是否强制保存
+ * @returns {Promise<Object|null>} 保存后的条目（包含 id），如果未强制保存则返回 null
+ */
 async function saveToHistory(entry, { force = false } = {}) {
     if (!force) return null;
     try {
@@ -356,12 +382,22 @@ async function saveToHistory(entry, { force = false } = {}) {
         const fallback = saveFallbackHistoryEntry(entry);
         if (fallback) {
             renderGallery();
+            showFallbackWarning(); // 显示降级警告
         } else {
             // IndexedDB 与 localStorage 均失败：把真实原因弹出来，便于排查（手机端无 console）
             toastr.error(`图库保存失败: ${e?.message || e}`, 'st-ai-image', { timeOut: 8000 });
         }
         return fallback;
     }
+}
+
+function showFallbackWarning() {
+    const $banner = $('#st_ai_fallback_banner');
+    if (!$banner.length) return;
+    $banner.removeClass('st_ai_hidden');
+    $('#st_ai_fallback_banner_close').off('click').on('click', () => {
+        $banner.addClass('st_ai_hidden');
+    });
 }
 
 function parseDataImageUrl(value) {
@@ -950,6 +986,13 @@ function extractImageFromChatResponse(data) {
     return extractImageFromResponse(data);
 }
 
+/**
+ * 调用图片生成 API
+ * @param {string} prompt - 图片描述提示词
+ * @param {Object} options - 选项
+ * @param {AbortSignal} [options.signal] - 取消信号
+ * @returns {Promise<string>} 图片 URL（data: 或 https:）
+ */
 async function callImageAPI(prompt, { signal } = {}) {
     const s = getSettings();
     let base = s.apiBase.replace(/\/+$/, '');
@@ -965,6 +1008,7 @@ async function callImageAPI(prompt, { signal } = {}) {
     const isGemini = /gemini/i.test(model);
     const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.apiKey}` };
     const errors = [];
+    const timeout = Number(s.imageTimeout) || IMAGE_GEN_TIMEOUT_MS;
 
     const imageGenBody = { model: s.model, prompt: fullPrompt, n: 1, size: s.size };
     if (s.quality && s.quality !== 'auto') imageGenBody.quality = s.quality;
@@ -990,7 +1034,7 @@ async function callImageAPI(prompt, { signal } = {}) {
                     headers,
                     body: JSON.stringify(imageGenBody),
                     signal,
-                    timeout: IMAGE_GEN_TIMEOUT_MS,
+                    timeout,
                 });
             } else {
                 const body = attempt === 'chat_modalities' ? chatModalitiesBody : chatBase;
@@ -999,26 +1043,32 @@ async function callImageAPI(prompt, { signal } = {}) {
                     headers,
                     body: JSON.stringify(body),
                     signal,
-                    timeout: IMAGE_GEN_TIMEOUT_MS,
+                    timeout,
                 });
             }
             if (!resp.ok) {
                 const errText = await resp.text().catch(() => '');
-                errors.push(`${attempt}: HTTP ${resp.status} ${summarizeApiError(errText)}`);
+                const statusMsg = resp.status === 404 ? '模型不存在或 API 地址错误' :
+                                  resp.status === 401 || resp.status === 403 ? 'API Key 无效或无权限' :
+                                  resp.status === 429 ? 'API 请求频率超限，请稍后重试' :
+                                  resp.status >= 500 ? 'API 服务器错误' :
+                                  `HTTP ${resp.status}`;
+                errors.push(`${statusMsg}: ${summarizeApiError(errText)}`);
                 continue;
             }
             const data = await resp.json();
             console.log('[st-ai-image] attempt=' + attempt + ' response:', data);
             const img = extractImageFromResponse(data) || extractImageFromChatResponse(data);
             if (img) return ensureSafeImageUrl(img);
-            errors.push(`${attempt}: 响应中未找到图片 (keys: ${Object.keys(data || {}).join(',')})`);
+            errors.push(`API 响应格式错误：未找到图片数据`);
         } catch (e) {
             if (e?.name === 'AbortError') throw e;   // 用户主动取消，直接抛
-            errors.push(`${attempt}: ${e.message}`);
+            const isNetworkError = e.message.includes('Failed to fetch') || e.message.includes('Network') || e.message.includes('请求超时');
+            errors.push(isNetworkError ? '网络连接失败，请检查网络' : e.message);
         }
     }
 
-    throw new Error(`生图失败 — ${errors.join(' | ')}`);
+    throw new Error(`无法生成图片。${errors[0] || '请检查 API 配置和模型名称'}`);
 }
 
 // ===== 获取模型列表 (自动尝试两种格式) =====
@@ -1266,9 +1316,16 @@ async function activateTab(tab) {
 }
 
 // ===== 图库 =====
+let galleryImageObserver = null;
+
 async function renderGallery() {
     const $c = $('#st_gpt_image_history_list');
     if (!$c.length) return;
+    
+    // 显示加载状态
+    const container = $c[0];
+    container.innerHTML = '<div class="st_ai_loading"><div class="st_ai_spinner"></div> 加载图库中...</div>';
+    
     const history = await getHistory().catch((e) => {
         console.error('[st-ai-image] getHistory error:', e);
         return [];
@@ -1281,7 +1338,25 @@ async function renderGallery() {
         return;
     }
 
-    // 逐个创建 DOM 元素并分批设置 img.src，避免一次性拼接超大 base64 HTML 撑爆手机 WebView
+    // 断开旧的 observer
+    if (galleryImageObserver) {
+        galleryImageObserver.disconnect();
+    }
+
+    // 使用 IntersectionObserver 懒加载图片
+    galleryImageObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const img = entry.target;
+                const src = img.dataset.src;
+                if (src && !img.src) {
+                    img.src = src;
+                    galleryImageObserver.unobserve(img);
+                }
+            }
+        });
+    }, { rootMargin: '50px' });
+
     container.innerHTML = '';
     let rendered = 0;
     for (const e of history) {
@@ -1294,7 +1369,7 @@ async function renderGallery() {
         item.dataset.prompt = prompt;
         const img = document.createElement('img');
         img.alt = prompt;
-        img.loading = 'lazy';
+        img.dataset.src = safeUrl; // 懒加载：先存在 data-src
         img.addEventListener('error', () => { img.alt = '加载失败'; });
         const actions = document.createElement('div');
         actions.className = 'st_ai_gallery_actions';
@@ -1304,10 +1379,8 @@ async function renderGallery() {
         item.appendChild(img);
         item.appendChild(actions);
         container.appendChild(item);
+        galleryImageObserver.observe(img);
         rendered++;
-        // 分批设置 src，让主线程有机会呼吸，避免大 base64 一次性阻塞
-        const src = safeUrl;
-        setTimeout(() => { img.src = src; }, 0);
     }
 
     if (rendered === 0) {
@@ -1680,7 +1753,13 @@ function processMessageElement(el, { allowImageRequests = true } = {}) {
         if (el.dataset._stGptText === currentText) return;
         delete el.dataset.stGptProcessed;
     }
+    // 快速检查：避免无标签时进入 TreeWalker
     if (!hasInlineRenderableTag(currentText)) return;
+
+    // 二次检查：用完整正则验证（避免 QUICK_RE 误报）
+    const re = new RegExp(`${IMAGE_REQUEST_SOURCE}|\\[st-ai-image\\b[^\\]]*\\]`, 'gi');
+    if (!re.test(currentText)) return;
+    re.lastIndex = 0;
 
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
     const textNodes = [];
@@ -1689,9 +1768,6 @@ function processMessageElement(el, { allowImageRequests = true } = {}) {
 
     // 拼接所有文本节点内容，用于匹配跨节点的 [image]...[/image] 标签
     const fullText = textNodes.map(n => n.textContent).join('');
-    const re = new RegExp(`${IMAGE_REQUEST_SOURCE}|\\[st-ai-image\\b[^\\]]*\\]`, 'gi');
-    if (!re.test(fullText)) return;
-    re.lastIndex = 0;
 
     const messageId = getMessageIdFromElement(el);
 
@@ -1766,7 +1842,9 @@ function getInlineScanElements() {
     const seen = new Set();
     return roots.filter((el) => {
         if (!el?.textContent || !hasInlineRenderableTag(el.textContent)) return false;
-        if (el.classList?.contains('mes') && el.querySelector('.mes_text')?.textContent && hasInlineRenderableTag(el.querySelector('.mes_text').textContent)) return false;
+        // 缓存 querySelector 结果避免重复查询
+        const mesText = el.classList?.contains('mes') ? el.querySelector('.mes_text') : null;
+        if (mesText?.textContent && hasInlineRenderableTag(mesText.textContent)) return false;
         if (seen.has(el)) return false;
         seen.add(el);
         return true;
@@ -1926,6 +2004,7 @@ jQuery(async () => {
         $('#st_gpt_image_model').val(s.model);
         $('#st_gpt_image_size').val(s.size);
         $('#st_gpt_image_quality').val(s.quality);
+        $('#st_gpt_image_timeout').val((s.imageTimeout || 120000) / 1000); // 转换为秒
         $('#st_gpt_image_enabled').prop('checked', s.enabled);
         $('#st_gpt_image_auto_detect').prop('checked', s.autoDetect);
         $('#st_gpt_image_auto_inject_prompt').prop('checked', s.autoInjectPrompt);
@@ -1933,16 +2012,34 @@ jQuery(async () => {
         $('#st_gpt_image_extra_prompt').val(s.extraPrompt || '');
         $('#st_gpt_image_negative_prompt').val(s.negativePrompt || '');
 
+        let settingsSaveTimer = null;
+        const debouncedSaveSetting = (key, val) => {
+            clearTimeout(settingsSaveTimer);
+            settingsSaveTimer = setTimeout(() => {
+                s[key] = val;
+                saveSettings(s);
+            }, 500); // 500ms 防抖
+        };
+
         const bindSetting = (id, key, type) => {
             $(id).on(type === 'check' ? 'change' : 'input', function () {
-                const val = type === 'check' ? !!$(this).prop('checked') : String($(this).val()).trim();
+                let val = type === 'check' ? !!$(this).prop('checked') : String($(this).val()).trim();
                 // API Base URL 协议校验
                 if (key === 'apiBase' && val && !isValidApiBaseUrl(val)) {
                     toastr.warning('API 地址必须以 http:// 或 https:// 开头');
                     return;
                 }
-                s[key] = val;
-                saveSettings(s);
+                // 超时时间转换为毫秒
+                if (key === 'imageTimeout') {
+                    val = Math.max(30, Math.min(300, Number(val) || 120)) * 1000;
+                }
+                // checkbox 立即保存，text 防抖保存
+                if (type === 'check') {
+                    s[key] = val;
+                    saveSettings(s);
+                } else {
+                    debouncedSaveSetting(key, val);
+                }
             });
         };
         bindSetting('#st_gpt_image_api_base', 'apiBase', 'text');
@@ -1950,6 +2047,7 @@ jQuery(async () => {
         bindSetting('#st_gpt_image_model', 'model', 'text');
         bindSetting('#st_gpt_image_size', 'size', 'text');
         bindSetting('#st_gpt_image_quality', 'quality', 'text');
+        bindSetting('#st_gpt_image_timeout', 'imageTimeout', 'text');
         bindSetting('#st_gpt_image_enabled', 'enabled', 'check');
         bindSetting('#st_gpt_image_auto_detect', 'autoDetect', 'check');
         bindSetting('#st_gpt_image_auto_inject_prompt', 'autoInjectPrompt', 'check');
@@ -2044,9 +2142,10 @@ jQuery(async () => {
             }, { passive: true });
             document.addEventListener('touchmove', (e) => {
                 if (!dragging) return;
+                e.preventDefault(); // 阻止滚动
                 const t = e.touches[0];
                 moveDrag(t.clientX, t.clientY);
-            }, { passive: true });
+            }, { passive: false }); // 必须 false 才能 preventDefault
             document.addEventListener('touchend', endDrag);
         }
 

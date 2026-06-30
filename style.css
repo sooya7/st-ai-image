@@ -1,5 +1,52 @@
 /* ===== AI Image Generator - 悬浮窗 ===== */
 
+/* --- IndexedDB 降级警告横幅 --- */
+.st_ai_fallback_banner {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(239, 68, 68, 0.95);
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 10001;
+    font-size: 13px;
+    max-width: 90vw;
+    animation: st_ai_banner_in 0.3s ease;
+}
+
+.st_ai_fallback_banner.st_ai_hidden {
+    display: none;
+}
+
+.st_ai_fallback_banner i.fa-triangle-exclamation {
+    font-size: 16px;
+}
+
+.st_ai_banner_close {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    padding: 4px;
+    margin-left: auto;
+    transition: color 0.15s;
+}
+
+.st_ai_banner_close:hover {
+    color: #fff;
+}
+
+@keyframes st_ai_banner_in {
+    from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
 /* --- 悬浮窗主体 --- */
 #st_ai_float_panel {
     width: 460px;
@@ -354,6 +401,10 @@
 .st_ai_gallery_item:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.st_ai_gallery_item:active {
+    transform: translateY(-1px);
 }
 
 .st_ai_gallery_item img {
