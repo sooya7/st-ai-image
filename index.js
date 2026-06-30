@@ -20,7 +20,6 @@ const IMAGE_GEN_TIMEOUT_MS = 120000;     // 生图 API 超时时间（毫秒）�
 const INLINE_SCAN_INTERVAL_MS = 3000;     // 内联扫描间隔（毫秒）
 const INLINE_SCAN_DURATION_MS = 30000;   // 内联扫描持续时间（毫秒）
 const SCAN_DEBOUNCE_MS = 150;            // 扫描防抖延迟（毫秒）
-const ERROR_DISPLAY_DURATION_MS = 5000;  // 错误提示显示时长（毫秒）
 const MAX_PROMPT_LENGTH = 1200;          // 楼层提示词最大长度
 const API_ERROR_SUMMARY_LENGTH = 340;    // API 错误摘要最大长度
 const VALID_URL_PROTOCOL_RE = /^https?:\/\//i; // 合法 URL 协议校验
@@ -2506,7 +2505,6 @@ jQuery(async () => {
                 err.className = 'st_gpt_inline_error';
                 err.textContent = e.message || '生成失败';
                 btn.after(err);
-                setTimeout(() => err.remove(), ERROR_DISPLAY_DURATION_MS);
 
                 toastr.error(e.message, '生图失败');
             } finally {
