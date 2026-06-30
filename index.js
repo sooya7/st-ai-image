@@ -1966,6 +1966,7 @@ let inlineScanEventsBound = false;
 // [AI 自动图文出图] 通过 SillyTavern 内置 setExtensionPrompt 后台自动提示 AI 在文中输出 [image] 标签
 // position 枚举: -1=NONE, 0=IN_PROMPT, 1=IN_CHAT, 2=BEFORE_PROMPT
 // role 枚举: 0=SYSTEM, 1=USER, 2=ASSISTANT
+// depth: 数值越大，优先级越高（插入位置越靠前）
 async function registerSystemExtensionPrompt() {
     const ctx = getSillyTavernContext();
     if (!ctx || typeof ctx.setExtensionPrompt !== "function") return;
@@ -1974,10 +1975,11 @@ async function registerSystemExtensionPrompt() {
     const systemInstruction = String(s.systemPrompt || "").trim();
 
     if (s.enabled && s.autoInjectPrompt && systemInstruction) {
-        ctx.setExtensionPrompt("st-ai-image", systemInstruction, 1, 2, false, 0);
-        console.log("[st-ai-image] System extension prompt successfully injected!");
+        // 改为 position=0 (IN_PROMPT) + depth=100，确保注入到提示词开头且优先级最高
+        ctx.setExtensionPrompt("st-ai-image", systemInstruction, 100, 0, false, 0);
+        console.log("[st-ai-image] System extension prompt injected with high priority (depth=100, position=IN_PROMPT)");
     } else {
-        ctx.setExtensionPrompt("st-ai-image", "", 1, 2, false, 0);
+        ctx.setExtensionPrompt("st-ai-image", "", 100, 0, false, 0);
     }
 }
 
