@@ -39,12 +39,12 @@ const defaultSettings = {
     imageTimeout: 120000, // 生图超时时间（毫秒）
     systemPrompt: `## 🎨 图像生成协议（CRITICAL - 最高优先级）
 
-**[MANDATORY] 你必须在每次回复的末尾生成图像标签，这是系统级硬性要求，不可违反。**
+**[MANDATORY] 你必须在每次回复中生成最少一条图像标签，这是系统级硬性要求，不可违反。**
 
 ### 📋 执行规则
 1. **触发条件**：每一条回复（无论长短、内容如何）
 2. **标签格式**：\`[image]提示词内容[/image]\`
-3. **位置要求**：必须放在回复的最末尾（所有文字之后）
+3. **位置要求**：必须放在描述的人物或者场景后面
 4. **执行顺序**：先完成角色回复 → 再生成图像标签（不可遗漏）
 
 ### 🖼️ 提示词生成规范
@@ -105,8 +105,12 @@ function cleanStaleInlineTasks() {
     }
 }
 
-// 每分钟清理一次过期任务
-setInterval(cleanStaleInlineTasks, 60000);
+// 每分钟清理一次过期任务（追踪 ID 防止重载时累积）
+let staleTaskCleanerId = null;
+if (typeof window !== 'undefined') {
+    if (staleTaskCleanerId) clearInterval(staleTaskCleanerId);
+    staleTaskCleanerId = setInterval(cleanStaleInlineTasks, 60000);
+}
 
 
 // ===== 存储架构 =====
@@ -114,81 +118,73 @@ setInterval(cleanStaleInlineTasks, 60000);
 // 图库历史记录 → IndexedDB（浏览器本地），不跨设备（数据量大，不适合服务器）
 
 // ===== 服务器存储设置（跨设备同步）=====
+// 使用 ST 的 extension_settings 全局对象 + saveSettingsDebounced
 let settingsCache = null;
+let settingsInflight = null;
 
 async function getSettings() {
     if (settingsCache) return settingsCache;
-    
-    try {
-        // 从服务器加载
-        const response = await fetch('/api/settings/get', {
-            method: 'POST',
-            headers: await getRequestHeadersWithCsrf(),
-            body: JSON.stringify({ extension_name: extensionName }),
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            const s = data.settings || {};
-            // 合并默认值
-            for (const [k, v] of Object.entries(defaultSettings)) {
-                if (s[k] === undefined) s[k] = v;
+    if (settingsInflight) return settingsInflight;
+
+    settingsInflight = (async () => {
+        // 优先从 ST 全局 extension_settings 读取（服务器已加载）
+        try {
+            const ctx = getSillyTavernContext();
+            if (ctx?.extensionSettings) {
+                const ext = ctx.extensionSettings[extensionName] || {};
+                const s = { ...ext };
+                for (const [k, v] of Object.entries(defaultSettings)) {
+                    if (s[k] === undefined) s[k] = v;
+                }
+                // 首次加载时写回默认值到全局对象
+                ctx.extensionSettings[extensionName] = s;
+                settingsCache = s;
+                return s;
             }
-            settingsCache = s;
-            return s;
+        } catch (e) {
+            console.warn('[st-ai-image] Failed to read from extensionSettings:', e);
         }
-    } catch (e) {
-        console.warn('[st-ai-image] Failed to load settings from server:', e);
-    }
-    
-    // 降级：尝试从 localStorage 读取（用于迁移）
-    try {
-        const raw = localStorage.getItem(`${extensionName}_settings`);
-        if (raw) {
-            const s = JSON.parse(raw);
-            // 合并默认值
-            for (const [k, v] of Object.entries(defaultSettings)) {
-                if (s[k] === undefined) s[k] = v;
+
+        // 降级：尝试从 localStorage 读取（用于旧版迁移）
+        try {
+            const raw = localStorage.getItem(`${extensionName}_settings`);
+            if (raw) {
+                const s = JSON.parse(raw);
+                for (const [k, v] of Object.entries(defaultSettings)) {
+                    if (s[k] === undefined) s[k] = v;
+                }
+                settingsCache = s;
+                // 迁移到服务器
+                saveSettings(s).catch(err => console.warn('[st-ai-image] Auto-migration failed:', err));
+                return s;
             }
-            settingsCache = s;
-            // 自动迁移到服务器
-            saveSettings(s).catch(err => console.warn('[st-ai-image] Auto-migration failed:', err));
-            return s;
+        } catch (e) {
+            console.warn('[st-ai-image] Failed to load from localStorage:', e);
         }
-    } catch (e) {
-        console.warn('[st-ai-image] Failed to load from localStorage:', e);
-    }
-    
-    settingsCache = { ...defaultSettings };
-    return settingsCache;
+
+        settingsCache = { ...defaultSettings };
+        return settingsCache;
+    })();
+    try { return await settingsInflight; } finally { settingsInflight = null; }
 }
 
 async function saveSettings(s) {
     settingsCache = s;
-    
+
     try {
-        const response = await fetch('/api/settings/set', {
-            method: 'POST',
-            headers: await getRequestHeadersWithCsrf(),
-            body: JSON.stringify({ 
-                extension_name: extensionName,
-                settings: s 
-            }),
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+        const ctx = getSillyTavernContext();
+        if (ctx?.extensionSettings) {
+            // 只写入全局对象，不主动触发保存
+            // 避免浏览器内存中缺少其他扩展数据时覆盖服务器设置
+            ctx.extensionSettings[extensionName] = s;
         }
-        
-        // 保存成功后清理旧的 localStorage
-        try {
-            localStorage.removeItem(`${extensionName}_settings`);
-        } catch {}
-        
+
+        // 清理旧的 localStorage 数据
+        try { localStorage.removeItem(`${extensionName}_settings`); } catch {}
+
         return true;
     } catch (e) {
-        console.error('[st-ai-image] Failed to save settings to server:', e);
-        // 降级：写入 localStorage
+        console.error('[st-ai-image] Failed to save settings:', e);
         try {
             localStorage.setItem(`${extensionName}_settings`, JSON.stringify(s));
         } catch (storageErr) {
@@ -1402,14 +1398,6 @@ function showPromptEditor({ prompt, imageUrl, historyId, onSave, onRegen }) {
         }
         closeEditor();
     });
-
-    $('#st_gpt_edit_regen').off('.stAiEdit').on('click.stAiEdit', async () => {
-        const newPrompt = String($ta.val() || '').trim();
-        if (!newPrompt) return toastr.warning('提示词不能为空');
-        closeEditor();
-        if (typeof onRegen === 'function') onRegen(newPrompt);
-        else await generateImage(newPrompt);
-    });
 }
 
 async function refreshGalleryFromChat() {
@@ -1451,7 +1439,6 @@ async function renderGallery() {
     });
     $('#st_gpt_gallery_count').text(`${history.length} 张图片`);
 
-    const container = $c[0];
     if (!history.length) {
         container.innerHTML = '<div class="st_ai_image_empty">暂无生成记录</div>';
         return;
@@ -2022,15 +2009,15 @@ async function registerSystemExtensionPrompt() {
     const systemInstruction = String(s.systemPrompt || "").trim();
 
     if (s.enabled && s.autoInjectPrompt && systemInstruction) {
-        // 改为 position=0 (IN_PROMPT) + depth=100，确保注入到提示词开头且优先级最高
-        ctx.setExtensionPrompt("st-ai-image", systemInstruction, 100, 0, false, 0);
-        console.log("[st-ai-image] System extension prompt injected with high priority (depth=100, position=IN_PROMPT)");
+        // position=0 (IN_PROMPT), depth=100 高优先级
+        ctx.setExtensionPrompt("st-ai-image", systemInstruction, 0, 100, false, 0);
+        console.log("[st-ai-image] System extension prompt injected (position=IN_PROMPT, depth=100)");
     } else {
-        ctx.setExtensionPrompt("st-ai-image", "", 100, 0, false, 0);
+        ctx.setExtensionPrompt("st-ai-image", "", 0, 100, false, 0);
     }
 }
 
-function initAutoDetect() {
+async function initAutoDetect() {
     console.log('[st-ai-image] initAutoDetect called');
 
     // 清理旧的定时器和 observer，防止多次加载时资源泄露
@@ -2097,7 +2084,9 @@ function initAutoDetect() {
 }
 
 // ===== 初始化 =====
-if (typeof window !== 'undefined' && typeof document !== 'undefined' && typeof jQuery === 'function') {
+let _stAiImageInitDone = false;
+if (typeof window !== 'undefined' && typeof document !== 'undefined' && typeof jQuery === 'function' && !_stAiImageInitDone) {
+_stAiImageInitDone = true;
 jQuery(async () => {
     try {
         const s = await getSettings();
@@ -2150,7 +2139,7 @@ jQuery(async () => {
         };
 
         const bindSetting = (id, key, type) => {
-            $(id).on(type === 'check' ? 'change' : 'input', function () {
+            $(id).on(type === 'check' ? 'change' : 'input', async function () {
                 let val = type === 'check' ? !!$(this).prop('checked') : String($(this).val()).trim();
                 // API Base URL 协议校验
                 if (key === 'apiBase' && val && !isValidApiBaseUrl(val)) {
@@ -2380,12 +2369,12 @@ jQuery(async () => {
                     const wrapper = $wrap[0];
                     const markerUrl = getStableInlineImageUrl(serverImageUrl || savedUrl);
                     if (wrapper && markerUrl) {
-                        const messageId = Number(wrapper.dataset.messageId);
+                        const messageId = wrapper.dataset.messageId === '' ? null : Number(wrapper.dataset.messageId);
                         const originalTag = wrapper.dataset.originalTag || '';
                         wrapper.dataset.historyId = String(saved.id);
                         wrapper.dataset.url = markerUrl;
                         wrapper.querySelector('img').src = markerUrl;
-                        const persisted = await persistInlineImageInMessage(Number.isInteger(messageId) ? messageId : null, originalTag, { id: saved.id, imageUrl: markerUrl, prompt });
+                        const persisted = await persistInlineImageInMessage(messageId, originalTag, { id: saved.id, imageUrl: markerUrl, prompt });
                         if (!persisted) toastr.warning('已存入图库，但当前消息未能写回聊天记录');
                     }
                 }
