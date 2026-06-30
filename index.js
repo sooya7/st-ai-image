@@ -62,22 +62,93 @@ function cleanStaleInlineTasks() {
 setInterval(cleanStaleInlineTasks, 60000);
 
 
-// localStorage 存储设置（设置很小，不需要 IndexedDB）
-function getSettings() {
+// ===== 存储架构 =====
+// 设置（API Key、模型等） → 服务器存储（/api/settings），支持跨设备同步
+// 图库历史记录 → IndexedDB（浏览器本地），不跨设备（数据量大，不适合服务器）
+
+// ===== 服务器存储设置（跨设备同步）=====
+let settingsCache = null;
+
+async function getSettings() {
+    if (settingsCache) return settingsCache;
+    
+    try {
+        // 从服务器加载
+        const response = await fetch('/api/settings/get', {
+            method: 'POST',
+            headers: await getRequestHeadersWithCsrf(),
+            body: JSON.stringify({ extension_name: extensionName }),
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            const s = data.settings || {};
+            // 合并默认值
+            for (const [k, v] of Object.entries(defaultSettings)) {
+                if (s[k] === undefined) s[k] = v;
+            }
+            settingsCache = s;
+            return s;
+        }
+    } catch (e) {
+        console.warn('[st-ai-image] Failed to load settings from server:', e);
+    }
+    
+    // 降级：尝试从 localStorage 读取（用于迁移）
     try {
         const raw = localStorage.getItem(`${extensionName}_settings`);
-        const s = raw ? JSON.parse(raw) : {};
-        for (const [k, v] of Object.entries(defaultSettings)) {
-            if (s[k] === undefined) s[k] = v;
+        if (raw) {
+            const s = JSON.parse(raw);
+            // 合并默认值
+            for (const [k, v] of Object.entries(defaultSettings)) {
+                if (s[k] === undefined) s[k] = v;
+            }
+            settingsCache = s;
+            // 自动迁移到服务器
+            saveSettings(s).catch(err => console.warn('[st-ai-image] Auto-migration failed:', err));
+            return s;
         }
-        return s;
-    } catch {
-        return { ...defaultSettings };
+    } catch (e) {
+        console.warn('[st-ai-image] Failed to load from localStorage:', e);
     }
+    
+    settingsCache = { ...defaultSettings };
+    return settingsCache;
 }
 
-function saveSettings(s) {
-    localStorage.setItem(`${extensionName}_settings`, JSON.stringify(s));
+async function saveSettings(s) {
+    settingsCache = s;
+    
+    try {
+        const response = await fetch('/api/settings/set', {
+            method: 'POST',
+            headers: await getRequestHeadersWithCsrf(),
+            body: JSON.stringify({ 
+                extension_name: extensionName,
+                settings: s 
+            }),
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        // 保存成功后清理旧的 localStorage
+        try {
+            localStorage.removeItem(`${extensionName}_settings`);
+        } catch {}
+        
+        return true;
+    } catch (e) {
+        console.error('[st-ai-image] Failed to save settings to server:', e);
+        // 降级：写入 localStorage
+        try {
+            localStorage.setItem(`${extensionName}_settings`, JSON.stringify(s));
+        } catch (storageErr) {
+            console.error('[st-ai-image] Failed to save to localStorage:', storageErr);
+        }
+        return false;
+    }
 }
 
 // ===== 带超时的 fetch 工具 =====
@@ -197,23 +268,23 @@ function refreshPresetList() {
     if (current && presets[current]) $sel.val(current);
 }
 
-function loadPreset(name) {
+async function loadPreset(name) {
     const presets = getPresets();
     if (!presets[name]) return;
     const p = presets[name];
-    const s = getSettings();
+    const s = await getSettings();
     s.apiBase = p.apiBase || '';
     s.apiKey = p.apiKey || '';
     s.model = p.model || '';
-    saveSettings(s);
+    await saveSettings(s);
     $('#st_gpt_image_api_base').val(s.apiBase);
     $('#st_gpt_image_api_key').val(s.apiKey);
     $('#st_gpt_image_model').val(s.model);
     toastr.success(`已加载预设: ${name}`);
 }
 
-function saveCurrentAsPreset() {
-    const s = getSettings();
+async function saveCurrentAsPreset() {
+    const s = await getSettings();
     if (!s.apiBase && !s.apiKey) return toastr.warning('请先填写 API 配置');
     const name = prompt('输入预设名称:', s.model || '新预设');
     if (!name?.trim()) return;
@@ -830,10 +901,11 @@ function hasInlineRenderableTag(text) {
     return hasImageTag(text) || hasInlineImageMarker(text);
 }
 
-function shouldProcessInlineText(text, settings = getSettings()) {
+async function shouldProcessInlineText(text, settings = null) {
     const value = String(text ?? '');
     if (hasInlineImageMarker(value)) return true;
-    if (!settings.enabled || !settings.autoDetect) return false;
+    const s = settings || await getSettings();
+    if (!s.enabled || !s.autoDetect) return false;
     return hasImageTag(value);
 }
 
@@ -994,7 +1066,7 @@ function extractImageFromChatResponse(data) {
  * @returns {Promise<string>} 图片 URL（data: 或 https:）
  */
 async function callImageAPI(prompt, { signal } = {}) {
-    const s = getSettings();
+    const s = await getSettings();
     let base = s.apiBase.replace(/\/+$/, '');
     if (base.endsWith('/v1')) base = base.slice(0, -3);
 
@@ -1073,7 +1145,7 @@ async function callImageAPI(prompt, { signal } = {}) {
 
 // ===== 获取模型列表 (自动尝试两种格式) =====
 async function fetchModels() {
-    const s = getSettings();
+    const s = await getSettings();
     if (!s.apiKey) return toastr.error('请先填写 API Key');
     if (!s.apiBase) return toastr.error('请先填写 API Base URL');
 
@@ -1128,7 +1200,7 @@ let _currentGenAbortController = null;
 
 async function generateImage(prompt) {
     if (!prompt?.trim()) return toastr.warning('请输入图片描述');
-    const s = getSettings();
+    const s = await getSettings();
     if (!s.apiKey) return toastr.error('请先在设置中填写 API Key');
 
     // 取消上一次进行中的请求
@@ -1625,7 +1697,7 @@ async function saveInlinePromptInMessage(triggerEl, newPrompt) {
 
 // 编辑内联图提示词 → 替换正文中的 marker 为新 [image]tag[/image] → 重新生成 → 写回 marker
 async function regenerateInlineImageInMessage(triggerEl, newPrompt) {
-    const s = getSettings();
+    const s = await getSettings();
     if (!s.apiKey) return toastr.error('请先在设置中填写 API Key');
     const ctx = getSillyTavernContext();
     if (!ctx) return toastr.error('无法获取 SillyTavern 上下文');
@@ -1851,13 +1923,15 @@ function getInlineScanElements() {
     });
 }
 
-function scanInlineMessages() {
-    const s = getSettings();
+async function scanInlineMessages() {
+    const s = await getSettings();
     const allowImageRequests = !!s.enabled;
     const els = getInlineScanElements();
-    els.forEach(el => {
-        if (shouldProcessInlineText(el.textContent, s)) processMessageElement(el, { allowImageRequests });
-    });
+    for (const el of els) {
+        if (await shouldProcessInlineText(el.textContent, s)) {
+            processMessageElement(el, { allowImageRequests });
+        }
+    }
 }
 
 let scanTimer = null;
@@ -1892,11 +1966,11 @@ let inlineScanEventsBound = false;
 // [AI 自动图文出图] 通过 SillyTavern 内置 setExtensionPrompt 后台自动提示 AI 在文中输出 [image] 标签
 // position 枚举: -1=NONE, 0=IN_PROMPT, 1=IN_CHAT, 2=BEFORE_PROMPT
 // role 枚举: 0=SYSTEM, 1=USER, 2=ASSISTANT
-function registerSystemExtensionPrompt() {
+async function registerSystemExtensionPrompt() {
     const ctx = getSillyTavernContext();
     if (!ctx || typeof ctx.setExtensionPrompt !== "function") return;
 
-    const s = getSettings();
+    const s = await getSettings();
     const systemInstruction = String(s.systemPrompt || "").trim();
 
     if (s.enabled && s.autoInjectPrompt && systemInstruction) {
@@ -1977,7 +2051,7 @@ function initAutoDetect() {
 if (typeof window !== 'undefined' && typeof document !== 'undefined' && typeof jQuery === 'function') {
 jQuery(async () => {
     try {
-        const s = getSettings();
+        const s = await getSettings();
 
         const html = await $.get(`${extensionFolder}/settings.html`);
         const tempDiv = document.createElement('div');
@@ -2036,7 +2110,7 @@ jQuery(async () => {
                 // checkbox 立即保存，text 防抖保存
                 if (type === 'check') {
                     s[key] = val;
-                    saveSettings(s);
+                    await saveSettings(s);
                 } else {
                     debouncedSaveSetting(key, val);
                 }
@@ -2054,9 +2128,9 @@ jQuery(async () => {
         bindSetting('#st_gpt_image_system_prompt_text', 'systemPrompt', 'text');
         bindSetting('#st_gpt_image_extra_prompt', 'extraPrompt', 'text');
         bindSetting('#st_gpt_image_negative_prompt', 'negativePrompt', 'text');
-        $('#st_gpt_image_auto_inject_prompt').on('change', registerSystemExtensionPrompt);
-        $('#st_gpt_image_enabled').on('change', registerSystemExtensionPrompt);
-        $('#st_gpt_image_system_prompt_text').on('input', registerSystemExtensionPrompt);
+        $('#st_gpt_image_auto_inject_prompt').on('change', () => registerSystemExtensionPrompt());
+        $('#st_gpt_image_enabled').on('change', () => registerSystemExtensionPrompt());
+        $('#st_gpt_image_system_prompt_text').on('input', () => registerSystemExtensionPrompt());
 
         // API 预设
         refreshPresetList();
@@ -2236,7 +2310,7 @@ jQuery(async () => {
 
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-            const s = getSettings();
+            const s = await getSettings();
             const { saved, imageUrl: savedUrl, serverImageUrl } = await saveGeneratedImage({ prompt, imageUrl: safeUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true });
             if (saved?.id) {
                 btn.dataset.historyId = saved.id;
@@ -2286,7 +2360,7 @@ jQuery(async () => {
             // 从 wrapper 读取最新 prompt（编辑保存后会更新），而非按钮自己的 data-prompt
             const prompt = String($(wrapper).data('prompt') || $(btn).data('prompt') || '');
             if (!prompt || !wrapper) return;
-            const s = getSettings();
+            const s = await getSettings();
             if (!s.apiKey) return toastr.error('请先在设置中填写 API Key');
 
             const $icon = $(btn).find('i');
@@ -2335,7 +2409,7 @@ jQuery(async () => {
             const btn = this;
             const prompt = btn.dataset.prompt;
             if (!prompt) return;
-            const s = getSettings();
+            const s = await getSettings();
             if (!s.apiKey) return toastr.error('请先在设置中填写 API Key');
             const messageId = btn.dataset.messageId === '' ? getMessageIdFromElement(btn) : Number(btn.dataset.messageId);
             const originalTag = btn.dataset.originalTag || `[image]${prompt}[/image]`;
