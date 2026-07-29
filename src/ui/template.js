@@ -133,7 +133,13 @@ export const PANEL_HTML = `
     </div>
 </div>`;
 
-export const PREVIEW_HTML = '<div id="st_gpt_image_preview" class="st_ai_image_preview"></div>';
+/**
+ * 面板与预览都用 <dialog>：showModal 会渲染到 top layer，
+ * 不受宿主任何 transform/z-index/overflow 影响，移动端也能稳定铺满屏幕。
+ */
+export const DIALOG_HTML = '<dialog id="st_ai_dialog"></dialog>';
+
+export const PREVIEW_HTML = '<dialog id="st_gpt_image_preview" class="st_ai_image_preview"></dialog>';
 
 /** 把模板字符串变成元素。 */
 export function fromHtml(html) {

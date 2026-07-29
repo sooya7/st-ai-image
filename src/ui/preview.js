@@ -17,16 +17,26 @@ function openOverlay(content, { onClose } = {}) {
         overlay.textContent = '';
         document.removeEventListener('keydown', onKeyDown);
         overlay.removeEventListener('click', onBackdrop);
+        overlay.removeEventListener('cancel', onCancel);
+        if (overlay.open) overlay.close();
+        else overlay.removeAttribute('open');
         closeCurrent = null;
         onClose?.();
     };
     const onKeyDown = (e) => { if (e.key === 'Escape') close(); };
     const onBackdrop = (e) => { if (e.target === overlay) close(); };
+    const onCancel = (e) => { e.preventDefault(); close(); };
 
     replaceContent(overlay, content);
     overlay.classList.add('st_gpt_preview_visible');
+    // 预览层也是 dialog：后开的 modal 在 top layer 更上层，才能盖住面板
+    if (typeof overlay.showModal === 'function' && !overlay.open) {
+        try { overlay.showModal(); }
+        catch { overlay.setAttribute('open', ''); }
+    }
     document.addEventListener('keydown', onKeyDown);
     overlay.addEventListener('click', onBackdrop);
+    overlay.addEventListener('cancel', onCancel);
     closeCurrent = close;
     return close;
 }
