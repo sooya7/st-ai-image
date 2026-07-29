@@ -1,6 +1,11 @@
 /* ===== AI Image Generator - 悬浮窗 ===== */
 
 /* --- IndexedDB 降级警告横幅 --- */
+/* 通用隐藏类：模型列表、系统提示词框都靠它显示/隐藏 */
+.st_ai_hidden {
+    display: none !important;
+}
+
 .st_ai_fallback_banner {
     position: fixed;
     top: 20px;
@@ -511,8 +516,8 @@
 }
 
 .st_ai_model_list {
-    display: none;
     margin-top: 6px;
+    width: 100%;
 }
 
 .st_ai_field label {

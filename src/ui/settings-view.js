@@ -60,11 +60,13 @@ function renderPresetOptions(selected = '') {
     select.value = names.includes(selected) ? selected : '';
 }
 
-function renderModelOptions(models) {
+/** 拉到模型后才显示这个下拉框；选中项跟当前配置的模型对齐。 */
+function renderModelOptions(models, selected = '') {
     const select = qs('#st_gpt_model_list');
     if (!select) return;
-    replaceContent(select, el('option', { value: '', text: `— 共 ${models.length} 个模型 —` }),
+    replaceContent(select, el('option', { value: '', text: `— 选择模型（共 ${models.length} 个）—` }),
         ...models.map((m) => el('option', { value: m.id, text: m.name || m.id })));
+    select.value = models.some((m) => m.id === selected) ? selected : '';
     select.classList.toggle('st_ai_hidden', models.length === 0);
 }
 
@@ -151,8 +153,8 @@ export async function bindSettingsForm(onChange) {
         setBusy(fetchBtn, true);
         try {
             const models = await fetchModelList();
-            renderModelOptions(models);
-            notify.success(models.length ? `拉到 ${models.length} 个模型` : '接口返回空列表');
+            renderModelOptions(models, (await getSettings()).model);
+            notify.success(models.length ? `拉到 ${models.length} 个模型，在下方列表里选` : '接口返回空列表');
         } catch (e) {
             renderModelOptions([]);
             notify.error(`获取模型失败: ${errMsg(e)}`);
