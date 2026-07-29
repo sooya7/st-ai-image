@@ -72,23 +72,21 @@
 /* --- 移动端 --- */
 @media (max-width: 600px) {
     #st_ai_dialog {
-        width: 100vw;
         max-width: 100vw;
-        height: 100vh;
-        height: 100dvh;
+        max-height: 100vh;
         max-height: 100dvh;
-        margin: 0;
     }
 
     #st_ai_float_panel {
-        width: 100vw;
-        max-width: 100vw;
-        height: 100vh;
-        height: 100dvh;
-        max-height: 100dvh;
-        border: none;
-        border-radius: 0;
-        padding-bottom: env(safe-area-inset-bottom, 0px);
+        /* 不铺满：四周留出边距，能看到底下的聊天页 */
+        width: calc(100vw - 24px);
+        max-width: calc(100vw - 24px);
+        /* 固定成视口的 70%：切 tab 时高度不跳，四周始终留边 */
+        height: 70vh;
+        height: 70dvh;
+        max-height: calc(100vh - 88px);
+        max-height: calc(100dvh - 88px - env(safe-area-inset-bottom, 0px));
+        border-radius: 14px;
     }
 
     #st_ai_float_panel.st_ai_hidden {
