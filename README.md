@@ -55,18 +55,45 @@ AI 回复 `[image]少女坐在窗边[/image]` → 自动替换为「生成图片
 
 ## 文件结构
 
+v2 把原来 2500 行的单文件 `index.js` 拆成了分层模块：入口只负责挂 UI、绑事件、起扫描器。
+
 ```
 st-ai-image/
-├── index.js           # 主逻辑
-├── style.css          # UI 样式
-├── settings.html      # 设置面板 HTML
-├── manifest.json      # 插件清单
-├── image_gen_prompt.txt       # AI 出图提示词模板
-├── worldinfo_image_logic.json # World Info 出图规则
+├── index.js                # 入口：挂载 + 事件委托
+├── style.css               # UI 样式
+├── manifest.json           # 插件清单
+├── package.json            # 只用于跑测试（node --test tests/）
+├── src/
+│   ├── core/               # 纯函数层：常量、正则、文本处理、网络、事件总线、通知
+│   │   ├── constants.js  default-prompt.js  text.js
+│   │   └── net.js  bus.js  notify.js
+│   ├── st/                 # 与 SillyTavern 宿主的唯一接触面
+│   │   ├── context.js      # getContext/消息读写/事件订阅/CSRF
+│   │   └── chat-dom.js     # 楼层定位、当前楼层提示词
+│   ├── api/images.js       # 生图 API 客户端（多端点降级 + 响应格式兼容）
+│   ├── gallery/            # 图库：IndexedDB（含 localStorage 降级）与聊天记录同步
+│   │   ├── db.js  sync.js
+│   ├── inline/             # 正文内联：扫描、渲染、写回聊天记录、任务去重
+│   │   ├── scanner.js  render.js  message.js  tasks.js
+│   ├── ui/                 # 面板、图库视图、预览、按钮组、模板、DOM 工具
+│   │   ├── panel.js  settings-view.js  gallery-view.js  preview.js
+│   │   └── image-actions.js  tabs.js  template.js  dom.js
+│   ├── generate.js         # 面板里的生图流程
+│   └── settings.js         # 设置存储（extensionSettings + 旧数据迁移）
+├── tests/                  # 纯函数单测：node --test tests/
+│   ├── text.test.mjs  api.test.mjs
+├── image_gen_prompt.txt           # AI 出图提示词模板
+├── worldinfo_image_logic.json     # World Info 出图规则
 ├── worldinfo_female_priority.json # 女性优先 World Info
-├── tests/
-│   └── helpers.test.js
 └── docs/
+```
+
+设置面板 HTML 从 `settings.html` 内联进了 `src/ui/template.js`：少一次网络请求，也不会因为扩展目录名不同而 404。
+
+## 开发
+
+```bash
+node --test tests/     # 纯函数单测（文本处理 / API 响应解析 / 图库合并）
 ```
 
 ## License

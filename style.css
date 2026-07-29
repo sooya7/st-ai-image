@@ -871,3 +871,28 @@
     font-size: 12px;
     line-height: 1.6;
 }
+
+/* --- 兜底启动按钮：找不到 #extensionsMenu 时用它进面板 --- */
+.st_ai_floating_launcher {
+    position: fixed;
+    right: 16px;
+    bottom: 96px;
+    z-index: 9998;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 1px solid rgba(99, 102, 241, 0.4);
+    background: rgba(30, 30, 40, 0.9);
+    color: #c4b5fd;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.st_ai_floating_launcher:hover {
+    background: rgba(99, 102, 241, 0.3);
+}
+
+/* 生成中的内联按钮：沿用 .st_gpt_inline_gen 的样式，只压一点透明度 */
+.st_gpt_inline_gen_pending {
+    opacity: 0.75;
+}

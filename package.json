@@ -1,0 +1,10 @@
+{
+    "name": "st-ai-image",
+    "version": "2.0.0",
+    "private": true,
+    "type": "module",
+    "description": "SillyTavern 扩展：中转 API 生图 + 图库 + 楼层内联出图",
+    "scripts": {
+        "test": "node --test tests/"
+    }
+}

@@ -1,19 +1,25 @@
-<!-- Wand 菜单按钮 -->
+/**
+ * 静态 HTML 模板。v1 用 $.get 拉 settings.html，v2 直接内联：
+ * 少一次网络请求，也不会因为扩展目录名不同而 404。
+ * 这些字符串全是常量，没有任何插值。
+ */
+
+export const WAND_BUTTON_HTML = `
 <div id="st_ai_image_wand_button" class="list-group-item flex-container flexGap5">
     <div class="fa-solid fa-image extensionsMenuExtensionButton"></div>
     <span>AI 生图</span>
-</div>
+</div>`;
 
-<!-- IndexedDB 降级警告横幅 -->
+export const FALLBACK_BANNER_HTML = `
 <div id="st_ai_fallback_banner" class="st_ai_fallback_banner st_ai_hidden">
     <i class="fa-solid fa-triangle-exclamation"></i>
     <span>图库存储已降级到 localStorage（容量有限），请检查浏览器设置。</span>
     <button type="button" id="st_ai_fallback_banner_close" class="st_ai_banner_close" aria-label="关闭">
         <i class="fa-solid fa-xmark"></i>
     </button>
-</div>
+</div>`;
 
-<!-- 悬浮窗面板 -->
+export const PANEL_HTML = `
 <div id="st_ai_float_panel" class="st_ai_hidden">
     <div class="st_ai_float_header">
         <div class="st_ai_float_tabs">
@@ -24,7 +30,6 @@
         <button type="button" id="st_ai_float_close" class="st_ai_btn" title="关闭面板" aria-label="关闭面板"><i class="fa-solid fa-xmark"></i></button>
     </div>
 
-    <!-- 生图 Tab -->
     <div class="st_ai_tab_content active" data-tab="generate">
         <div class="st_ai_gen_area">
             <textarea id="st_gpt_image_prompt" class="st_ai_textarea" rows="3" placeholder="输入图片描述..."></textarea>
@@ -54,7 +59,6 @@
         </div>
     </div>
 
-    <!-- 图库 Tab -->
     <div class="st_ai_tab_content" data-tab="gallery">
         <div class="st_ai_gallery_header">
             <span id="st_gpt_gallery_count" class="st_ai_gallery_count">0 张图片</span>
@@ -65,7 +69,6 @@
         </div>
     </div>
 
-    <!-- 设置 Tab -->
     <div class="st_ai_tab_content" data-tab="settings">
         <div class="st_ai_settings_form">
             <div class="st_ai_field">
@@ -77,15 +80,15 @@
                 </div>
             </div>
             <div class="st_ai_field">
-                <label>中转 API 地址</label>
+                <label for="st_gpt_image_api_base">中转 API 地址</label>
                 <input type="text" id="st_gpt_image_api_base" class="st_ai_input" placeholder="https://your-proxy.com/v1">
             </div>
             <div class="st_ai_field">
-                <label>API Key</label>
+                <label for="st_gpt_image_api_key">API Key</label>
                 <input type="password" id="st_gpt_image_api_key" class="st_ai_input" placeholder="sk-...">
             </div>
             <div class="st_ai_field">
-                <label>模型</label>
+                <label for="st_gpt_image_model">模型</label>
                 <div class="st_ai_inline_row">
                     <input type="text" id="st_gpt_image_model" class="st_ai_input st_ai_flex_fill" placeholder="gpt-image-2">
                     <button type="button" id="st_gpt_fetch_models" class="st_ai_btn" title="获取模型列表" aria-label="获取模型列表"><i class="fa-solid fa-rotate"></i></button>
@@ -128,7 +131,13 @@
             </div>
         </div>
     </div>
-</div>
+</div>`;
 
-<!-- 图片预览覆盖层 -->
-<div id="st_gpt_image_preview" class="st_ai_image_preview"></div>
+export const PREVIEW_HTML = '<div id="st_gpt_image_preview" class="st_ai_image_preview"></div>';
+
+/** 把模板字符串变成元素。 */
+export function fromHtml(html) {
+    const holder = document.createElement('div');
+    holder.innerHTML = String(html).trim();
+    return holder.firstElementChild;
+}
