@@ -54,11 +54,12 @@
 
 /* --- 悬浮窗主体 --- */
 #st_ai_float_panel {
-    width: 460px;
-    max-width: calc(100vw - 24px);
-    height: 520px;
-    max-height: 80vh;
-    max-height: 80dvh;
+    /* 尺寸用 min() 直接夹住，不靠媒体查询：
+       任何屏幕都至少留出左右 24px、上下 80px，永远看得见底下的聊天页。
+       （之前靠 max-width:100vw-24px + 媒体查询，屏幕一旦落在断点外就退回接近满屏） */
+    width: min(460px, 100vw - 48px);
+    height: min(520px, 100vh - 160px);
+    height: min(520px, 100dvh - 160px);
     background: rgba(15, 15, 25, 0.92);
     backdrop-filter: blur(20px) saturate(1.5);
     -webkit-backdrop-filter: blur(20px) saturate(1.5);
@@ -70,32 +71,12 @@
     overflow: hidden;
 }
 
-#st_ai_float_panel.st_ai_hidden {
-    display: none;
-}
-
-/* --- 移动端 --- */
+/* --- 移动端：尺寸已由上面的 min() 夹好，这里只补手机特有的两件事 --- */
 @media (max-width: 600px) {
-    #st_ai_dialog {
-        max-width: 100vw;
-        max-height: 100vh;
-        max-height: 100dvh;
-    }
-
     #st_ai_float_panel {
-        /* 不铺满：四周留出边距，能看到底下的聊天页 */
-        width: calc(100vw - 24px);
-        max-width: calc(100vw - 24px);
-        /* 固定成视口的 70%：切 tab 时高度不跳，四周始终留边 */
-        height: 70vh;
-        height: 70dvh;
-        max-height: calc(100vh - 88px);
-        max-height: calc(100dvh - 88px - env(safe-area-inset-bottom, 0px));
+        /* 底部小白条／手势条要额外让出空间 */
+        height: min(520px, 100dvh - 160px - env(safe-area-inset-bottom, 0px));
         border-radius: 14px;
-    }
-
-    #st_ai_float_panel.st_ai_hidden {
-        display: none;
     }
 }
 
