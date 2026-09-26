@@ -51,8 +51,9 @@ export async function requestData(url, options = {}, binary = false, limit = 32 
     if (signal?.aborted) abort();
     else signal?.addEventListener('abort', abort, { once: true });
     try {
-        // 同源（酒馆代理）要带会话 Cookie，第三方一律不带。
-        const response = await fetch(url, { redirect: 'error', ...rest, signal: controller.signal, credentials: sameOrigin(url) ? 'same-origin' : 'omit' });
+        // 同源（酒馆代理）要带会话 Cookie，第三方一律不带。任务轮询必须跳过 HTTP 缓存：
+        // 有的网关给状态接口发 Cache-Control: public, max-age=14400，浏览器会把首个「queued」响应缓存几小时。
+        const response = await fetch(url, { redirect: 'error', cache: 'no-store', ...rest, signal: controller.signal, credentials: sameOrigin(url) ? 'same-origin' : 'omit' });
         if (!response.ok) {
             await response.body?.cancel();
             throw new Error(`HTTP ${response.status}：${({401:'密钥无效',403:'无权限',404:'端点或模型不存在',429:'请求受限，请稍后再试'})[response.status] || '服务请求失败'}（未自动重试）`);

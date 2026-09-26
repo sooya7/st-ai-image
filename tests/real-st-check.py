@@ -119,15 +119,17 @@ def main():
         ctx = lambda js: page.evaluate(f'(async () => {{ const c = SillyTavern.getContext(); {js} }})()')
 
         def dismiss_popups():
+            # 首次运行的 onboarding 必须真正完成：它是 doOnboarding 的 await 点，不点确定
+            # settingsReady 永远是 false，之后所有设置都不会落盘。填个名字再敲确定。
             for _ in range(5):
-                ok = page.locator('dialog[open] .popup-button-ok:visible')
-                if not ok.count():
+                if not page.locator('dialog[open]').count():
                     break
-                try:
-                    ok.first.click(timeout=3000)
-                except Exception:
-                    break
-                page.wait_for_timeout(500)
+                page.evaluate("""document.querySelectorAll('dialog[open] .onboarding input').forEach((i) => {
+                    if (!i.value) { i.value = 'tester'; i.dispatchEvent(new Event('input', { bubbles: true })); }
+                });""")
+                page.wait_for_timeout(300)
+                page.evaluate("document.querySelectorAll('dialog[open] .popup-button-ok').forEach((b) => b.click())")
+                page.wait_for_timeout(700)
 
         def boot():
             page.goto(args.st)
@@ -180,9 +182,11 @@ def main():
 
         # Settings through the real panel.
         open_tab('speech')
+        page.locator('#st_ai_speech_provider').select_option('openai')
         page.locator('#st_ai_speech_base').fill(mock_base)
         page.locator('#st_ai_speech_key').fill('real-st-voice-key')
         open_tab('video')
+        page.locator('#st_ai_video_provider').select_option('runway')
         page.locator('#st_ai_video_base').fill(mock_base)
         page.locator('#st_ai_video_key').fill('real-st-video-key')
         page.locator('#st_ai_video_proxy').check()

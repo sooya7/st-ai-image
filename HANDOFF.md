@@ -2,7 +2,7 @@
 
 更新时间：2026-09-26（Asia/Shanghai）。接手前请重新检查 Git 与远端。
 
-**当前状态：2.2.0，图片 / 配音 / 视频都嵌在聊天正文里生成，面板里的语音、视频页只做设置。62 项单元测试、15 组模拟宿主浏览器测试、8 项真实 SillyTavern 1.18.0 验收全部通过。分支已推送（未建 PR），还没有调用真实厂商服务。** 使用说明与验证结果见 [docs/MEDIA.md](docs/MEDIA.md)。
+**当前状态：2.2.0，图片 / 配音 / 视频都嵌在聊天正文里生成，面板里的语音、视频页只做设置。63 项单元测试、15 组模拟宿主浏览器测试、8 项真实 SillyTavern 1.18.0 验收全部通过，SOOYA 三个真实渠道各完成一次端到端生成：mikoto 生图（直连）、Fish 配音（经酒馆代理）、Agnes 视频（直连，含断线续查）。已合入 `master`（未建 PR，直接本地合并推送）。** 使用说明与验证结果见 [docs/MEDIA.md](docs/MEDIA.md)，真实渠道证据在 `docs/verification/real-vendor-*.json`。
 
 ## 1. 项目入口与用户要求
 
@@ -43,6 +43,7 @@
 - **原有问题**：`saveSettings` 从不调用 `saveSettingsDebounced`，设置只在酒馆因别的原因保存时才顺带落盘。
 - **原有问题**：图库文件夹按角色名分类失效（ST 的 `characterId` 是字符串）。
 - Runway 进度是 0–1，原来显示成「0.4%」。
+- Agnes 网关给任务状态接口返回 `Cache-Control: public, max-age=14400`，浏览器会把首个「queued」响应缓存 4 小时，轮询原地踏步直到超时（真实任务其实 3.8 分钟已完成）。统一给所有媒体请求加 `cache: 'no-store'`，修复后续查原任务 4.7 秒就拿回结果。
 
 ## 5. 已知边界
 
@@ -51,18 +52,24 @@
 - 停止等待不会取消服务端任务；失败不自动重试；重新生成会留下旧文件。
 - 所有设置（含密钥）存在酒馆 `settings.json`，与原图片 API Key 相同。
 - 原图片扫描器的事件扫描和 30 秒轮询兜底依旧存在，没有做整体性能量化。
-- 没有真实厂商验证（无密钥），没有 Safari/iOS 验证。
+- 没有 Safari/iOS 验证。Agnes 只测了 720P/5 秒/flash 模型这一路（SOOYA 在用配置）。
 
 ## 6. 验证方法
 
 ```powershell
 Set-Location 'C:\Users\iulze\Documents\Codex\2026-09-26\new-chat-2\outputs\st-ai-image'
-npm test                                                    # 62 项
+npm test                                                    # 63 项
 python tests/inline-media-ui.py --output ./test-output      # 模拟宿主 15 组（需要 Playwright；ffmpeg 可选）
 python tests/real-st-check.py --st http://127.0.0.1:8123 --data <临时数据目录> --output ./test-output
+# 真实渠道（各调一次付费接口，脚本在工作区 work/ 下，不在仓库）：
+python ..\..\work\real-vendor-check.py  --st http://127.0.0.1:8123 --data <临时数据目录> --output <结果目录>
+python ..\..\work\real-vendor-resume.py --st http://127.0.0.1:8123 --data <临时数据目录> --output <结果目录>  # 复用已完成的任务做续查，不再计费
 ```
 
 `real-st-check.py` 需要先用独立数据目录启动一个酒馆实例，启动命令见脚本开头。**不要指向 `D:\SillyTavern\SillyTavern\data`。**
+两个真实渠道脚本运行时从 kaze1 `/opt/sooya/shared/config/models.json` 读密钥，密钥只在内存和临时数据目录（用完即删）。视频用 Edge 跑（Playwright 自带 Chromium 没有 H.264）。
+
+**测试驱动酒馆的注意点（都踩过）**：全新数据目录的首轮 onboarding 必须填名字、真正点确定完成——它是 `doOnboarding` 的 await 点，跳过后 ST 的 `settingsReady` 一直是 false，界面上的一切设置都不会落盘（控制台刷 `Settings not ready`）；脚本会用过的数据目录再跑，扩展设置里残留的服务商选择会影响断言，`real-st-check.py` 已显式选 provider。
 
 证据：`docs/verification/inline-media-result.json`、`real-st-result.json` 和截图。
 
@@ -73,15 +80,18 @@ python tests/real-st-check.py --st http://127.0.0.1:8123 --data <临时数据目
 - `index.js` 等少数文件是 CRLF，其余是 LF；用字符串替换改文件时注意换行符。
 - 不要在文档、Git、测试夹具里写真实密钥。
 
-## 7.5 SOOYA 渠道适配（2026-09-27）
+## 7.5 SOOYA 渠道适配（2026-09-27，已真实验证）
 
 - 用户要求用 SOOYA（kaze1）在用的渠道做真实测试：图片 mikoto OpenAI Images（gpt-image-2.5-flare）、语音 Fish Audio（s2.1-pro-free）、视频 Agnes（/videos 协议 agnes 方言）。配置在 kaze1 `/opt/sooya/shared/config/models.json`，密钥明文在该文件里。
 - 已照 SOOYA 源码新增 Fish Audio、Agnes 两个服务；`/videos` 改为 JSON；视频下载允许跳转；未知任务状态继续轮询。
 - CORS 实测：Fish 不允许浏览器直连（需酒馆代理），Agnes、mikoto 允许。
-- 真实生成还没跑成：脚本 `work/real-vendor-check.py`（在工作区 work/ 下，不在仓库）运行时从 kaze1 读密钥，用独立 dataRoot 酒馆 + Edge（Playwright 自带 Chromium 没有 H.264）。上一会话中断，没有产出结果，也没有生成任何文件。
+- **真实端到端结果（真实酒馆 + Edge，证据 `docs/verification/real-vendor-*.json`）**：
+  - Fish 配音经酒馆代理：38 KB mp3，可解码 2.38 秒，生成 5.0 秒；标签写回正确。
+  - mikoto 生图直连：1254×1254 png，23.7 秒；「存入图库」落 `user/images/Seraphina/`。
+  - Agnes 视频直连：首次暴露 §4 的缓存假死（轮询原地踏步 15 分钟到超时，真实任务其实 227 秒已完成）；加 `cache: 'no-store'` 后复用原任务「继续查询」4.7 秒完成：3 MB mp4（1280×720，5.2 秒）落 `user/files`、可解码、任务记录清理、聊天文件无密钥。
+- `work/real-vendor-resume.py` 续查复测复用已完成的任务，不重新计费；以后验视频链路优先用它（改脚本里的任务来源即可）。
 
 ## 8. 下一步
 
-1. 跑 `work/real-vendor-check.py` 完成 Fish / mikoto / Agnes 真实生成（各一次）。
-2. 用户确认后建 PR 合入 `master`（发布前先问用户）。
-3. 按用户需要再考虑：每条消息的朗读按钮、旧文件清理、视频服务端取消接口。
+1. 已合入 `master`（2026-09-27，直接本地合并推送，没有走 PR）。`feat/media-generation` 分支保留。
+2. 按用户需要再考虑：每条消息的朗读按钮、旧文件清理、视频服务端取消接口。

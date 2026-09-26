@@ -190,6 +190,21 @@ test('真实 HTTP：无 Content-Type 的视频按文件头识别，无法识别�
     await assert.rejects(downloadVideo({ url: `${base}/html` }), /可识别/);
 });
 
+test('轮询请求跳过 HTTP 缓存（有网关给状态接口发 Cache-Control: public, max-age=14400，浏览器会把首个 queued 响应缓存几小时）', async (t) => {
+    const caches = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+        caches.push(init?.cache);
+        if (String(url).endsWith('/content')) return new Response(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1]), { status: 200, headers: { 'Content-Type': 'video/webm' } });
+        return new Response(JSON.stringify({ status: 'completed' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    t.after(() => { globalThis.fetch = original; });
+    const { requestData } = await import('../src/media/client.js');
+    await requestData('https://example.test/v1/videos/task_1');
+    await downloadVideo({ url: 'https://example.test/v1/videos/task_1/content' });
+    assert.deepEqual(caches, ['no-store', 'no-store']);
+});
+
 test('/videos 兼容服务可经代理提交', async () => {
     const urls = [];
     await generateMedia('video', { ...cfg, provider: 'openai', model: 'sora-2', proxy: true }, 'cat', {
