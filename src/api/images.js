@@ -97,6 +97,17 @@ export async function callImageAPI(prompt, { signal, onProgress } = {}) {
     const fullPrompt = extra ? `${extra}, ${prompt}` : prompt;
     const negative = String(s.negativePrompt || '').trim();
 
+    if (s.imageProvider && s.imageProvider !== 'auto') {
+        const { generateMedia } = await import('../media/client.js');
+        const result = await generateMedia('image', {
+            provider: s.imageProvider, base: s.apiBase, key: s.apiKey, model: s.model,
+            size: s.size, extra: s.imageParams || '{}', timeout: s.imageTimeout,
+        }, negative ? `${fullPrompt}\n\n避免出现：${negative}` : fullPrompt, {
+            signal, onProgress: () => onProgress?.({ attempt: 1, total: 1, method: s.imageProvider, errors: 0 }),
+        });
+        return result.url;
+    }
+
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${s.apiKey}` };
     const timeout = Number(s.imageTimeout) || LIMITS.imageGenTimeoutMs;
 
@@ -124,17 +135,19 @@ export async function callImageAPI(prompt, { signal, onProgress } = {}) {
 
             if (!resp.ok) {
                 const text = await resp.text().catch(() => '');
-                errors.push(`${statusMessage(resp.status)}: ${summarizeApiError(text)}`);
-                continue;
+                const message = `${statusMessage(resp.status)}: ${summarizeApiError(text)}`;
+                // Only an explicitly unsupported endpoint may fall back. Unknown execution state
+                // (timeout, network error, 5xx or a successful but unrecognized response) must not resubmit.
+                if ([404, 405, 501].includes(resp.status)) { errors.push(message); continue; }
+                throw new Error(message);
             }
             const data = await resp.json();
             const img = extractImage(data);
             if (img) return ensureSafeImageUrl(img);
-            log.warn(`${method} 响应里没找到图片:`, data);
-            errors.push('API 响应格式错误：未找到图片数据');
+            throw new Error('API 返回成功但未找到图片；请检查服务端记录，未自动重复提交');
         } catch (e) {
             if (e?.name === 'AbortError') throw e; // 用户主动取消
-            errors.push(isNetworkError(e) ? '网络连接失败，请检查网络' : String(e?.message || e));
+            throw new Error(isNetworkError(e) ? '网络请求失败，执行状态未知；请检查服务端记录，未自动重复提交' : String(e?.message || e));
         }
     }
     throw new Error(`无法生成图片。${errors[0] || '请检查 API 配置和模型名称'}`);
@@ -145,6 +158,14 @@ export async function fetchModelList() {
     const s = await getSettings();
     if (!s.apiKey) throw new Error('请先填写 API Key');
     if (!s.apiBase) throw new Error('请先填写 API Base URL');
+
+    if (['fal', 'replicate'].includes(s.imageProvider)) throw new Error('此服务请从模型页面复制模型路径，不使用 OpenAI 模型列表');
+    if (s.imageProvider === 'gemini') {
+        const { apiRoot } = await import('../media/providers.js');
+        const { requestData } = await import('../media/client.js');
+        const data = await requestData(`${apiRoot(s.apiBase, 'gemini')}/models?pageSize=100`, { headers: { 'x-goog-api-key': s.apiKey } });
+        return (data.models || []).map((model) => ({ id: model.name.replace(/^models\//, ''), name: model.displayName || model.name }));
+    }
 
     const resp = await apiFetch(`${normalizeApiBase(s.apiBase)}/v1/models`, {
         headers: { Authorization: `Bearer ${s.apiKey}` },

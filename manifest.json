@@ -1,11 +1,11 @@
 {
-    "display_name": "AI Image Generator",
+    "display_name": "AI Image, Voice & Video Generator",
     "loading_order": 10,
     "requires": [],
     "optional": [],
     "js": "index.js",
     "css": "style.css",
     "author": "iulze",
-    "version": "2.0.0",
+    "version": "2.2.0",
     "homePage": "https://github.com/sooya7/st-ai-image"
 }

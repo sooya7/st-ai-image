@@ -11,7 +11,9 @@ import { generateFromCurrentFloor, generateImage } from './src/generate.js';
 import { saveGeneratedImage } from './src/gallery/sync.js';
 import { getSettings } from './src/settings.js';
 import { trackFloorClicks } from './src/st/chat-dom.js';
+import { onStEvents } from './src/st/context.js';
 import { migrateInlineMarkersInChat, persistInlineImageInMessage, regenerateInlineImageInMessage, saveInlinePrompt } from './src/inline/message.js';
+import { bindInlineMedia, stopPlaying } from './src/inline/media.js';
 import { renderInlineImageContent } from './src/inline/render.js';
 import { initScanner, registerSystemPrompt, scanBurst } from './src/inline/scanner.js';
 import { endTask, getTaskKey, isPending, startTask, startStaleCleaner } from './src/inline/tasks.js';
@@ -211,6 +213,8 @@ export async function init() {
         bindGeneratePanel();
         bindImageActions();
         bindInlineGenerate();
+        bindInlineMedia();
+        onStEvents(['CHAT_CHANGED'], stopPlaying); // 切聊天时停掉正在播放的配音
         trackFloorClicks();
         startStaleCleaner();
 

@@ -49,6 +49,8 @@ export const DEFAULT_SETTINGS = {
     autoDetect: true,
     apiBase: '',
     apiKey: '',
+    imageProvider: 'auto',
+    imageParams: '',
     model: 'ai-image-2',
     size: '1024x1024',
     quality: 'auto',

@@ -61,8 +61,8 @@ function mountLauncher() {
         type: 'button',
         id: 'st_ai_image_wand_button',
         class: 'st_ai_floating_launcher',
-        title: 'AI 生图',
-        'aria-label': 'AI 生图',
+        title: 'AI 图片·语音·视频',
+        'aria-label': 'AI 图片·语音·视频',
         onclick: () => togglePanel(),
     }, [el('i', { class: 'fa-solid fa-image' })]));
     return false;

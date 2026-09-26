@@ -13,6 +13,8 @@ import { debounce, el, qs, replaceContent, setBusy } from './dom.js';
 
 /** 表单字段 → 设置键。text/textarea 走防抖 input，其余走 change。 */
 const FIELDS = [
+    { id: 'st_gpt_image_provider', key: 'imageProvider', kind: 'select' },
+    { id: 'st_gpt_image_params', key: 'imageParams', kind: 'text' },
     { id: 'st_gpt_image_api_base', key: 'apiBase', kind: 'text' },
     { id: 'st_gpt_image_api_key', key: 'apiKey', kind: 'text' },
     { id: 'st_gpt_image_model', key: 'model', kind: 'text' },
@@ -100,6 +102,10 @@ export async function bindSettingsForm(onChange) {
                     notify.warn('API 地址需要以 http:// 或 https:// 开头');
                     return;
                 }
+                if (field.key === 'imageParams') {
+                    try { const data = JSON.parse(value || '{}'); if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error(); }
+                    catch { notify.warn('额外模型参数必须是 JSON 对象'); return; }
+                }
                 commit(field.key, value);
             }, 400);
             node.addEventListener('input', save);
@@ -121,7 +127,7 @@ export async function bindSettingsForm(onChange) {
         const preset = getPresets()[name];
         if (!preset) return renderPresetOptions();
         const current = await getSettings();
-        await saveSettings({ ...current, apiBase: preset.apiBase, apiKey: preset.apiKey, model: preset.model || current.model });
+        await saveSettings({ ...current, apiBase: preset.apiBase, apiKey: preset.apiKey, model: preset.model || current.model, imageProvider: preset.imageProvider || 'auto', imageParams: preset.imageParams || '' });
         fillForm(await getSettings());
         notify.success(`已应用预设「${name}」`);
         onChange?.('preset');

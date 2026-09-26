@@ -3,6 +3,7 @@
  * 这一层不碰 DOM、不碰存储，是唯一有单元测试的部分。
  */
 import { LIMITS, RE, IMAGE_REQUEST_SOURCE } from './constants.js';
+import { MEDIA_TAG_SOURCE, hasMediaTag } from '../media/tags.js';
 
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
@@ -166,7 +167,7 @@ export function hasImageTag(text) {
 }
 
 export function hasInlineRenderableTag(text) {
-    return hasImageTag(text) || hasInlineImageMarker(text);
+    return hasImageTag(text) || hasInlineImageMarker(text) || hasMediaTag(text);
 }
 
 /**
@@ -176,6 +177,7 @@ export function hasInlineRenderableTag(text) {
 export function shouldProcessInlineText(text, settings) {
     const value = String(text ?? '');
     if (hasInlineImageMarker(value)) return true;
+    if (hasMediaTag(value)) return true; // 已生成的要画播放器；按钮是否出现由扫描器按开关决定
     if (!settings?.enabled || !settings?.autoDetect) return false;
     return hasImageTag(value);
 }
@@ -201,6 +203,7 @@ export function replaceFirstImageRequest(text, originalTag, markerSource) {
 export function stripGeneratedImageArtifacts(text) {
     return String(text ?? '')
         .replace(new RegExp(IMAGE_REQUEST_SOURCE, 'gi'), '$2$4')
+        .replace(new RegExp(MEDIA_TAG_SOURCE, 'gi'), '$3')
         .replace(new RegExp(RE.inlineMarker.source, 'g'), '')
         .replace(new RegExp(RE.markdownImage.source, 'g'), '$1')
         .replace(/\s+/g, ' ')

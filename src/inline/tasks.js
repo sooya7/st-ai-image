@@ -21,6 +21,15 @@ export const isPending = (key) => pending.has(key);
 
 export const pendingCount = () => pending.size;
 
+export const getTask = (key) => pending.get(key) || null;
+
+/** 更新进行中任务的附加信息（如进度文字），任务不存在时什么都不做。 */
+export function updateTask(key, patch) {
+    const task = pending.get(key);
+    if (task) Object.assign(task, patch);
+    return task || null;
+}
+
 export function startTask(key, meta = {}) {
     pending.set(key, { ...meta, startedAt: Date.now() });
     return key;
@@ -34,7 +43,7 @@ export function endTask(key) {
 export function sweepStaleTasks(now = Date.now()) {
     let removed = 0;
     for (const [key, task] of pending) {
-        if (now - task.startedAt > LIMITS.taskMaxAgeMs) {
+        if (now - task.startedAt > (task.maxAgeMs || LIMITS.taskMaxAgeMs)) {
             pending.delete(key);
             removed++;
             log.warn('内联生图任务超时，已从任务表移除:', key);

@@ -9,11 +9,12 @@ export function fetchWithTimeout(url, options = {}) {
     const { timeout = LIMITS.fetchTimeoutMs, signal, ...rest } = options;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('请求超时')), timeout);
+    const abort = () => controller.abort(signal.reason);
     if (signal) {
         if (signal.aborted) controller.abort(signal.reason);
-        else signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+        else signal.addEventListener('abort', abort, { once: true });
     }
-    return fetch(url, { ...rest, signal: controller.signal }).finally(() => clearTimeout(timer));
+    return fetch(url, { ...rest, signal: controller.signal }).finally(() => { clearTimeout(timer); signal?.removeEventListener('abort', abort); });
 }
 
 const parseHeaders = (raw) => {
