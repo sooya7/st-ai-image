@@ -13,9 +13,13 @@ import {
 import { getSettings, peekSettings } from '../settings.js';
 import { getMessageElement, getMessageIdFromElement } from '../st/chat-dom.js';
 import { onStEvents, setExtensionPrompt } from '../st/context.js';
+import { readMediaSettings } from '../media/media-settings.js';
+import { MEDIA_TAG_SOURCE, normalizeMediaText, parseMediaTag } from '../media/tags.js';
+import { createMediaElement } from './media.js';
 import { createInlineGenerateButton, createInlineImageWrapper } from './render.js';
 
-const RENDERABLE_SOURCE = `${IMAGE_REQUEST_SOURCE}|\\[st-ai-image\\b[^\\]]*\\]`;
+const RENDERABLE_SOURCE = `${IMAGE_REQUEST_SOURCE}|\\[st-ai-image\\b[^\\]]*\\]|${MEDIA_TAG_SOURCE}`;
+const MEDIA_SECTION = { audio: 'speech', video: 'video' };
 
 let observer = null;
 let scanTimer = null;
@@ -26,6 +30,7 @@ let eventsBound = false;
 /**
  * 处理一个 .mes_text 元素。
  * @param {boolean} allowImageRequests 关掉扩展时未生成的标签保持原样文本，不给按钮
+ * 语音/视频标签：已生成（带 src）的总是渲染成播放器；未生成的只在对应功能开启时给按钮。
  */
 export function processMessageElement(node, { allowImageRequests = true } = {}) {
     const text = node.textContent;
@@ -55,8 +60,20 @@ export function processMessageElement(node, { allowImageRequests = true } = {}) 
     }
 
     const matches = [];
+    const mediaSeen = new Map(); // 同类型同文字的标签按出现顺序编号，写回时靠它定位原文
+    const settings = peekSettings();
     let m;
     while ((m = re.exec(fullText)) !== null) {
+        const media = parseMediaTag(m[0]);
+        if (media) {
+            const seenKey = `${media.kind}#${normalizeMediaText(media.text)}`;
+            const ordinal = mediaSeen.get(seenKey) || 0;
+            mediaSeen.set(seenKey, ordinal + 1);
+            const allowed = media.src || (allowImageRequests && readMediaSettings(settings, MEDIA_SECTION[media.kind]).enabled);
+            const replacement = allowed ? createMediaElement(m[0], messageId, ordinal) : document.createTextNode(m[0]);
+            matches.push({ start: m.index, end: re.lastIndex, replacement });
+            continue;
+        }
         const prompt = getImageRequestPrompt(m);
         let replacement;
         if (prompt && allowImageRequests) replacement = createInlineGenerateButton(prompt, m[0], messageId);
@@ -148,6 +165,10 @@ export function registerSystemPrompt() {
     const s = peekSettings();
     const instruction = String(s.systemPrompt || '').trim();
     const active = s.enabled && s.autoInjectPrompt && instruction;
+    for (const [section, suffix] of [['speech', 'voice'], ['video', 'video']]) {
+        const media = readMediaSettings(s, section);
+        setExtensionPrompt(`${EXT_ID}-${suffix}`, s.enabled && media.enabled && media.autoInject ? media.prompt.trim() : '');
+    }
     return setExtensionPrompt(EXT_ID, active ? instruction : '');
 }
 

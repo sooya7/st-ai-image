@@ -7,7 +7,7 @@
 export const WAND_BUTTON_HTML = `
 <div id="st_ai_image_wand_button" class="list-group-item flex-container flexGap5">
     <div class="fa-solid fa-image extensionsMenuExtensionButton"></div>
-    <span>AI 生图</span>
+    <span>AI 图片·语音·视频</span>
 </div>`;
 
 export const FALLBACK_BANNER_HTML = `
@@ -24,6 +24,8 @@ export const PANEL_HTML = `
     <div class="st_ai_float_header">
         <div class="st_ai_float_tabs">
             <button type="button" class="st_ai_tab active" data-tab="generate"><i class="fa-solid fa-wand-magic-sparkles"></i> 生图</button>
+            <button type="button" class="st_ai_tab" data-tab="speech"><i class="fa-solid fa-volume-high"></i> 语音</button>
+            <button type="button" class="st_ai_tab" data-tab="video"><i class="fa-solid fa-video"></i> 视频</button>
             <button type="button" class="st_ai_tab" data-tab="gallery"><i class="fa-solid fa-images"></i> 图库</button>
             <button type="button" class="st_ai_tab" data-tab="settings"><i class="fa-solid fa-gear"></i> 设置</button>
         </div>
@@ -59,6 +61,9 @@ export const PANEL_HTML = `
         </div>
     </div>
 
+    <div class="st_ai_tab_content" data-tab="speech" id="st_ai_speech_panel"></div>
+    <div class="st_ai_tab_content" data-tab="video" id="st_ai_video_panel"></div>
+
     <div class="st_ai_tab_content" data-tab="gallery">
         <div class="st_ai_gallery_header">
             <span id="st_gpt_gallery_count" class="st_ai_gallery_count">0 张图片</span>
@@ -82,6 +87,23 @@ export const PANEL_HTML = `
             <div class="st_ai_field">
                 <label for="st_gpt_image_api_base">中转 API 地址</label>
                 <input type="text" id="st_gpt_image_api_base" class="st_ai_input" placeholder="https://your-proxy.com/v1">
+            </div>
+            <div class="st_ai_field">
+                <label for="st_gpt_image_provider">生图接口协议</label>
+                <select id="st_gpt_image_provider" class="st_ai_input">
+                    <option value="auto">旧版兼容（仅端点不支持时降级）</option>
+                    <option value="openai">OpenAI Images</option>
+                    <option value="chat">OpenAI Chat 生图</option>
+                    <option value="gemini">Gemini 原生</option>
+                    <option value="fal">fal 队列</option>
+                    <option value="replicate">Replicate</option>
+                </select>
+                <p class="st_ai_speech_hint">切换协议不会替换地址、密钥或模型，请使用对应服务的配置。fal / Replicate 的模型填写平台路径。</p>
+            </div>
+            <div class="st_ai_field">
+                <label for="st_gpt_image_params">额外模型参数（JSON 对象）</label>
+                <textarea id="st_gpt_image_params" class="st_ai_textarea" rows="2" maxlength="4096" placeholder='例如 {"seed":42}；Gemini 对应 generationConfig'></textarea>
+                <p class="st_ai_speech_hint">仅指定协议时生效。按模型文档填写尺寸等参数，不要填写密钥。</p>
             </div>
             <div class="st_ai_field">
                 <label for="st_gpt_image_api_key">API Key</label>

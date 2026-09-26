@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulated SillyTavern host — inline media</title>
+<link rel="stylesheet" href="../style.css">
+<style>
+body { margin: 16px; background: #151720; color: #eee; font: 15px system-ui; }
+#extensionsMenu { cursor: pointer; padding: 10px; background: #242634; }
+#chat { max-width: 760px; margin: 24px auto; }
+.mes { padding: 8px; border-bottom: 1px solid #262838; }
+q { color: #e0c070; }
+.mes q:before, .mes q:after { content: ''; } /* 与 ST 1.18 style.css 相同 */
+</style>
+<div id="extensionsMenu"></div>
+<div id="chat"></div>
+<script>
+// 聊天与设置存 sessionStorage，模拟 ST 服务器落盘：刷新页面后仍在。
+const STORE = 'fixture-state';
+const initial = {
+    chatId: 'chat-A',
+    settings: {},
+    chat: [
+        { mes: '你好，欢迎来到酒馆。' },
+        { mes: '她轻声说：[voice]"*轻声*晚上好"[/voice] 然后看向窗外。[video]雨夜的城市，镜头缓慢推进[/video]' },
+        { mes: '[语音]FAIL 这句会失败[/语音]' },
+        { mes: '重复两遍：[voice]嗯[/voice] 和 [voice]嗯[/voice]' },
+        { mes: '[视频]SLOW 慢镜头[/视频]' },
+        { mes: '[配音]WAIT 慢慢说[/配音]' },
+        { mes: '[image]a red square[/image]' },
+    ],
+};
+const state = JSON.parse(sessionStorage.getItem(STORE) || 'null') || structuredClone(initial);
+for (let i = 0; i < 300; i++) if (state.chat.length < 307) state.chat.push({ mes: '历史聊天内容。'.repeat(8) });
+const persist = () => sessionStorage.setItem(STORE, JSON.stringify(state));
+window.fixture = { state, saves: { chat: 0, settings: 0 }, prompts: {}, toasts: [], persist };
+
+// 近似 ST 的 markdown：*斜体*、"引号" 会拆成多个文本节点，渲染后文字与原文不同。
+const escape = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const format = (text) => escape(text).replace(/\*([^*]+)\*/g, '<em>$1</em>').replace(/"([^"]*)"/g, '<q>"$1"</q>');
+function renderMessage(id) {
+    let mes = document.querySelector(`.mes[mesid="${id}"]`);
+    if (!mes) {
+        mes = document.createElement('div');
+        mes.className = 'mes'; mes.setAttribute('mesid', String(id));
+        mes.innerHTML = '<div class="mes_text"></div>';
+        document.getElementById('chat').append(mes);
+    }
+    mes.querySelector('.mes_text').innerHTML = format(state.chat[id].mes);
+}
+state.chat.forEach((_, i) => renderMessage(i));
+
+const handlers = new Map();
+const eventSource = { on(name, fn) { const list = handlers.get(name) || []; list.push(fn); handlers.set(name, list); } };
+const event_types = Object.fromEntries(['CHAT_CHANGED', 'MESSAGE_RECEIVED', 'GENERATION_ENDED', 'GENERATION_STARTED'].map((n) => [n, n]));
+const context = {
+    get chat() { return state.chat; },
+    extensionSettings: state.settings,
+    eventSource, event_types,
+    getCurrentChatId: () => state.chatId,
+    getRequestHeaders: () => ({ 'Content-Type': 'application/json', 'X-CSRF-Token': 'fixture-csrf' }),
+    updateMessageBlock: (id) => renderMessage(id),
+    saveChat: async () => { window.fixture.saves.chat++; persist(); },
+    saveSettingsDebounced: () => { window.fixture.saves.settings++; persist(); },
+    setExtensionPrompt: (id, text) => { window.fixture.prompts[id] = text; },
+};
+window.SillyTavern = { getContext: () => context };
+window.toastr = Object.fromEntries(['success', 'info', 'warning', 'error'].map((level) => [level, (message, title) => window.fixture.toasts.push({ level, message, title })]));
+window.fixtureEmit = (name) => { for (const fn of handlers.get(name) || []) fn(); };
+window.fixtureSwitchChat = (id) => { state.chatId = id; window.fixtureEmit('CHAT_CHANGED'); };
+</script>
+<script type="module" src="../index.js"></script>
+</html>

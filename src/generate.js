@@ -23,7 +23,7 @@ export async function generateImage(prompt) {
     const s = await getSettings();
     if (!s.apiKey) { notify.error('请先在设置中填写 API Key'); return null; }
 
-    currentRequest?.abort(); // 新请求顶掉上一个未完成的
+    if (currentRequest) { notify.warn('已有图片任务，请等待完成，避免重复提交'); return null; }
     const controller = new AbortController();
     currentRequest = controller;
 

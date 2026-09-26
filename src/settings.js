@@ -54,8 +54,12 @@ export async function saveSettings(settings) {
     cache = settings;
     try {
         const ctx = getContext();
-        // 只写全局对象，交给 ST 自己落盘：主动触发保存可能用不完整的内存数据覆盖服务器
-        if (ctx?.extensionSettings) ctx.extensionSettings[EXT_ID] = settings;
+        // 写进全局对象后请 ST 防抖落盘；扩展在 ST 设置加载完之后才初始化，不会用空数据覆盖服务器。
+        // 以前只改内存不落盘，要等 ST 因别的操作保存时才顺带写入，刷新前填的密钥可能丢失。
+        if (ctx?.extensionSettings) {
+            ctx.extensionSettings[EXT_ID] = settings;
+            ctx.saveSettingsDebounced?.();
+        }
         try { localStorage.removeItem(LEGACY_SETTINGS_KEY); } catch { /* 忽略 */ }
         return true;
     } catch (e) {
@@ -88,7 +92,7 @@ function writePresets(presets) {
 
 export function upsertPreset(name, preset) {
     const presets = getPresets();
-    presets[name] = { apiBase: preset.apiBase || '', apiKey: preset.apiKey || '', model: preset.model || '' };
+    presets[name] = { apiBase: preset.apiBase || '', apiKey: preset.apiKey || '', model: preset.model || '', imageProvider: preset.imageProvider || 'auto', imageParams: preset.imageParams || '' };
     return writePresets(presets) ? presets : null;
 }
 

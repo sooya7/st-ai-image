@@ -1,100 +1,103 @@
-# AI Image Generator — SillyTavern 扩展
+# AI Image, Voice & Video Generator — SillyTavern 扩展
 
-支持 OpenAI / Gemini 兼容 API 的 AI 图片生成插件，自动识别聊天中的 `[image]` 标签并原位渲染。
+在聊天正文里生成图片、配音和视频的 SillyTavern 扩展。AI 回复中的 `[image]`、`[voice]`、`[video]` 标签会变成按钮，点一下就在原位生成，结果写回聊天记录。
+
+当前本地版本为 **2.2.0**，代码在 `feat/media-generation` 本地分支，尚未推送；从远端默认分支安装仍是原来的生图版本。
 
 ## 功能
 
-- **手动静默生图** — 在悬浮窗输入描述后生成
-- **内联自动生图** — AI 回复中出现 `[image]提示词[/image]` 时自动替换为生成按钮或图片
-- **AI 自动出图** — 通过注入系统提示词让 AI 在每轮回复中自动携带 `[image]` 标签
-- **图库管理** — 生成记录自动保存（IndexedDB），支持浏览、删除、重新生成
-- **提示词编辑** — 已生成的图片可编辑 prompt 并更新到聊天记录
-- **API 预设** — 保存/加载多组 API 配置
-- **模型列表获取** — 从 API 拉取可用模型列表
+- **内联生图** — `[image]提示词[/image]` 替换为生成按钮，点击后原位出图，可存入图库并写回正文
+- **内联配音** — `[voice]台词[/voice]` 台词照常显示，旁边出现「配音」按钮；生成后变成播放键，文件存进酒馆
+- **内联视频** — `[video]画面描述[/video]` 替换为「生成视频」按钮；异步任务显示进度，完成后原位嵌入播放器，刷新页面也能继续查询原任务
+- **AI 自动带标签** — 可分别为图片、配音、视频注入系统提示词，让 AI 在回复里输出标签
+- **手动静默生图** — 在面板「生图」页输入描述生成
+- **图库管理** — 生成记录保存在 IndexedDB，支持浏览、删除、重新生成
+- **多协议** — 图片：OpenAI Images、Chat 生图、Gemini 原生、fal、Replicate、旧版自动兼容；配音：OpenAI 兼容 TTS、ElevenLabs、Azure；视频：Runway、fal、Replicate、/videos 兼容
+- **API 预设 / 模型列表** — 保存多组图片 API 配置，从接口拉取模型
 
 ## 安装
 
 1. 在 SillyTavern 中选择 **Extensions 面板 → Install Extension**
-2. 输入仓库 URL:
+2. 输入仓库 URL：
    ```
    https://github.com/sooya7/st-ai-image
    ```
-3. 或手动克隆到 `plugins/extensions/` 目录
+3. 当前 2.2.0 尚未推送，请使用本地安装包：把压缩包里的 `st-ai-image` 目录放进 `data/<用户>/extensions/`（仅当前用户）或 `public/scripts/extensions/third-party/`（全局），然后刷新酒馆。不要放进服务端的 `plugins/` 目录；已有旧版时先把旧目录移出扩展目录，避免同时加载两份。
 
 ## 使用
 
-1. 点击聊天栏 Wand 按钮打开插件面板
-2. 在 **设置** tab 中填写 API 地址和 Key
-3. 切换到 **生图** tab 输入描述后点生成
-4. AI 回复中含 `[image]文字描述[/image]` 时自动弹出生成按钮
+1. 魔杖菜单 → **AI 图片·语音·视频** 打开面板
+2. **设置** 页填写图片 API；**语音**、**视频** 页分别填写对应服务
+3. AI 回复里出现标签时，点正文里的按钮生成
 
-### 内联生图流程
+### 配音与视频
 
-AI 回复 `[image]少女坐在窗边[/image]` → 自动替换为「生成图片」按钮 → 点击后调用 API 生成 → 图片原位渲染 → 可保存到图库或重新生成
+详见 [聊天内配音与视频](docs/MEDIA.md)。要点：
+
+- 生成结果上传到酒馆的 `user/files`，标签改写为 `[voice src="/user/files/…"]台词[/voice]`，刷新后仍在；
+- Runway、Replicate 不允许浏览器直连，需要在设置里勾选「通过酒馆代理」，并在酒馆 `config.yaml` 设置 `enableCorsProxy: true`；
+- 失败不自动重试，停止等待不代表服务端停止计费。
 
 ### AI 自动出图
 
-开启「AI 自动图文出图」开关后，插件会注入系统提示词，引导 AI 在每轮回复末尾自动附带 `[image]` 标签。
+开启「AI 自动图文出图」后，插件会注入系统提示词，引导 AI 在每轮回复末尾附带 `[image]` 标签。配音、视频的自动标签在各自设置页开启（默认关闭）。
 
 ## 配置
 
 | 字段 | 说明 |
 |------|------|
-| 中转 API 地址 | OpenAI 兼容 API 地址（如 `https://api.openai.com/v1`） |
-| API Key | API 密钥 |
-| 模型 | 模型名称（如 `gpt-image-2`、`gemini-2.0-flash-exp-image-generation`） |
-| 额外提示词 | 追加到每次生图描述末尾 |
-| 负面提示词 | 不希望出现的内容 |
-| 自定义出图提示词 | AI 自动出图时使用的系统提示词 |
+| 中转 API 地址 | 图片 API 地址（如 `https://api.openai.com/v1`） |
+| 生图接口协议 | 旧版兼容（按模型猜端点，仅端点不支持时降级）或指定协议 |
+| API Key | 图片 API 密钥 |
+| 模型 | 如 `gpt-image-2`、`gemini-2.5-flash-image`，fal / Replicate 填模型路径 |
+| 额外模型参数 | 指定协议时生效的 JSON 对象 |
+| 额外提示词 / 负面提示词 | 追加到每次生图描述 |
+| 语音 / 视频 设置页 | 服务、地址、密钥、模型、音色或尺寸时长、酒馆代理、自动标签提示词 |
 
-## 支持模型
-
-- OpenAI `gpt-image-2` 系列
-- Gemini 图像生成模型（`gemini-2.0-flash-exp-image-generation` 等）
-- 任何兼容 OpenAI `/v1/images/generations` 或 `/v1/chat/completions` 格式的 API
+所有设置（含密钥）保存在酒馆的 `settings.json`，与酒馆其它扩展相同。
 
 ## 文件结构
-
-v2 把原来 2500 行的单文件 `index.js` 拆成了分层模块：入口只负责挂 UI、绑事件、起扫描器。
 
 ```
 st-ai-image/
 ├── index.js                # 入口：挂载 + 事件委托
 ├── style.css               # UI 样式
 ├── manifest.json           # 插件清单
-├── package.json            # 只用于跑测试（node --test tests/）
+├── package.json            # 只用于跑测试（npm test）
 ├── src/
 │   ├── core/               # 纯函数层：常量、正则、文本处理、网络、事件总线、通知
-│   │   ├── constants.js  default-prompt.js  text.js
-│   │   └── net.js  bus.js  notify.js
-│   ├── st/                 # 与 SillyTavern 宿主的唯一接触面
+│   ├── st/                 # 与 SillyTavern 宿主的接触面
 │   │   ├── context.js      # getContext/消息读写/事件订阅/CSRF
-│   │   └── chat-dom.js     # 楼层定位、当前楼层提示词
-│   ├── api/images.js       # 生图 API 客户端（多端点降级 + 响应格式兼容）
-│   ├── gallery/            # 图库：IndexedDB（含 localStorage 降级）与聊天记录同步
-│   │   ├── db.js  sync.js
-│   ├── inline/             # 正文内联：扫描、渲染、写回聊天记录、任务去重
-│   │   ├── scanner.js  render.js  message.js  tasks.js
-│   ├── ui/                 # 面板、图库视图、预览、按钮组、模板、DOM 工具
-│   │   ├── panel.js  settings-view.js  gallery-view.js  preview.js
-│   │   └── image-actions.js  tabs.js  template.js  dom.js
+│   │   ├── chat-dom.js     # 楼层定位、当前楼层提示词
+│   │   └── files.js        # 媒体文件上传到 user/files
+│   ├── api/images.js       # 生图 API 客户端（旧版多端点降级 + 指定协议）
+│   ├── media/
+│   │   ├── tags.js         # [voice]/[video] 标签解析、定位、改写（纯函数）
+│   │   ├── media-settings.js  # 语音/视频设置默认值与读取
+│   │   ├── providers.js    # 各服务请求构造（按需加载）
+│   │   └── client.js       # 请求、任务轮询、下载、酒馆代理（按需加载）
+│   ├── inline/             # 正文内联：扫描、图片渲染、配音/视频、写回聊天、任务去重
+│   │   ├── scanner.js  render.js  media.js  message.js  tasks.js
+│   ├── gallery/            # 图库：IndexedDB 与聊天记录同步
+│   ├── ui/                 # 面板、设置页、图库视图、预览、模板、DOM 工具
+│   │   └── media-settings-view.js  # 语音/视频设置页（按需加载）
 │   ├── generate.js         # 面板里的生图流程
-│   └── settings.js         # 设置存储（extensionSettings + 旧数据迁移）
-├── tests/                  # 纯函数单测：node --test tests/
-│   ├── text.test.mjs  api.test.mjs
-├── image_gen_prompt.txt           # AI 出图提示词模板
-├── worldinfo_image_logic.json     # World Info 出图规则
-├── worldinfo_female_priority.json # 女性优先 World Info
+│   └── settings.js         # 设置存储（extensionSettings + saveSettingsDebounced）
+├── tests/                  # Node 单元测试 + Playwright 模拟宿主测试
 └── docs/
 ```
 
-设置面板 HTML 从 `settings.html` 内联进了 `src/ui/template.js`：少一次网络请求，也不会因为扩展目录名不同而 404。
-
 ## 开发
 
-```bash
-node --test tests/     # 纯函数单测（文本处理 / API 响应解析 / 图库合并）
+```powershell
+npm test
+# 需要 Python Playwright 与 Chromium；ffmpeg 可选（用于生成真实 WebM 验证视频播放）
+python tests/inline-media-ui.py --output ./test-output
+# 真实酒馆验收：先用独立数据目录启动一个酒馆实例（见脚本开头说明），绝不要指向日常使用的数据目录
+python tests/real-st-check.py --st http://127.0.0.1:8123 --data <临时数据目录> --output ./test-output
 ```
+
+测试使用假密钥、本地模拟服务和模拟 SillyTavern 宿主，不发起付费生成。验证记录见 [docs/MEDIA.md](docs/MEDIA.md#验证结果)。
 
 ## License
 

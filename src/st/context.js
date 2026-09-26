@@ -11,6 +11,13 @@ export function getChat() {
     return getContext()?.chat || null;
 }
 
+/** 当前聊天的标识：异步结果回来时用它确认没有切到别的聊天。 */
+export function getCurrentChatId() {
+    const ctx = getContext();
+    try { return String(ctx?.getCurrentChatId?.() ?? ctx?.chatId ?? ''); }
+    catch { return ''; }
+}
+
 export function getMessage(messageId) {
     return Number.isInteger(messageId) ? getChat()?.[messageId] || null : null;
 }
@@ -86,6 +93,8 @@ export function invalidateCsrfToken() { csrfToken = null; }
 
 export async function getRequestHeadersWithCsrf() {
     const headers = getRequestHeadersForJson();
+    // ST 的 getRequestHeaders 已带 X-CSRF-Token；再加一个小写键，fetch 会合并成 "t, t"，服务端校验必然失败。
+    if (Object.keys(headers).some((key) => key.toLowerCase() === 'x-csrf-token')) return headers;
     const token = await getCsrfToken();
     if (token) headers['x-csrf-token'] = token;
     return headers;
@@ -94,7 +103,9 @@ export async function getRequestHeadersWithCsrf() {
 /** 上传到酒馆图库时用的文件夹：优先当前角色名。 */
 export function getGalleryFolder() {
     const ctx = getContext();
-    const character = Number.isInteger(ctx?.characterId) ? ctx.characters?.[ctx.characterId] : null;
+    // ST 里 characterId 是字符串（如 "0"），未选角色时为 undefined
+    const id = ctx?.characterId === undefined || ctx?.characterId === null || ctx?.characterId === '' ? NaN : Number(ctx.characterId);
+    const character = Number.isInteger(id) ? ctx.characters?.[id] : null;
     return character?.name || 'AI Image Generator';
 }
 

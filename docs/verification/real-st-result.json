@@ -1,0 +1,15 @@
+{
+  "status": "passed",
+  "checks": [
+    "Real SillyTavern SillyTavern loaded the extension (menu entry present)",
+    "ST markdown split the tag across <q>/<em> nodes; scanner still turned [voice]/[video] into inline buttons (Seraphina)",
+    "Settings written to settings.json on disk via saveSettingsDebounced (speech key, video proxy)",
+    "Voice: browser → TTS, WAV uploaded through real /api/files/upload (CSRF ok), src saved in the .jsonl chat file, played from /user/files",
+    "Video: every Runway request went through real ST /proxy/ (Origin stripped, unlike the direct TTS call) with key + version header; proxied WebM had no Content-Type and was recognized by header bytes; stored and plays inline",
+    "Reload: ST reopened the chat and both players re-rendered; settings came back from the server",
+    "Confirmed old header bug on real ST: duplicate X-CSRF-Token → HTTP 403, single header → 200",
+    "Image \"save to gallery\" now uploads to ST user/images under the character folder (Seraphina/st-ai-image-1790430704369.png)"
+  ],
+  "mock_requests": 6,
+  "extension_errors": []
+}

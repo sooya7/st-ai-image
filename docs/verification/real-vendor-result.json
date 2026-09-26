@@ -1,0 +1,57 @@
+{
+  "results": [
+    {
+      "step": "settings",
+      "ok": true,
+      "warnings": []
+    },
+    {
+      "step": "voice (Fish via ST proxy)",
+      "ok": true,
+      "file": "st-ai-audio-1790458931287-tkqbvp.mp3",
+      "bytes": 38033,
+      "format": "mp3",
+      "decoded": {
+        "duration": 2.377063
+      },
+      "seconds": 5.0
+    },
+    {
+      "step": "image (mikoto OpenAI Images, direct)",
+      "ok": true,
+      "size": [
+        1254,
+        1254
+      ],
+      "saved_to_gallery": [
+        "Seraphina/st-ai-image-1790458956245.png"
+      ],
+      "seconds": 23.7
+    },
+    {
+      "step": "video",
+      "ok": false,
+      "error": "inline error: 任务等待超时；服务端可能仍在运行，请到服务商控制台查看",
+      "toasts": [
+        "任务等待超时；服务端可能仍在运行，请到服务商控制台查看"
+      ],
+      "progress_labels": [
+        "正在提交",
+        "生成中 · queued · 0%"
+      ],
+      "job_record": "{\"video-k8s52m\": {\"provider\": \"agnes\", \"id\": \"task_6O2iSTnCEsmlkedLMi27PpO6KuoWxRMa\", \"links\": {\"status\": \"https://apihub.agnes-ai.com/v1/videos/task_6O2iSTnCEsmlkedLMi27PpO6KuoWxRMa\", \"result\": \"https://apihub.agnes-ai.com/v1/videos/task_6O2iSTnCEsmlkedLMi27PpO6KuoWxRMa/content\"}, \"startedAt\": 1790458962012}}"
+    }
+  ],
+  "written_tags": [
+    [
+      "voice",
+      "st-ai-audio-1790458931287-tkqbvp.mp3"
+    ],
+    [
+      "voice",
+      "st-ai-audio-1790458931287-tkqbvp.mp3"
+    ]
+  ],
+  "page_errors": [],
+  "keys_in_chat_file": false
+}

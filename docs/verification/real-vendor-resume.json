@@ -1,0 +1,53 @@
+{
+  "checks": [
+    {
+      "step": "jobrecord survives reload",
+      "ok": true,
+      "job": "{\"video-k8s52m\":{\"provider\":\"agnes\",\"id\":\"task_6O2iSTnCEsmlkedLMi27PpO6KuoWxRMa\",\"links\":{\"status\":\"https://apihub.agnes-ai.com/v1/videos/task_6O2iSTnCEsmlkedLMi27PpO6KuoWxRMa\",\"result\":\"https://apihub.agnes-ai.com/v1/videos/task_6O2iSTnCEsmlkedLMi27PpO6KuoWxRMa/content\"},\"startedAt\":1790458962012}}"
+    },
+    {
+      "step": "reload shows resume button",
+      "ok": true,
+      "label": "继续查询视频任务"
+    },
+    {
+      "step": "resume completes",
+      "ok": true,
+      "seconds": 4.7,
+      "file": "st-ai-video-1790460034966-6kodl0.mp4",
+      "bytes": 3057566,
+      "format": "mp4",
+      "decoded": {
+        "duration": 5.184,
+        "w": 1280,
+        "h": 720
+      },
+      "progress_labels": [
+        "继续查询原任务",
+        "下载视频…"
+      ]
+    },
+    {
+      "step": "tag rewritten with src",
+      "ok": true,
+      "video_tags": [
+        "st-ai-video-1790460034966-6kodl0.mp4",
+        "st-ai-video-1790460034966-6kodl0.mp4"
+      ]
+    },
+    {
+      "step": "no key in chat file",
+      "ok": true
+    },
+    {
+      "step": "page errors",
+      "ok": true,
+      "errors": []
+    },
+    {
+      "step": "job record cleared",
+      "ok": true,
+      "remaining": "None"
+    }
+  ]
+}
