@@ -21,6 +21,7 @@ const SECTIONS = [
         read: (s) => { const m = readMediaSettings(s, id); return { autoInject: m.autoInject, prompt: m.prompt }; },
         write: (s, patch) => ({ ...s, [id]: { ...readMediaSettings(s, id), ...patch } }),
         fallback: MEDIA_DEFAULTS[id].prompt,
+        hint: id === 'speech' ? '提示词里的 {{音色类型}} 会换成「语音」页音色预设表里已经填了音色的类型名。' : '',
     })),
 ];
 
@@ -53,6 +54,7 @@ function buildSection(section, settings) {
         ]),
         el('label', { class: 'st_ai_checkbox' }, [toggle, el('span', { text: `让 AI 自动使用${section.title}标签（注入系统提示词）` })]),
         el('div', { class: 'st_ai_field st_ai_prompt_textarea_field' }, [text]),
+        section.hint ? el('p', { class: 'st_ai_speech_hint', text: section.hint }) : null,
     ]);
 }
 

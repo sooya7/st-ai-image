@@ -163,8 +163,8 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
     const provider = record?.provider && media.profiles[record.provider] ? record.provider : media.provider;
     const config = mediaRequestConfig(media, provider);
     if (kind === 'audio') {
-        // 标签里的 type 命中预设音色就用它，否则用默认音色
-        config.voice = resolveVoice({ type: info.voiceType, fallback: config.voice, provider, base: config.base }).voice;
+        // 标签里的 type 在当前服务的音色预设表里且配了音色就用它，否则用默认音色
+        config.voice = resolveVoice({ type: info.voiceType, fallback: config.voice, presets: config.presets }).voice;
     }
     const blocked = !settings.enabled || !media.enabled ? `${LABEL[kind]}功能已在设置中关闭`
         : !config.key.trim() ? `请先在 设置 → ${kind === 'audio' ? '语音' : '视频'} 里填写 API Key` : '';

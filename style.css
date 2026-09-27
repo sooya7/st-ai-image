@@ -164,6 +164,13 @@
 .st_ai_speech_hint { color: rgba(255, 255, 255, 0.65); font-size: 12px; margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
 .st_ai_media_warning { color: #fca5a5; }
 
+/* 音色预设表 */
+.st_ai_voice_rows { display: flex; flex-direction: column; gap: 6px; }
+.st_ai_voice_row { flex-wrap: nowrap; }
+.st_ai_voice_row .st_ai_voice_type { flex: 0 0 6.5em; width: 6.5em; min-width: 0; }
+.st_ai_voice_row .st_ai_voice_id { min-width: 0; }
+.st_ai_voice_row .st_ai_btn { flex: 0 0 auto; }
+
 /* 提示词页 */
 .st_ai_prompt_section { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 .st_ai_prompt_section_head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }

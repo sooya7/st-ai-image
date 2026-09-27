@@ -253,7 +253,7 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     # ---------- settings-only speech tab ----------
     open_tab('speech')
     expect(page.locator('#st_ai_speech_base')).to_be_visible()
-    assert page.locator('#st_ai_speech_panel button:not(#st_ai_speech_voice_preview)').count() == 0  # 只有试听，没有生成
+    assert page.locator('#st_ai_speech_panel .st_ai_media_gen, #st_ai_speech_panel button:has-text("生成"), #st_ai_speech_panel button:has-text("配音")').count() == 0  # 只有试听/增删，没有生成
     assert page.locator('#st_ai_speech_panel audio, #st_ai_speech_panel video').count() == 0
     page.locator('#st_ai_speech_base').fill(origin + '/mock/v1')
     page.locator('#st_ai_speech_key').fill('fixture-voice-key')
@@ -295,57 +295,69 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     assert re.fullmatch(r'重复两遍：\[voice\]嗯\[/voice\] 和 \[voice src="/user/files/st-ai-audio-[^"]+"\]嗯\[/voice\]', raw(3)), raw(3)
     checks.append('Two identical tags in one message: only the clicked (second) tag receives the src')
 
-    # ---------- preset voices ----------
-    FISH = {'bodies': []}
+    # ---------- voice presets (editable, any provider) ----------
+    def preset_row(type_name):
+        return page.locator('#st_ai_speech_panel .st_ai_voice_row').filter(has=page.locator(f'.st_ai_voice_type[value="{type_name}"]'))
 
-    def fish_route(route):
-        if route.request.method == 'OPTIONS':
-            return route.fulfill(status=204, headers={'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'POST'})
-        FISH['bodies'].append(json.loads(route.request.post_data))
-        route.fulfill(status=200, body=AUDIO, headers={'Content-Type': 'audio/wav', 'Access-Control-Allow-Origin': '*'})
-
-    page.route('https://api.fish.audio/**', fish_route)
     open_tab('speech')
-    old_base = page.locator('#st_ai_speech_base').input_value()
     old_voice = page.locator('#st_ai_speech_voice').input_value()
-    expect(page.locator('#st_ai_speech_voice_preset')).to_be_hidden()  # 非 Fish 地址：没有预设，只有 ID 输入框
-    expect(page.locator('#st_ai_speech_voice')).to_be_visible()
-    page.locator('#st_ai_speech_base').fill('https://api.fish.audio/compat/v1')
-    expect(page.locator('#st_ai_speech_voice_preset')).to_be_visible()
-    page.locator('#st_ai_speech_voice_preset').select_option(label='温柔女声（温柔、抑扬顿挫）')
-    expect(page.locator('#st_ai_speech_voice')).to_be_hidden()
-    page.locator('#st_ai_speech_voice_preset').scroll_into_view_if_needed()
-    page.screenshot(path=str(output / 'settings-voice-preset.png'))
+    rows = page.locator('#st_ai_speech_panel .st_ai_voice_row')
+    expect(rows).to_have_count(13)  # 非 Fish 服务：类型名预设好，音色空着
+    expect(page.locator('#st_ai_speech_fish_fill')).to_be_hidden()
+    assert rows.nth(0).locator('.st_ai_voice_id').input_value() == ''
+    expect(page.locator('#st_ai_speech_voice')).to_be_visible()  # 默认音色是自定义 ID（alloy）
+    preset_row('御姐').locator('.st_ai_voice_id').fill('voice-yujie')
+    renamed = preset_row('少年')
+    renamed.locator('.st_ai_voice_type').fill('冷酷剑客')
+    renamed.locator('.st_ai_voice_id').fill('voice-jianke')
+    page.locator('#st_ai_speech_voice_preset').select_option('__custom__')
+    page.locator('#st_ai_speech_voice').fill('voice-default')
     page.wait_for_timeout(700)
     saved = page.evaluate("JSON.parse(sessionStorage.getItem('fixture-state')).settings['st-ai-image'].speech.profiles.openai")
-    assert saved['voice'] == 'faccba1a8ac54016bcfc02761285e67f' and saved['base'] == 'https://api.fish.audio/compat/v1', saved
-    page.locator('#st_ai_speech_voice_preview').click()
-    page.wait_for_function("document.querySelector('#st_ai_speech_voice_preview').textContent === '试听'", timeout=10000)
-    assert [b['voice'] for b in FISH['bodies']] == ['faccba1a8ac54016bcfc02761285e67f'], FISH
-    assert page.locator('#st_ai_speech_panel .st_ai_media_warning').inner_text() == ''
+    assert saved['voice'] == 'voice-default', saved
+    assert {'type': '御姐', 'voice': 'voice-yujie'} in saved['presets'] and {'type': '冷酷剑客', 'voice': 'voice-jianke'} in saved['presets'], saved['presets']
+    labels = page.locator('#st_ai_speech_voice_preset option').all_inner_texts()
+    assert labels[1:3] == ['御姐', '冷酷剑客'], labels  # 下拉框只列配了音色的类型
+    page.locator('#st_ai_speech_voice_preset').select_option(label='御姐')
+    expect(page.locator('#st_ai_speech_voice')).to_be_hidden()
     page.locator('#st_ai_speech_voice_preset').select_option('__custom__')
-    expect(page.locator('#st_ai_speech_voice')).to_be_visible()
-    page.locator('#st_ai_speech_voice_preset').select_option(label='温柔女声（温柔、抑扬顿挫）')
+    page.locator('#st_ai_speech_voice').fill('voice-default')
+    before = len(posts('audio/speech'))
+    preset_row('御姐').locator('.st_ai_voice_preview').click()
+    page.wait_for_function("[...document.querySelectorAll('#st_ai_speech_panel .st_ai_voice_preview')].every((b) => b.textContent === '试听')", timeout=10000)
+    assert [json.loads(r['body'])['voice'] for r in posts('audio/speech')[before:]] == ['voice-yujie']
+    assert page.locator('#st_ai_speech_panel .st_ai_media_warning').inner_text() == ''
+    page.locator('#st_ai_speech_voice_preset').scroll_into_view_if_needed()
+    page.screenshot(path=str(output / 'settings-voice-presets.png'))
+    page.wait_for_timeout(600)
     close_panel()
 
     expect(mes(7).locator('.st_ai_media_gen').first).to_have_attribute('title', '林晚 · 御姐：快进来')
-    for i in range(3):
+    before = len(posts('audio/speech'))
+    for i in range(4):
         mes(7).locator('.st_ai_media_gen').first.click()
         expect(mes(7).locator('.st_ai_media_play')).to_have_count(i + 1, timeout=10000)
-    voices = [b['voice'] for b in FISH['bodies'][1:]]
-    # type 命中预设 → 预设；没写 type → 默认音色；不认识的 type → 默认音色
-    assert voices == ['c189c7cff21c400ba67592406202a3a0', 'faccba1a8ac54016bcfc02761285e67f', 'faccba1a8ac54016bcfc02761285e67f'], voices
-    assert re.fullmatch(r'林晚招手：\[voice type="御姐" name="林晚" src="/user/files/st-ai-audio-[^"]+"\]快进来\[/voice\] 店主笑道：\[voice src="/user/files/st-ai-audio-[^"]+"\]欢迎光临\[/voice\] \[voice type="不存在" src="/user/files/st-ai-audio-[^"]+"\]嗯哼\[/voice\]', raw(7)), raw(7)
-    expect(mes(7).locator('.st_ai_voice_text').first).to_have_text('快进来')
+    voices = [json.loads(r['body'])['voice'] for r in posts('audio/speech')[before:]]
+    # 表里有 → 用表里的；没写 type、type 不在表里 → 默认音色；改过名的类型照样生效
+    assert voices == ['voice-yujie', 'voice-default', 'voice-default', 'voice-jianke'], voices
+    assert re.fullmatch(r'林晚招手：\[voice type="御姐" name="林晚" src="/user/files/st-ai-audio-[^"]+"\]快进来\[/voice\] 店主笑道：\[voice src="/user/files/st-ai-audio-[^"]+"\]欢迎光临\[/voice\] \[voice type="不存在" src="/user/files/st-ai-audio-[^"]+"\]嗯哼\[/voice\] \[voice type="冷酷剑客" src="/user/files/st-ai-audio-[^"]+"\]走\[/voice\]', raw(7)), raw(7)
 
+    # Fish 地址：出现「填入 Fish 推荐音色」，只补同名行、保留自己加的类型
     open_tab('speech')
+    old_base = page.locator('#st_ai_speech_base').input_value()
+    page.locator('#st_ai_speech_base').fill('https://api.fish.audio/compat/v1')
+    expect(page.locator('#st_ai_speech_fish_fill')).to_be_visible()
+    assert preset_row('御姐').locator('.st_ai_voice_id').get_attribute('list') == 'st_ai_speech_fish_voices'
+    page.locator('#st_ai_speech_fish_fill').click()
+    expect(preset_row('御姐').locator('.st_ai_voice_id')).to_have_value('c189c7cff21c400ba67592406202a3a0')
+    expect(preset_row('冷酷剑客').locator('.st_ai_voice_id')).to_have_value('voice-jianke')
+    expect(rows).to_have_count(14)  # 少年被改名了，推荐里的少年补在最后
     page.locator('#st_ai_speech_base').fill(old_base)
-    expect(page.locator('#st_ai_speech_voice_preset')).to_be_hidden()
+    page.locator('#st_ai_speech_voice_preset').select_option('__custom__')
     page.locator('#st_ai_speech_voice').fill(old_voice)
     page.wait_for_timeout(700)
     close_panel()
-    page.unroute('https://api.fish.audio/**')
-    checks.append('Preset voices: dropdown only for Fish endpoints, preview plays one sample, [voice type=…] maps to the preset, missing/unknown type falls back to the default; type/name kept on write-back')
+    checks.append('Voice presets: preset type names with editable voices for any provider (rename/fill/preview), default-voice dropdown lists filled types, [voice type] uses the table else the default, Fish endpoint offers one-click recommended voices without overwriting custom rows')
 
     before = len(posts('audio/speech'))
     mes(2).locator('.st_ai_media_gen').click()
@@ -512,6 +524,9 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
         open_tab('video')
         assert page.locator('#st_ai_video_panel').evaluate('(n) => n.scrollWidth <= n.clientWidth + 1')
         page.screenshot(path=str(output / f'mobile-{width}.png'))
+        open_tab('speech')
+        assert page.locator('#st_ai_speech_panel').evaluate('(n) => n.scrollWidth <= n.clientWidth + 1')
+        page.screenshot(path=str(output / f'mobile-{width}-speech.png'))
         open_tab('prompts')
         assert page.locator('#st_ai_prompts_panel').evaluate('(n) => n.scrollWidth <= n.clientWidth + 1')
         bar = page.locator('.st_ai_float_tabs').bounding_box()

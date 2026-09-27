@@ -13,7 +13,7 @@ import {
 import { getSettings, peekSettings } from '../settings.js';
 import { getMessageElement, getMessageIdFromElement } from '../st/chat-dom.js';
 import { onStEvents, setExtensionPrompt } from '../st/context.js';
-import { readMediaSettings } from '../media/media-settings.js';
+import { readMediaSettings, renderVoicePrompt } from '../media/media-settings.js';
 import { MEDIA_TAG_SOURCE, normalizeMediaText, parseMediaTag } from '../media/tags.js';
 import { createMediaElement } from './media.js';
 import { createInlineGenerateButton, createInlineImageWrapper } from './render.js';
@@ -167,7 +167,8 @@ export function registerSystemPrompt() {
     const active = s.enabled && s.autoInjectPrompt && instruction;
     for (const [section, suffix] of [['speech', 'voice'], ['video', 'video']]) {
         const media = readMediaSettings(s, section);
-        setExtensionPrompt(`${EXT_ID}-${suffix}`, s.enabled && media.enabled && media.autoInject ? media.prompt.trim() : '');
+        const text = section === 'speech' ? renderVoicePrompt(media.prompt, media.profiles[media.provider].presets) : media.prompt;
+        setExtensionPrompt(`${EXT_ID}-${suffix}`, s.enabled && media.enabled && media.autoInject ? text.trim() : '');
     }
     return setExtensionPrompt(EXT_ID, active ? instruction : '');
 }
