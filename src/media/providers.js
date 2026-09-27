@@ -5,7 +5,7 @@ export { isLocalBase, needsKey } from './keys.js';
 export const PROVIDERS = {
     image: { openai: 'OpenAI / 兼容生图', chat: 'OpenAI Chat 生图', gemini: 'Gemini 原生', fal: 'fal', replicate: 'Replicate', comfyui: 'ComfyUI（自建）', sdwebui: 'SD WebUI（A1111 / Forge，自建）' },
     audio: { openai: 'OpenAI 兼容 TTS（Fish、各中转站）', elevenlabs: 'ElevenLabs', azure: 'Azure Speech', fish: 'Fish Audio 原生接口（要开酒馆跨域代理）' },
-    video: { openai: '/videos 兼容服务', agnes: 'Agnes AI', fal: 'fal（可灵、万相、Veo 等）', comfyui: 'ComfyUI（自建）', runway: 'Runway（要开酒馆跨域代理）', replicate: 'Replicate' },
+    video: { openai: '/videos 兼容服务（Agnes、各中转站）', agnes: 'Agnes AI', fal: 'fal（可灵、万相、Veo 等）', comfyui: 'ComfyUI（自建）', runway: 'Runway（要开酒馆跨域代理）', replicate: 'Replicate' },
 };
 
 export const DEFAULT_BASES = {
@@ -15,6 +15,9 @@ export const DEFAULT_BASES = {
     runway: 'https://api.dev.runwayml.com/v1', agnes: 'https://apihub.agnes-ai.com/v1',
     fal: 'https://queue.fal.run', replicate: 'https://api.replicate.com/v1',
 };
+
+export const AGNES_BASE = 'https://apihub.agnes-ai.com/v1';
+export const isAgnesBase = (base) => { try { return /(^|\.)agnes-ai\.com$/i.test(new URL(String(base)).hostname); } catch { return false; } };
 
 /** 走 OpenAI /videos 任务协议（查询 /videos/{id}、下载 /videos/{id}/content）的服务。 */
 export const VIDEOS_PROTOCOL = new Set(['openai', 'agnes']);
@@ -109,12 +112,14 @@ export function buildRequest(kind, config, prompt) {
             if (!Number.isFinite(body.duration) || body.duration <= 0) throw new Error('视频时长必须是正数');
         } else {
             // 纯文字生成用 JSON（OpenAI 与各兼容网关都接受；Agnes 只收 JSON，multipart 直接 400），也能走酒馆代理。
+            // Agnes 已并入 /videos 兼容：按地址认出来（旧的 agnes 服务 ID 也还认，续查老任务要用）。
+            const agnes = provider === 'agnes' || isAgnesBase(root);
             url = `${root}/videos`;
-            body = { ...extra, model, prompt, seconds: String(seconds || (provider === 'agnes' ? 5 : 4)) };
+            body = { ...extra, model, prompt, seconds: String(seconds || (agnes ? 5 : 4)) };
             if (size) body.size = size;
-            else if (provider === 'openai') body.size = '1280x720';
+            else if (!agnes) body.size = '1280x720';
             // Agnes 必填 mode：text 模式不能带任何图片字段；尺寸是 720P 这样的档位，不是 WxH。
-            if (provider === 'agnes') body.mode ||= 'text';
+            if (agnes) body.mode ||= 'text';
         }
     } else if (provider === 'gemini') {
         delete headers.Authorization;

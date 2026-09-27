@@ -12,7 +12,7 @@
 - **AI 自动带标签** — 可分别为图片、配音、视频注入系统提示词，让 AI 在回复里输出标签
 - **手动静默生图** — 在面板「图片」页输入描述生成
 - **图库管理** — 生成记录保存在 IndexedDB，支持浏览、删除、重新生成
-- **多协议** — 图片：OpenAI Images、Chat 生图、Gemini 原生、NovelAI（V4.5 / V4 / V3）、fal、Replicate、旧版自动兼容；配音：OpenAI 兼容 TTS（含 Fish 一键填写）、ElevenLabs、Azure；视频：/videos 兼容、Agnes、fal（可灵、万相、Veo 等）、ComfyUI。只能走酒馆代理的（Fish 原生、Runway、Replicate）放在「其他」里，TauriTavern 里不显示
+- **多协议** — 图片：OpenAI Images、Chat 生图、Gemini 原生、NovelAI（V4.5 / V4 / V3）、fal、Replicate、旧版自动兼容；配音：OpenAI 兼容 TTS（含 Fish 一键填写）、ElevenLabs、Azure；视频：/videos 兼容（含 Agnes 一键填写）、fal（可灵、万相、Veo 等）、ComfyUI。只能走酒馆代理的（Fish 原生、Runway、Replicate）放在「其他」里，TauriTavern 里不显示
 - **自建服务** — ComfyUI（生图、视频，工作流占位符与 st-chatu8 兼容）、SD WebUI（A1111 / Forge）；默认经酒馆后端转发，不用开跨域，TauriTavern 也能用；本机/局域网地址 Key 可留空；自带 SDXL 和 Anima 工作流模板
 - **按接口显示设置** — 切到哪个接口只显示它用得上的字段、提示和尺寸；每个接口各记各的地址、Key、模型、额外参数、尺寸（OpenAI / Chat / Gemini / 旧版兼容常是同一个中转站，共用一组）
 - **API 预设 / 模型列表** — 保存多组图片 API 配置，从接口拉取模型

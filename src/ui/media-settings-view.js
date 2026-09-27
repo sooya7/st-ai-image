@@ -49,9 +49,9 @@ const SPEC = {
         hints: {
             runway: 'Runway 不允许浏览器直连（跨域被拒），必须勾选「通过酒馆代理」，TauriTavern 里用不了。',
             replicate: 'Replicate 只允许 localhost 打开的酒馆直连，其他地址要勾选「通过酒馆代理」，TauriTavern 里用不了。模型填 owner/name 或 owner/name:version，时长、比例等写进额外参数。',
-            agnes: 'Agnes AI 允许浏览器直连。尺寸填 720P 这类分辨率档位（不是宽x高），横竖屏可在额外参数写 {"aspect_ratio":"9:16"}。',
+            agnes: 'Agnes 已并入「/videos 兼容服务」。因为那一组已经填了别的服务的 Key，这里先照旧能用；要合并，就改选「/videos 兼容服务」，点「一键填写：Agnes AI」，再填 Key。',
             fal: 'fal 允许浏览器直连，一个 Key 能用可灵、万相、Veo、Seedance 等很多视频模型。模型填平台路径（如 fal-ai/kling-video/v2.1/standard/text-to-video），时长、比例按模型文档写进额外参数。',
-            openai: '/videos 协议的兼容服务（中转站等），JSON 请求。OpenAI 官方不允许浏览器直连，而且 Sora 已计划停用。',
+            openai: '/videos 协议的兼容服务（Agnes、中转站等），JSON 请求。用 Agnes 点上面的「Agnes AI」一键填写；地址是 agnes-ai.com 时自动加 mode: text，尺寸填 720P 这类档位（不是宽x高），横竖屏在额外参数写 {"aspect_ratio":"9:16"}。OpenAI 官方不允许浏览器直连，而且 Sora 已计划停用。',
             comfyui: '自建 ComfyUI，地址默认 http://127.0.0.1:8188，不需要 Key。工作流里要变的值改成占位符：%prompt%、%negative_prompt%、%seed%（随机）、%width% %height%（按尺寸，填 832x480 这种）、%seconds%、%fps%（默认 16）、%frames%（秒数×帧率+1）、%MODEL_NAME%（模型栏）；中文 %提示词% %种子% %视频秒数% 等也认，额外参数里的键也能当占位符。输出节点用 VHS Video Combine 或 SaveVideo。默认经酒馆后端转发，完成前看不到进度。',
         },
     },
@@ -116,20 +116,23 @@ export async function mountMediaSettings(root, section) {
         }
         return field(label, node);
     }).flat();
-    // 一键填写：Fish 的 OpenAI 兼容接口（直连可用，免费模型）
-    const quick = section === 'speech' ? el('div', { class: 'st_ai_field st_ai_inline_row st_ai_quick_fill' }, [
+    // 一键填写：Fish 的 OpenAI 兼容接口（直连可用，免费模型）、Agnes 的 /videos 接口。都只填地址和默认值，Key 自己填
+    const QUICK = {
+        speech: [['fish', 'Fish Audio', (p) => {
+            p.base = 'https://api.fish.audio/compat/v1';
+            if (!p.model || p.model === 'tts-1') p.model = 'fish-audio/s2.1-pro-free';
+        }]],
+        video: [['agnes', 'Agnes AI', (p) => {
+            Object.assign(p, { base: 'https://apihub.agnes-ai.com/v1', model: 'agnes-video-2.5-flash', size: '720P', seconds: '5' });
+        }]],
+    };
+    const quick = QUICK[section] ? el('div', { class: 'st_ai_field st_ai_inline_row st_ai_quick_fill' }, [
         el('span', { class: 'st_ai_speech_hint', text: '一键填写：' }),
-        el('button', {
-            type: 'button', id: id('quick_fish'), class: 'st_ai_btn st_ai_library_btn', text: 'Fish Audio',
-            title: '地址填 Fish 的兼容接口，模型填免费档；Key 还要自己填',
-            onclick: () => {
-                const profile = state.profiles.openai;
-                profile.base = 'https://api.fish.audio/compat/v1';
-                if (!profile.model || profile.model === 'tts-1') profile.model = 'fish-audio/s2.1-pro-free';
-                fill();
-                save();
-            },
-        }),
+        ...QUICK[section].map(([key, text, apply]) => el('button', {
+            type: 'button', id: id(`quick_${key}`), class: 'st_ai_btn st_ai_library_btn', text,
+            title: '只填地址、模型等默认值，Key 还要自己填',
+            onclick: () => { apply(state.profiles.openai); fill(); save(); },
+        })),
     ]) : null;
     const proxy = checkbox('proxy', '通过酒馆代理请求（需在酒馆 config.yaml 设置 enableCorsProxy: true 并重启）');
     // 自建服务不走 CORS 代理，默认经酒馆后端转发；这个开关改成浏览器直连

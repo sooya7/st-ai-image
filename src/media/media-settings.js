@@ -155,12 +155,18 @@ export function readMediaSettings(settings, section) {
                 ?? (isFishEndpoint(id, profiles[id].base) ? fishPresets() : blankPresets());
         }
     }
+    let provider = Object.hasOwn(defaults.profiles, saved.provider) ? saved.provider : defaults.provider;
+    // Agnes 并进了 /videos 兼容：/videos 那组没填过 Key 就把 Agnes 的设置搬过去（Agnes 那组留着，续查老任务要用）
+    if (section === 'video' && provider === 'agnes' && !String(saved.profiles?.openai?.key || '').trim()) {
+        provider = 'openai';
+        profiles.openai = { ...profiles.agnes };
+    }
     return {
         enabled: typeof saved.enabled === 'boolean' ? saved.enabled : defaults.enabled,
         proxy: saved.proxy === true,
         autoInject: saved.autoInject === true,
         prompt: LEGACY_PROMPTS[section].includes(saved.prompt) ? defaults.prompt : str(saved.prompt, defaults.prompt),
-        provider: Object.hasOwn(defaults.profiles, saved.provider) ? saved.provider : defaults.provider,
+        provider,
         ...(section === 'video' ? { timeout: str(saved.timeout, defaults.timeout, 8) } : {}),
         profiles,
     };

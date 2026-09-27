@@ -23,6 +23,23 @@ test('Agnes：JSON、必填 mode=text、尺寸是 720P 档位，任务与下载�
     assert.equal(request.url, 'https://apihub.agnes-ai.com/v1/videos');
     assert.deepEqual(JSON.parse(request.body), { aspect_ratio: '9:16', model: 'agnes-video-2.5-flash', prompt: '雨夜', seconds: '5', size: '720P', mode: 'text' });
     assert.deepEqual(taskLinks({ id: 'task_1' }, request), { status: 'https://apihub.agnes-ai.com/v1/videos/task_1', result: 'https://apihub.agnes-ai.com/v1/videos/task_1/content' });
+    // 并进 /videos 兼容后按地址认：请求体完全一样
+    const merged = buildRequest('video', { provider: 'openai', base: 'https://apihub.agnes-ai.com/v1', key: 'k', model: 'agnes-video-2.5-flash', size: '720P', seconds: '5', extra: '{"aspect_ratio":"9:16"}' }, '雨夜');
+    assert.deepEqual([merged.url, JSON.parse(merged.body)], [request.url, JSON.parse(request.body)]);
+    const other = JSON.parse(buildRequest('video', { provider: 'openai', base: 'https://relay.example/v1', key: 'k', model: 'sora-2', size: '', seconds: '' }, 'x').body);
+    assert.deepEqual([other.mode, other.size, other.seconds], [undefined, '1280x720', '4']);
+    assert.equal(JSON.parse(buildRequest('video', { provider: 'openai', base: 'https://evil-agnes-ai.com.example/v1', key: 'k', model: 'm' }, 'x').body).mode, undefined);
+});
+
+test('Agnes 并入 /videos 兼容：老配置读档时搬过去（Key 跟着走），/videos 那组已有 Key 就不动', () => {
+    const agnes = { base: 'https://apihub.agnes-ai.com/v1', key: 'ag-key', model: 'agnes-video-2.5-flash', size: '720P', seconds: '5', extra: '' };
+    const moved = readMediaSettings({ video: { provider: 'agnes', profiles: { agnes } } }, 'video');
+    assert.equal(moved.provider, 'openai');
+    assert.deepEqual(moved.profiles.openai, agnes);
+    assert.deepEqual(moved.profiles.agnes, agnes); // 续查老任务还用得到
+    const kept = readMediaSettings({ video: { provider: 'agnes', profiles: { agnes, openai: { base: 'https://relay/v1', key: 'relay-key' } } } }, 'video');
+    assert.equal(kept.provider, 'agnes');
+    assert.equal(kept.profiles.openai.key, 'relay-key');
 });
 test('fal 与 Replicate 请求不猜模型参数，禁止任务认证跨域', () => {
     const fal = buildRequest('video', { ...cfg, base: 'https://queue.fal.run', provider: 'fal', model: 'fal-ai/model/text-to-video', extra: '{"duration":5}' }, 'cat');
@@ -134,7 +151,8 @@ test('服务列表：TauriTavern 里不列只能走酒馆代理的服务（当�
     assert.equal(isTauriTavern({ hostname: 'localhost', protocol: 'tauri:' }, {}), true);
     assert.equal(isTauriTavern({ hostname: '127.0.0.1', protocol: 'http:' }, {}), false);
     const values = (list) => list.map((o) => o.value);
-    assert.deepEqual(values(providerOptions('video', PROVIDERS.video, 'agnes', { tauri: true })), ['openai', 'agnes', 'fal', 'comfyui']);
+    assert.deepEqual(values(providerOptions('video', PROVIDERS.video, 'openai', { tauri: true })), ['openai', 'fal', 'comfyui']);
+    assert.match(providerOptions('video', PROVIDERS.video, 'agnes', { tauri: true }).find((o) => o.value === 'agnes').text, /已并入/);
     assert.deepEqual(values(providerOptions('audio', PROVIDERS.audio, 'openai', { tauri: true })), ['openai', 'elevenlabs', 'azure']);
     const kept = providerOptions('video', PROVIDERS.video, 'runway', { tauri: true }).find((o) => o.value === 'runway');
     assert.match(kept.text, /TauriTavern 里用不了/);

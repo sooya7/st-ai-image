@@ -411,6 +411,10 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     # 默认是 /videos 兼容服务；Runway 在浏览器版酒馆里放在「其他」分组
     expect(page.locator('#st_ai_video_provider')).to_have_value('openai')
     expect(page.locator('#st_ai_video_provider optgroup option[value="runway"]')).to_have_count(1)
+    expect(page.locator('#st_ai_video_provider option[value="agnes"]')).to_have_count(0)  # Agnes 并进了 /videos 兼容
+    page.locator('#st_ai_video_quick_agnes').click()
+    expect(page.locator('#st_ai_video_base')).to_have_value('https://apihub.agnes-ai.com/v1')
+    expect(page.locator('#st_ai_video_size')).to_have_value('720P')
     page.locator('#st_ai_video_provider').select_option('runway')
     page.locator('#st_ai_video_base').fill(origin + '/mock/v1')
     page.locator('#st_ai_video_key').fill('fixture-video-key')
