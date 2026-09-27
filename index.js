@@ -6,7 +6,7 @@ import { EVENTS, on } from './src/core/bus.js';
 import { LEGACY_HISTORY_KEY } from './src/core/constants.js';
 import { errMsg, log, notify } from './src/core/notify.js';
 import { getStableInlineImageUrl, sanitizeImageUrl } from './src/core/text.js';
-import { callImageAPI } from './src/api/images.js';
+import { callImageAPI, imageKeyMissing } from './src/api/images.js';
 import { generateFromCurrentFloor, generateImage } from './src/generate.js';
 import { saveGeneratedImage } from './src/gallery/sync.js';
 import { getSettings } from './src/settings.js';
@@ -95,7 +95,7 @@ function bindImageActions() {
         const prompt = wrapper?.dataset.prompt || btn.dataset.prompt || '';
         if (!wrapper || !prompt) return;
         const s = await getSettings();
-        if (!s.apiKey) return notify.error('请先在面板的「图片」页填写 API Key');
+        if (imageKeyMissing(s)) return notify.error('请先在面板的「图片」页填写 API Key');
 
         // 已入库的正文图：重新生成并把新标记写回聊天记录，刷新后仍然在
         if (wrapper.dataset.historyId) {
@@ -140,7 +140,7 @@ function bindInlineGenerate() {
         const prompt = btn.dataset.prompt;
         if (!prompt) return;
         const s = await getSettings();
-        if (!s.apiKey) return notify.error('请先在面板的「图片」页填写 API Key');
+        if (imageKeyMissing(s)) return notify.error('请先在面板的「图片」页填写 API Key');
 
         const messageId = btn.dataset.messageId === '' ? null : Number(btn.dataset.messageId);
         const originalTag = btn.dataset.originalTag || `[image]${prompt}[/image]`;

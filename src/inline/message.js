@@ -9,7 +9,7 @@ import {
     createInlineImageMarker, ensureSafeImageUrl, hasInlineImageMarker,
     replaceFirstImageRequest, replaceInlineImageMarkersWithMarkdown,
 } from '../core/text.js';
-import { callImageAPI } from '../api/images.js';
+import { callImageAPI, imageKeyMissing } from '../api/images.js';
 import { saveToHistory, updateHistoryItemPrompt } from '../gallery/db.js';
 import { syncChatImagesToHistory } from '../gallery/sync.js';
 import { getSettings } from '../settings.js';
@@ -64,7 +64,7 @@ export async function saveInlinePrompt(wrapper, newPrompt) {
  */
 export async function regenerateInlineImageInMessage(wrapper, newPrompt) {
     const s = await getSettings();
-    if (!s.apiKey) { notify.error('请先在面板的「图片」页填写 API Key'); return false; }
+    if (imageKeyMissing(s)) { notify.error('请先在面板的「图片」页填写 API Key'); return false; }
     if (!wrapper) return false;
 
     const messageId = getMessageIdFromElement(wrapper);

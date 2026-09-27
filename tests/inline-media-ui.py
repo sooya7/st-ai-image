@@ -28,6 +28,7 @@ from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[1]
 LOG, UPLOADS, FILES = [], [], {}
+SD_CALLS = []
 STATE = {'polls': {}, 'slow_done': False, 'jobs': 0}
 
 
@@ -111,6 +112,20 @@ class Handler(SimpleHTTPRequestHandler):
             FILES[data['name']] = base64.b64decode(data['data'])
             return self.reply(200, {'path': f"/user/files/{data['name']}"})
         self.record('POST', body)
+        if self.path in ('/api/sd/comfy/generate', '/api/sd/generate'):
+            data = json.loads(body)
+            call = {'path': self.path, 'csrf': self.headers.get('x-csrf-token') == 'fixture-csrf', 'url': data.get('url')}
+            if self.path == '/api/sd/generate':
+                call.update(prompt=data.get('prompt'), auth=data.get('auth'), width=data.get('width'))
+                SD_CALLS.append(call)
+                return self.reply(200, {'images': [PNG_B64]})
+            workflow = json.loads(data['prompt'])['prompt']
+            call['texts'] = [n['inputs'].get('text') for n in workflow.values() if 'text' in n.get('inputs', {})]
+            call['seed'] = next((n['inputs']['seed'] for n in workflow.values() if 'seed' in n.get('inputs', {})), None)
+            SD_CALLS.append(call)
+            if any('Video' in n['class_type'] for n in workflow.values()):
+                return self.reply(200, {'format': 'webm', 'data': base64.b64encode(VIDEO).decode()})
+            return self.reply(200, {'format': 'png', 'data': PNG_B64})
         if self.path == '/mock/v1/audio/speech':
             text = json.loads(body)['input']
             if 'FAIL' in text:
@@ -160,12 +175,12 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 INSTRUMENT = """(() => {
-    const stats = window.mediaStats = { timers: new Set(), audios: [] };
+    const stats = window.mediaStats = { timers: new Set(), audios: [], stacks: new Map() };
     const schedule = window.setTimeout.bind(window), clear = window.clearTimeout.bind(window);
     window.setTimeout = (fn, delay, ...args) => {
         const media = /\\/media\\/|\\/inline\\/media/.test(new Error().stack);
         const id = schedule(() => { stats.timers.delete(id); fn(...args); }, delay);
-        if (media) stats.timers.add(id);
+        if (media) { stats.timers.add(id); stats.stacks.set(id, `${delay}ms ${new Error().stack.split('\\n').slice(2, 5).join(' | ')}`); }
         return id;
     };
     window.clearTimeout = (id) => { stats.timers.delete(id); clear(id); };
@@ -520,6 +535,73 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     close_panel()
     checks.append('Image protocols: OpenAI Images and Gemini native requests; legacy mode does not resubmit on 500 but falls back on 404')
 
+    # ---------- self-hosted: ComfyUI / SD WebUI through the tavern backend ----------
+    comfy_image = json.dumps({
+        '3': {'class_type': 'KSampler', 'inputs': {'seed': '%seed%', 'steps': '%steps%'}},
+        '6': {'class_type': 'CLIPTextEncode', 'inputs': {'text': 'masterpiece, %prompt%'}},
+        '7': {'class_type': 'CLIPTextEncode', 'inputs': {'text': '%负面提示词%'}},
+        '9': {'class_type': 'SaveImage', 'inputs': {'filename_prefix': 'st'}},
+    })
+    open_tab('generate')
+    page.locator('#st_gpt_image_provider').select_option('comfyui')
+    expect(page.locator('#st_gpt_image_api_key')).to_be_hidden()  # 自建服务不要 Key
+    expect(page.locator('#st_gpt_image_comfy_workflow')).to_be_visible()
+    expect(page.locator('#st_gpt_image_sd_auth')).to_be_hidden()
+    expect(page.locator('#st_gpt_image_via_st')).to_be_checked()  # 默认经酒馆后端转发
+    page.locator('#st_gpt_image_comfy_workflow').fill('{"nodes": [], "links": []}')
+    expect(page.locator('#st_gpt_image_comfy_status')).to_contain_text('导出 (API)')
+    page.locator('#st_gpt_image_comfy_workflow').fill(comfy_image)
+    expect(page.locator('#st_gpt_image_comfy_status')).to_contain_text('✓ API 格式，4 个节点')
+    page.locator('#st_gpt_image_api_base').fill('http://127.0.0.1:8188')
+    page.locator('#st_gpt_image_negative_prompt').fill('blurry')
+    page.wait_for_timeout(700)
+    page.locator('#st_gpt_image_prompt').fill('comfy cat')
+    page.locator('#st_gpt_image_generate_btn').click()
+    page.wait_for_function("document.querySelector('#st_gpt_gen_result img.st_gpt_gen_img')", timeout=10000)
+    page.wait_for_timeout(300)
+    call = SD_CALLS[-1]
+    assert call['path'] == '/api/sd/comfy/generate' and call['csrf'] and call['url'] == 'http://127.0.0.1:8188', call
+    assert call['texts'] == ['masterpiece, comfy cat', 'blurry'] and isinstance(call['seed'], int), call
+    page.locator('#st_gpt_image_provider').select_option('sdwebui')
+    expect(page.locator('#st_gpt_image_sd_auth')).to_be_visible()
+    expect(page.locator('#st_gpt_image_comfy_workflow')).to_be_hidden()
+    page.locator('#st_gpt_image_sd_auth').fill('user:pass')
+    page.locator('#st_gpt_image_api_base').fill('http://127.0.0.1:7860')
+    page.wait_for_timeout(700)
+    before = len(SD_CALLS)
+    page.locator('#st_gpt_image_prompt').fill('webui dog')
+    page.locator('#st_gpt_image_generate_btn').click()
+    for _ in range(100):
+        if len(SD_CALLS) > before:
+            break
+        page.wait_for_timeout(100)
+    call = SD_CALLS[-1]
+    assert call['path'] == '/api/sd/generate' and call['csrf'] and call['auth'] == 'user:pass' and call['prompt'] == 'webui dog' and call['url'] == 'http://127.0.0.1:7860', call
+    expect(page.locator('#st_gpt_gen_result img.st_gpt_gen_img')).to_have_count(1, timeout=10000)
+    page.locator('#st_gpt_image_negative_prompt').fill('')
+    page.wait_for_timeout(600)
+    close_panel()
+
+    open_tab('video')
+    page.locator('#st_ai_video_provider').select_option('comfyui')
+    expect(page.locator('#st_ai_video_key')).to_be_hidden()
+    expect(page.locator('#st_ai_video_workflow')).to_be_visible()
+    expect(page.locator('#st_ai_video_direct')).to_be_visible()
+    expect(page.locator('#st_ai_video_proxy')).to_be_hidden()
+    expect(page.locator('#st_ai_video_panel .st_ai_media_warning').first).to_contain_text('还没有填 ComfyUI 工作流')
+    page.locator('#st_ai_video_workflow').fill(json.dumps({
+        '1': {'class_type': 'WanTextEncode', 'inputs': {'text': '%提示词%', 'frames': '%frames%'}},
+        '2': {'class_type': 'VHS_VideoCombine', 'inputs': {'frame_rate': '%fps%'}},
+    }))
+    page.wait_for_timeout(700)
+    close_panel()
+    mes(8).locator('.st_ai_media_gen').click()
+    expect(mes(8).locator('video')).to_have_count(1, timeout=15000)
+    call = SD_CALLS[-1]
+    assert call['path'] == '/api/sd/comfy/generate' and call['texts'] == ['COMFY 海边日落'], call
+    assert re.fullmatch(r'\[video src="/user/files/st-ai-video-[^"]+\.webm"\]COMFY 海边日落\[/video\]', raw(8)), raw(8)
+    checks.append('Self-hosted: ComfyUI (image + video) and SD WebUI through the tavern backend (/api/sd/comfy/generate, /api/sd/generate) with CSRF; placeholders filled (incl. 中文别名); no Key needed; fields shown per service; API-format workflow checked live; video saved and embedded')
+
     # ---------- mobile ----------
     for width in [390, 320]:
         page.set_viewport_size({'width': width, 'height': 844})
@@ -540,7 +622,11 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     checks.append('390px / 320px: embedded video and the image/voice/video pages fit without horizontal overflow; the four tabs stay on one row')
 
     page.wait_for_timeout(500)
-    assert page.evaluate('mediaStats.timers.size') == 0
+    # 生成成功后扫描器会在 0.5/2/5 秒各补扫一次；等它们跑完，还剩的才算泄漏
+    try:
+        page.wait_for_function('mediaStats.timers.size === 0', timeout=8000)
+    except Exception:
+        raise AssertionError(page.evaluate('[...mediaStats.timers].map((id) => mediaStats.stacks.get(id))'))
     assert not errors, errors
     result = {'status': 'passed', 'checks': checks, 'mock_requests': len(LOG), 'uploads': len(UPLOADS), 'page_errors': errors,
               'browser': browser.version, 'real_webm_playback': playback, 'real_provider_verified': False,

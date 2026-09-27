@@ -1,8 +1,11 @@
 /** Protocol adapters. No SDK, timers, DOM or network at module load. */
+import { needsKey } from './keys.js';
+
+export { isLocalBase, needsKey } from './keys.js';
 export const PROVIDERS = {
-    image: { openai: 'OpenAI / 兼容生图', chat: 'OpenAI Chat 生图', gemini: 'Gemini 原生', fal: 'fal', replicate: 'Replicate' },
+    image: { openai: 'OpenAI / 兼容生图', chat: 'OpenAI Chat 生图', gemini: 'Gemini 原生', fal: 'fal', replicate: 'Replicate', comfyui: 'ComfyUI（自建）', sdwebui: 'SD WebUI（A1111 / Forge，自建）' },
     audio: { openai: 'OpenAI / 兼容 TTS', fish: 'Fish Audio', elevenlabs: 'ElevenLabs', azure: 'Azure Speech' },
-    video: { runway: 'Runway', agnes: 'Agnes AI', fal: 'fal', replicate: 'Replicate', openai: '/videos 兼容服务（官方 Sora 已计划停用）' },
+    video: { runway: 'Runway', agnes: 'Agnes AI', fal: 'fal', replicate: 'Replicate', openai: '/videos 兼容服务（官方 Sora 已计划停用）', comfyui: 'ComfyUI（自建）' },
 };
 
 export const DEFAULT_BASES = {
@@ -48,7 +51,7 @@ const xml = (text) => String(text).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', 
 export function buildRequest(kind, config, prompt) {
     const { provider, model, key, voice, size, seconds } = config;
     if (!PROVIDERS[kind]?.[provider]) throw new Error('不支持的媒体类型或服务');
-    if (!String(key || '').trim()) throw new Error('请填写此服务的 API Key');
+    if (!String(key || '').trim() && needsKey(provider, config.base)) throw new Error('请填写此服务的 API Key');
     if (!String(prompt || '').trim()) throw new Error('请输入生成内容');
     if (prompt.length > (kind === 'audio' ? 4096 : 20000)) throw new Error('输入过长，请分段生成（语音最多 4096 字符）');
     if (provider !== 'azure' && !model?.trim()) throw new Error('请填写模型名称或模型路径');
@@ -125,6 +128,7 @@ export function buildRequest(kind, config, prompt) {
         url = `${root}/images/generations`;
         body = { model, prompt, n: 1, ...(size && size !== 'auto' ? { size } : {}), ...extra };
     }
+    if (!String(key || '').trim()) for (const name of ['Authorization', 'xi-api-key', 'Ocp-Apim-Subscription-Key', 'x-goog-api-key']) delete headers[name];
     return { url, root, provider, headers, binary, queue, body: typeof body === 'string' || body instanceof FormData ? body : JSON.stringify(body) };
 }
 

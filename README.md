@@ -10,9 +10,10 @@
 - **内联配音** — `[voice]台词[/voice]` 台词照常显示，旁边出现「配音」按钮；生成后变成播放键，文件存进酒馆；`[voice type="御姐"]` 按音色预设表换音色，AI 按角色自己挑类型
 - **内联视频** — `[video]画面描述[/video]` 替换为「生成视频」按钮；异步任务显示进度，完成后原位嵌入播放器，刷新页面也能继续查询原任务
 - **AI 自动带标签** — 可分别为图片、配音、视频注入系统提示词，让 AI 在回复里输出标签
-- **手动静默生图** — 在面板「生图」页输入描述生成
+- **手动静默生图** — 在面板「图片」页输入描述生成
 - **图库管理** — 生成记录保存在 IndexedDB，支持浏览、删除、重新生成
-- **多协议** — 图片：OpenAI Images、Chat 生图、Gemini 原生、fal、Replicate、旧版自动兼容；配音：OpenAI 兼容 TTS、ElevenLabs、Azure；视频：Runway、fal、Replicate、/videos 兼容
+- **多协议** — 图片：OpenAI Images、Chat 生图、Gemini 原生、fal、Replicate、旧版自动兼容；配音：OpenAI 兼容 TTS、Fish Audio、ElevenLabs、Azure；视频：Runway、Agnes、fal、Replicate、/videos 兼容
+- **自建服务** — ComfyUI（生图、视频，工作流占位符与 st-chatu8 兼容）、SD WebUI（A1111 / Forge）；默认经酒馆后端转发，不用开跨域，TauriTavern 也能用；本机/局域网地址 Key 可留空
 - **API 预设 / 模型列表** — 保存多组图片 API 配置，从接口拉取模型
 
 ## 安装

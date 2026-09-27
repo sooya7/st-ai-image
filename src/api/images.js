@@ -7,6 +7,7 @@ import { LIMITS } from '../core/constants.js';
 import { apiFetch } from '../core/net.js';
 import { log } from '../core/notify.js';
 import { ensureSafeImageUrl, summarizeApiError } from '../core/text.js';
+import { needsKey } from '../media/keys.js';
 import { getSettings } from '../settings.js';
 
 const pick = (img) => {
@@ -97,6 +98,15 @@ export async function callImageAPI(prompt, { signal, onProgress } = {}) {
     const fullPrompt = extra ? `${extra}, ${prompt}` : prompt;
     const negative = String(s.negativePrompt || '').trim();
 
+    if (s.imageProvider === 'comfyui' || s.imageProvider === 'sdwebui') {
+        const { generateMedia } = await import('../media/client.js');
+        const result = await generateMedia('image', {
+            provider: s.imageProvider, base: s.apiBase, model: s.model, size: s.size, extra: s.imageParams || '{}',
+            negative, workflow: s.comfyWorkflow, auth: s.sdAuth, viaTavern: s.selfHostedViaSt !== false, timeout: s.imageTimeout,
+        }, fullPrompt, { signal, onProgress: () => onProgress?.({ attempt: 1, total: 1, method: s.imageProvider, errors: 0 }) });
+        return result.url;
+    }
+
     if (s.imageProvider && s.imageProvider !== 'auto') {
         const { generateMedia } = await import('../media/client.js');
         const result = await generateMedia('image', {
@@ -108,7 +118,7 @@ export async function callImageAPI(prompt, { signal, onProgress } = {}) {
         return result.url;
     }
 
-    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${s.apiKey}` };
+    const headers = { 'Content-Type': 'application/json', ...(s.apiKey ? { Authorization: `Bearer ${s.apiKey}` } : {}) };
     const timeout = Number(s.imageTimeout) || LIMITS.imageGenTimeoutMs;
 
     const imageBody = { model: s.model, prompt: fullPrompt, n: 1, size: s.size };
@@ -153,10 +163,25 @@ export async function callImageAPI(prompt, { signal, onProgress } = {}) {
     throw new Error(`无法生成图片。${errors[0] || '请检查 API 配置和模型名称'}`);
 }
 
-/** 拉取模型列表（OpenAI 兼容 /v1/models）。 */
+/** 图片接口缺 Key：自建服务和本机/局域网地址允许留空。 */
+export function imageKeyMissing(s) {
+    return !String(s?.apiKey || '').trim() && needsKey(s?.imageProvider, s?.apiBase || '');
+}
+
+/** 拉取模型列表（OpenAI 兼容 /v1/models；自建服务走酒馆的 /api/sd/models、/api/sd/comfy/models）。 */
 export async function fetchModelList() {
     const s = await getSettings();
-    if (!s.apiKey) throw new Error('请先填写 API Key');
+    if (s.imageProvider === 'comfyui' || s.imageProvider === 'sdwebui') {
+        const { serviceRoot } = await import('../media/selfhosted.js');
+        const { getRequestHeadersWithCsrf } = await import('../st/context.js');
+        const url = serviceRoot(s.apiBase, s.imageProvider);
+        const path = s.imageProvider === 'comfyui' ? '/api/sd/comfy/models' : '/api/sd/models';
+        const resp = await fetch(path, { method: 'POST', headers: await getRequestHeadersWithCsrf(), body: JSON.stringify({ url, auth: s.sdAuth || '' }), cache: 'no-store' });
+        if (!resp.ok) throw new Error(`经酒馆读取模型列表失败 HTTP ${resp.status}：${(await resp.text().catch(() => '')).slice(0, 200)}`);
+        const list = await resp.json();
+        return (Array.isArray(list) ? list : []).map((m) => (typeof m === 'string' ? { id: m, name: m } : { id: m.value, name: m.text || m.value })).filter((m) => m.id);
+    }
+    if (imageKeyMissing(s)) throw new Error('请先填写 API Key');
     if (!s.apiBase) throw new Error('请先填写 API Base URL');
 
     if (['fal', 'replicate'].includes(s.imageProvider)) throw new Error('此服务请从模型页面复制模型路径，不使用 OpenAI 模型列表');
@@ -168,7 +193,7 @@ export async function fetchModelList() {
     }
 
     const resp = await apiFetch(`${normalizeApiBase(s.apiBase)}/v1/models`, {
-        headers: { Authorization: `Bearer ${s.apiKey}` },
+        headers: s.apiKey ? { Authorization: `Bearer ${s.apiKey}` } : {},
     });
     if (!resp.ok) {
         const text = await resp.text().catch(() => '');

@@ -8,6 +8,7 @@
 import { errMsg, log, notify } from '../core/notify.js';
 import { readMediaSettings, mediaRequestConfig } from '../media/media-settings.js';
 import { resolveVoice } from '../media/voice-presets.js';
+import { needsKey } from '../media/keys.js';
 import {
     buildMediaTag, locateMediaTag, mediaJobKey, normalizeMediaText, parseMediaTag, replaceMediaTag,
 } from '../media/tags.js';
@@ -167,7 +168,7 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
         config.voice = resolveVoice({ type: info.voiceType, fallback: config.voice, presets: config.presets }).voice;
     }
     const blocked = !settings.enabled || !media.enabled ? `${LABEL[kind]}功能已在设置中关闭`
-        : !config.key.trim() ? `请先在面板的「${kind === 'audio' ? '配音' : '视频'}」页填写 API Key` : '';
+        : !config.key.trim() && needsKey(provider, config.base) ? `请先在面板的「${kind === 'audio' ? '配音' : '视频'}」页填写 API Key` : '';
     if (blocked) {
         endTask(key);
         return notify.warn(blocked, TITLE[kind]);
@@ -194,7 +195,8 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
             onProgress: (message) => setProgress(key, message),
         });
         if (kind === 'video') setProgress(key, '下载视频…');
-        const blob = kind === 'audio' ? result.blob : await downloadVideo(result, { proxy: !!config.proxy });
+        // 自建服务（ComfyUI）直接给回文件，不用再下载
+        const blob = result.blob || await downloadVideo(result, { proxy: !!config.proxy });
         setProgress(key, '保存到酒馆…');
         const { uploadMediaFile } = await import('../st/files.js');
         const src = await uploadMediaFile(blob, kind);

@@ -127,6 +127,8 @@ export const MEDIA_DEFAULTS = {
             fal: { base: 'https://queue.fal.run', key: '', model: '', size: '', seconds: '', extra: '' },
             replicate: { base: 'https://api.replicate.com/v1', key: '', model: '', size: '', seconds: '', extra: '' },
             openai: { base: '', key: '', model: 'sora-2', size: '1280x720', seconds: '4', extra: '' },
+            // 自建 ComfyUI：workflow 是「导出 (API)」的 JSON；direct='1' 表示浏览器直连，默认经酒馆后端转发
+            comfyui: { base: 'http://127.0.0.1:8188', key: '', model: '', size: '832x480', seconds: '5', extra: '', workflow: '', direct: '' },
         },
     },
 };
@@ -140,7 +142,7 @@ export function readMediaSettings(settings, section) {
     const profiles = {};
     for (const [id, fields] of Object.entries(defaults.profiles)) {
         profiles[id] = {};
-        for (const [field, fallback] of Object.entries(fields)) profiles[id][field] = str(saved.profiles?.[id]?.[field], fallback, 4096);
+        for (const [field, fallback] of Object.entries(fields)) profiles[id][field] = str(saved.profiles?.[id]?.[field], fallback, field === 'workflow' ? 400000 : 4096);
         if (section === 'speech') {
             // 音色预设表：存过就用存的；没存过按服务给初始表（Fish 带推荐音色，其他只有类型名）
             profiles[id].presets = normalizePresets(saved.profiles?.[id]?.presets)

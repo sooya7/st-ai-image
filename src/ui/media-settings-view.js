@@ -6,6 +6,7 @@ import { registerSystemPrompt, scanBurst } from '../inline/scanner.js';
 import { mediaRequestConfig, readMediaSettings } from '../media/media-settings.js';
 import { PROVIDERS, apiRoot, extraParams } from '../media/providers.js';
 import { isFishEndpoint } from '../media/voice-presets.js';
+import { SELF_HOSTED, parseWorkflow, serviceRoot } from '../media/selfhosted.js';
 import { getSettings, saveSettings } from '../settings.js';
 import { debounce, el } from './dom.js';
 import { buildPromptSection } from './prompt-section.js';
@@ -35,15 +36,19 @@ const SPEC = {
         usage: '在 AI 回复里用 [video]画面描述[/video]（也可写 [视频]）标出场景，正文里会出现「生成视频」按钮；生成需要几分钟，完成后原位显示播放器，文件存在酒馆的 user/files。',
         fields: [
             ['base', 'API 根地址'], ['key', 'API Key', 'password'], ['model', '模型 / 模型路径'],
-            ['size', '尺寸 / 比例'], ['seconds', '时长（秒）'], ['extra', '额外参数（JSON 对象）', 'textarea'],
+            ['size', '尺寸 / 比例'], ['seconds', '时长（秒）'],
+            ['workflow', 'ComfyUI 工作流（在 ComfyUI 里「导出 (API)」得到的 JSON）', 'textarea'],
+            ['extra', '额外参数（JSON 对象）', 'textarea'],
         ],
-        hidden: { fal: ['size', 'seconds'], replicate: ['size', 'seconds'] },
+        hidden: { fal: ['size', 'seconds'], replicate: ['size', 'seconds'], comfyui: ['key'] },
+        only: { workflow: ['comfyui'] },
         hints: {
             runway: 'Runway 不允许浏览器直连（跨域被拒），必须勾选「通过酒馆代理」。',
             replicate: 'Replicate 不允许浏览器直连，必须勾选「通过酒馆代理」。模型填 owner/name 或 owner/name:version，时长、比例等写进额外参数。',
             agnes: 'Agnes AI 允许浏览器直连。尺寸填 720P 这类分辨率档位（不是宽x高），横竖屏可在额外参数写 {"aspect_ratio":"9:16"}。',
             fal: 'fal 允许浏览器直连。模型填平台路径（如 fal-ai/xxx/text-to-video），时长、比例按模型文档写进额外参数。',
             openai: '/videos 兼容服务（官方 Sora 已计划停用），JSON 请求；服务不允许跨域时勾选酒馆代理。',
+            comfyui: '自建 ComfyUI，地址默认 http://127.0.0.1:8188，不需要 Key。工作流里要变的值改成占位符：%prompt%、%negative_prompt%、%seed%（随机）、%width% %height%（按尺寸，填 832x480 这种）、%seconds%、%fps%（默认 16）、%frames%（秒数×帧率+1）、%MODEL_NAME%（模型栏）；中文 %提示词% %种子% %视频秒数% 等也认，额外参数里的键也能当占位符。输出节点用 VHS Video Combine 或 SaveVideo。默认经酒馆后端转发，完成前看不到进度。',
         },
     },
 };
@@ -79,13 +84,17 @@ export async function mountMediaSettings(root, section) {
     }) : null;
     const profileFields = spec.fields.map(([key, label, type]) => {
         const node = type === 'textarea'
-            ? el('textarea', { id: id(key), class: 'st_ai_textarea', rows: 2, maxlength: 4096, dataset: { key }, placeholder: '例如 {"seed": 1}；不要填写密钥' })
+            ? el('textarea', key === 'workflow'
+                ? { id: id(key), class: 'st_ai_textarea', rows: 6, maxlength: 400000, spellcheck: 'false', dataset: { key }, placeholder: '{"3": {"class_type": "...", "inputs": {"text": "%prompt%"}}, ...}' }
+                : { id: id(key), class: 'st_ai_textarea', rows: 2, maxlength: 4096, dataset: { key }, placeholder: '例如 {"seed": 1}；不要填写密钥' })
             : el('input', { id: id(key), type: type || 'text', class: 'st_ai_input', autocomplete: 'off', dataset: { key } });
         inputs[key] = node;
         if (key === 'voice' && voice) return [voice.defaultField(label, node), voice.presetsField];
         return field(label, node);
     }).flat();
     const proxy = checkbox('proxy', '通过酒馆代理请求（需在酒馆 config.yaml 设置 enableCorsProxy: true 并重启）');
+    // 自建服务不走 CORS 代理，默认经酒馆后端转发；这个开关改成浏览器直连
+    const direct = section === 'video' ? checkbox('direct', '浏览器直连 ComfyUI（能看到等待时间；要给 ComfyUI 加 --enable-cors-header）') : null;
     const timeout = section === 'video'
         ? el('input', { id: id('timeout'), type: 'number', min: 60, max: 1800, step: 30, class: 'st_ai_input' }) : null;
 
@@ -96,6 +105,7 @@ export async function mountMediaSettings(root, section) {
         hint,
         ...profileFields,
         proxy.node,
+        direct?.node,
         timeout ? field('最长等待（秒）', timeout) : null,
         buildPromptSection(section, settings),
         el('p', { class: 'st_ai_speech_hint', text: '密钥与图片 API Key 一样保存在酒馆设置里。停止等待不会取消服务端任务，生成失败不会自动重试。' }),
@@ -109,7 +119,14 @@ export async function mountMediaSettings(root, section) {
         const hidden = spec.hidden[state.provider] || [];
         for (const [key, node] of Object.entries(inputs)) {
             node.value = profile[key] ?? '';
-            node.closest('.st_ai_field').hidden = hidden.includes(key);
+            const only = spec.only?.[key];
+            node.closest('.st_ai_field').hidden = hidden.includes(key) || (only ? !only.includes(state.provider) : false);
+        }
+        const selfHosted = SELF_HOSTED.has(state.provider);
+        proxy.node.hidden = selfHosted;
+        if (direct) {
+            direct.node.hidden = !selfHosted;
+            direct.input.checked = profile.direct === '1';
         }
         hint.textContent = spec.hints[state.provider] || '';
         proxy.input.checked = state.proxy;
@@ -121,7 +138,11 @@ export async function mountMediaSettings(root, section) {
     const validate = () => {
         const profile = state.profiles[state.provider];
         const problems = [];
-        try { if (profile.base) apiRoot(profile.base, state.provider); } catch (e) { problems.push(`API 地址：${e.message}`); }
+        if (SELF_HOSTED.has(state.provider)) {
+            try { serviceRoot(profile.base, state.provider); } catch (e) { problems.push(`地址：${e.message}`); }
+            if (!String(profile.workflow || '').trim()) problems.push('还没有填 ComfyUI 工作流');
+            else try { parseWorkflow(profile.workflow); } catch (e) { problems.push(e.message); }
+        } else try { if (profile.base) apiRoot(profile.base, state.provider); } catch (e) { problems.push(`API 地址：${e.message}`); }
         try { extraParams(profile.extra); } catch (e) { problems.push(`额外参数：${e.message}`); }
         if (state.proxy && state.provider === 'azure') problems.push('当前服务不能走酒馆代理，请取消勾选');
         warning.textContent = problems.join('；');
@@ -147,6 +168,7 @@ export async function mountMediaSettings(root, section) {
         });
     }
     proxy.input.addEventListener('change', () => { state.proxy = proxy.input.checked; save(); });
+    direct?.input.addEventListener('change', () => { state.profiles[state.provider].direct = direct.input.checked ? '1' : ''; save(); });
     timeout?.addEventListener('change', () => {
         const seconds = Math.min(1800, Math.max(60, Number(timeout.value) || 600));
         timeout.value = String(seconds);

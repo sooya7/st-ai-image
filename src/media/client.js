@@ -1,4 +1,5 @@
 import { VIDEOS_PROTOCOL, buildRequest, mediaUrl, safeUrl, taskLinks, taskState } from './providers.js';
+import { SELF_HOSTED } from './selfhosted.js';
 
 let active = 0;
 export function pendingMediaCount() { return active; }
@@ -99,6 +100,7 @@ export async function generateMedia(kind, config, prompt, options = {}) {
     const { signal, onProgress, onTask, resume, request = requestData, sleep = wait, now = Date.now } = options;
     if (active >= 2) throw new Error('已有两个媒体任务，请等待完成或停止后重试');
     signal?.throwIfAborted();
+    if (SELF_HOSTED.has(config.provider)) return runSelfHostedJob(kind, config, prompt, options);
     const plan = resume?.plan || { ...buildRequest(kind, config, prompt), proxy: !!config.proxy };
     // 酒馆代理只会把请求体按 JSON 重新序列化，SSML 和 multipart 过去会被改坏。
     if (plan.proxy && (typeof plan.body !== 'string' || !/json/i.test(plan.headers['Content-Type'] || ''))) {
@@ -165,6 +167,37 @@ export async function generateMedia(kind, config, prompt, options = {}) {
             if (url) return { url };
         }
         throw new Error('服务响应中没有可用媒体；未自动重复提交');
+    } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
+        active--;
+    }
+}
+
+/**
+ * ComfyUI / SD WebUI：默认经酒馆后端转发，浏览器直连要显式打开。
+ * 图片设置传 viaTavern；视频配置里是 direct: '1'（和 CORS 代理 proxy 不是一回事）。
+ */
+async function runSelfHostedJob(kind, config, prompt, { signal, onProgress, fetch: fetchImpl } = {}) {
+    const { buildSelfHostedPlan, runSelfHosted } = await import('./selfhosted.js');
+    const plan = buildSelfHostedPlan(kind, config, prompt);
+    const viaTavern = config.viaTavern !== undefined ? !!config.viaTavern : String(config.direct || '') !== '1';
+    active++;
+    const controller = new AbortController();
+    const abort = () => controller.abort(signal.reason);
+    signal?.addEventListener('abort', abort, { once: true });
+    const timeout = Math.min(30 * 60000, Math.max(30000, Number(config.timeout) || (kind === 'video' ? 900000 : 300000)));
+    const timer = setTimeout(() => controller.abort(new Error('等待超时；任务可能仍在自建服务里运行')), timeout);
+    try {
+        const { getRequestHeadersWithCsrf } = await import('../st/context.js');
+        return await runSelfHosted(plan, { viaTavern, tavernHeaders: getRequestHeadersWithCsrf, signal: controller.signal, onProgress, timeout, fetch: fetchImpl });
+    } catch (error) {
+        if (controller.signal.aborted && controller.signal.reason instanceof Error && !signal?.aborted) throw controller.signal.reason;
+        if (/Failed to fetch|Load failed|NetworkError/i.test(error?.message || '')) {
+            throw new Error(viaTavern ? '连不上酒馆后端或自建服务，请检查地址和服务是否在运行'
+                : `浏览器连不上 ${plan.root}：服务没运行，或没开跨域（ComfyUI 加 --enable-cors-header，SD WebUI 加 --cors-allow-origins），也可以勾选「经酒馆后端转发」`);
+        }
+        throw error;
     } finally {
         clearTimeout(timer);
         signal?.removeEventListener('abort', abort);

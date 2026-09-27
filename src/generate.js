@@ -1,5 +1,5 @@
 /** 面板里的生图流程（结果只展示，不自动入库——由用户点"存入图库"决定）。 */
-import { callImageAPI } from './api/images.js';
+import { callImageAPI, imageKeyMissing } from './api/images.js';
 import { errMsg, log, notify } from './core/notify.js';
 import { ensureSafeImageUrl } from './core/text.js';
 import { getSettings } from './settings.js';
@@ -21,7 +21,7 @@ export async function generateImage(prompt) {
     const clean = String(prompt ?? '').trim();
     if (!clean) { notify.warn('请输入图片描述'); return null; }
     const s = await getSettings();
-    if (!s.apiKey) { notify.error('请先在面板的「图片」页填写 API Key'); return null; }
+    if (imageKeyMissing(s)) { notify.error('请先在面板的「图片」页填写 API Key'); return null; }
 
     if (currentRequest) { notify.warn('已有图片任务，请等待完成，避免重复提交'); return null; }
     const controller = new AbortController();

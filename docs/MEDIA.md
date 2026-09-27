@@ -36,6 +36,36 @@
 - 「默认音色」是下拉框，选项是表里填了音色的类型，也可以选「自定义音色 ID」。
 - 写回时 `type` 保留：`[voice type="御姐" src="/user/files/…"]快进来[/voice]`，重新生成还是同一个类型。
 
+## 自建服务（ComfyUI / SD WebUI）
+
+图片页的「生图接口协议」和视频页的「服务」里可以选：
+
+| 服务 | 能做 | 地址默认值 | 需要填 |
+| --- | --- | --- | --- |
+| ComfyUI（自建） | 生图、视频 | `http://127.0.0.1:8188` | 工作流（ComfyUI 里「导出 (API)」得到的 JSON） |
+| SD WebUI（A1111 / Forge，自建） | 生图 | `http://127.0.0.1:7860` | 启动参数有 `--api-auth` 时填 `用户名:密码` |
+
+- **不需要 API Key**。另外，任何服务的地址只要是本机或局域网（`localhost`、`127.x`、`10.x`、`192.168.x`、`172.16–31.x`、`*.local`），Key 都可以留空，留空时不发 Authorization。
+- **默认经酒馆后端转发**：请求发给酒馆自带的 `/api/sd/comfy/generate`、`/api/sd/generate`，由酒馆服务器去访问自建服务，所以不用给自建服务开跨域，也不用开 `enableCorsProxy`；原版酒馆和 TauriTavern 都有这两个接口。代价是 ComfyUI 任务跑完前看不到进度。
+- **浏览器直连**（图片页取消勾选「经酒馆后端转发」，视频页勾选「浏览器直连 ComfyUI」）：能看到等待时间，但 ComfyUI 要加 `--enable-cors-header`，SD WebUI 要加 `--cors-allow-origins`。
+- **ComfyUI 工作流占位符**（和 st-chatu8 兼容，中文写法也认）：
+
+| 占位符 | 值 |
+| --- | --- |
+| `%prompt%` `%提示词%` `%正面提示词%` | 标签里的描述（图片还会加上「额外提示词」） |
+| `%negative_prompt%` `%负面提示词%` | 负面提示词（图片页） |
+| `%seed%` `%种子%` | 随机；额外参数写 `{"seed": 123}` 可固定 |
+| `%width%` `%height%` `%宽度%` `%高度%` | 按尺寸设置（`832x480`、`832*480`、`832:480` 都行） |
+| `%steps%` `%cfg_scale%` `%sampler_name%` `%scheduler%` | 默认 20 / 7 / euler / normal |
+| `%MODEL_NAME%` `%model%` `%模型%` | 「模型」栏 |
+| `%seconds%` `%视频秒数%` `%fps%` `%frames%` | 视频：秒数、帧率（默认 16）、帧数（秒数×帧率+1，Wan 5 秒就是 81） |
+| 额外参数里的任意键 | 比如 `{"lora_strength": 0.8}` 会填进 `%lora_strength%` |
+
+  整个字符串就是占位符时按原类型替换（数字还是数字），夹在文字里时按文字替换（`"masterpiece, %prompt%"`）。工作流里有占位符没给值，生成前会直接报出名字。
+- **输出节点**：生图用 SaveImage；视频用 VHS Video Combine 或 SaveVideo。经酒馆转发时，酒馆只取第一个图片输出（没有才取 gifs），所以视频工作流里不要再放 SaveImage/PreviewImage，否则拿回来的是那张图；浏览器直连时扩展会按类型挑。
+- **SD WebUI**：发 `/sdapi/v1/txt2img`，额外参数里写 txt2img 的字段（如 `{"steps": 28, "sampler_name": "DPM++ 2M", "enable_hr": true}`）；「模型」栏填了会通过 `override_settings.sd_model_checkpoint` 临时切模型。模型列表按钮经酒馆读取 `/api/sd/models` 或 `/api/sd/comfy/models`。
+- 自建视频不支持断线续查：刷新页面后任务还在 ComfyUI 里跑完，结果留在 ComfyUI 的 output 目录，但不会写回聊天。
+
 ## 设置（插件面板 → 配音 / 视频）
 
 每个服务一套独立的地址、密钥、模型，切换服务不会串。设置和密钥与原有图片 API Key 一样保存在酒馆的 `settings.json`（`extension_settings["st-ai-image"]`）。

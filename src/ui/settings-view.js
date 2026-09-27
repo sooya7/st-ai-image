@@ -15,6 +15,9 @@ import { debounce, el, qs, replaceContent, setBusy } from './dom.js';
 const FIELDS = [
     { id: 'st_gpt_image_provider', key: 'imageProvider', kind: 'select' },
     { id: 'st_gpt_image_params', key: 'imageParams', kind: 'text' },
+    { id: 'st_gpt_image_comfy_workflow', key: 'comfyWorkflow', kind: 'text' },
+    { id: 'st_gpt_image_sd_auth', key: 'sdAuth', kind: 'text' },
+    { id: 'st_gpt_image_via_st', key: 'selfHostedViaSt', kind: 'bool' },
     { id: 'st_gpt_image_api_base', key: 'apiBase', kind: 'text' },
     { id: 'st_gpt_image_api_key', key: 'apiKey', kind: 'text' },
     { id: 'st_gpt_image_model', key: 'model', kind: 'text' },
@@ -43,6 +46,33 @@ function fillForm(settings) {
     }
     const timeout = qs('#st_gpt_image_timeout');
     if (timeout) timeout.value = String(clampSeconds(Number(settings.imageTimeout || LIMITS.imageGenTimeoutMs) / 1000));
+    syncProviderFields(settings.imageProvider);
+    checkWorkflow(settings.comfyWorkflow);
+}
+
+/** 按服务显示字段：data-show-for 只在这些服务下显示，data-hide-for 在这些服务下隐藏。 */
+function syncProviderFields(provider) {
+    for (const node of document.querySelectorAll('#st_ai_float_panel [data-show-for], #st_ai_float_panel [data-hide-for]')) {
+        const show = node.dataset.showFor?.split(/\s+/);
+        const hide = node.dataset.hideFor?.split(/\s+/);
+        node.classList.toggle('st_ai_hidden', show ? !show.includes(provider) : hide.includes(provider));
+    }
+}
+
+/** 工作流即时校验：格式不对当场说，别等点了生成才报错。 */
+async function checkWorkflow(text) {
+    const status = qs('#st_gpt_image_comfy_status');
+    if (!status) return;
+    const show = (text, bad) => { status.textContent = text; status.classList.toggle('st_ai_media_warning', bad); };
+    if (!String(text || '').trim()) return show('还没有填工作流', true);
+    try {
+        const { parseWorkflow } = await import('../media/selfhosted.js');
+        const nodes = Object.keys(parseWorkflow(text)).length;
+        const tokens = [...new Set(String(text).match(/%[A-Za-z_一-鿿][\w一-鿿]*%/g) || [])];
+        show(`✓ API 格式，${nodes} 个节点；占位符：${tokens.join(' ') || '没有（提示词不会传进去）'}`, !tokens.length);
+    } catch (e) {
+        show(e.message, true);
+    }
 }
 
 function renderPresetOptions(selected = '') {
@@ -102,6 +132,9 @@ export async function bindSettingsForm(onChange) {
             node.addEventListener('input', save);
         }
     }
+    qs('#st_gpt_image_provider')?.addEventListener('change', (e) => syncProviderFields(e.target.value));
+    const workflow = qs('#st_gpt_image_comfy_workflow');
+    workflow?.addEventListener('input', debounce(() => checkWorkflow(workflow.value), 300));
 
     const timeout = qs('#st_gpt_image_timeout');
     timeout?.addEventListener('change', () => {

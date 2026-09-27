@@ -30,6 +30,8 @@
 | `src/media/media-settings.js` | 语音/视频设置默认值，按服务分 profile，存 `extension_settings["st-ai-image"].speech/.video` |
 | `src/ui/media-settings-view.js` | 配音/视频页（第一次切过去才加载）；保存时不碰提示词字段 |
 | `src/ui/voice-settings.js` | 配音页的默认音色下拉框和可编辑的音色预设表（按服务分开存） |
+| `src/media/selfhosted.js` | 自建服务：ComfyUI 工作流占位符填充、挑输出、经酒馆 `/api/sd/comfy/generate` 或直连 `/prompt`→`/history`→`/view`；SD WebUI 经 `/api/sd/generate` 或直连 txt2img |
+| `src/media/keys.js` | `needsKey`/`isLocalBase`：本机/局域网地址和自建服务 Key 可留空（页面加载就用，所以不放 providers.js） |
 | `src/ui/prompt-section.js` | 各功能页底部的 AI 自动标签区块（开关 + 折叠的提示词 + 恢复默认）；面板按功能分页：图片/配音/视频/图库 |
 | `src/media/providers.js`、`client.js` | 各服务请求构造、轮询、下载、酒馆 `/proxy/`、文件头识别（第一次生成时才加载） |
 

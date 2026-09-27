@@ -69,8 +69,8 @@ export const PANEL_HTML = `
                 </div>
             </div>
             <div class="st_ai_field">
-                <label for="st_gpt_image_api_base">中转 API 地址</label>
-                <input type="text" id="st_gpt_image_api_base" class="st_ai_input" placeholder="https://your-proxy.com/v1">
+                <label for="st_gpt_image_api_base">API 地址（自建服务填 http://本机:端口）</label>
+                <input type="text" id="st_gpt_image_api_base" class="st_ai_input" placeholder="https://your-proxy.com/v1 · ComfyUI http://127.0.0.1:8188 · WebUI http://127.0.0.1:7860">
             </div>
             <div class="st_ai_field">
                 <label for="st_gpt_image_provider">生图接口协议</label>
@@ -81,16 +81,34 @@ export const PANEL_HTML = `
                     <option value="gemini">Gemini 原生</option>
                     <option value="fal">fal 队列</option>
                     <option value="replicate">Replicate</option>
+                    <option value="comfyui">ComfyUI（自建）</option>
+                    <option value="sdwebui">SD WebUI（A1111 / Forge，自建）</option>
                 </select>
                 <p class="st_ai_speech_hint">切换协议不会替换地址、密钥或模型，请使用对应服务的配置。fal / Replicate 的模型填写平台路径。</p>
+            </div>
+            <div class="st_ai_field" data-show-for="comfyui sdwebui">
+                <label class="st_ai_checkbox">
+                    <input type="checkbox" id="st_gpt_image_via_st">
+                    <span>经酒馆后端转发（推荐：自建服务不用开跨域，TauriTavern 也能用）</span>
+                </label>
+            </div>
+            <div class="st_ai_field" data-show-for="sdwebui">
+                <label for="st_gpt_image_sd_auth">WebUI 账号密码（启动参数有 --api-auth 时填 用户名:密码）</label>
+                <input type="password" id="st_gpt_image_sd_auth" class="st_ai_input" autocomplete="off" placeholder="没开认证就留空">
+            </div>
+            <div class="st_ai_field" data-show-for="comfyui">
+                <label for="st_gpt_image_comfy_workflow">ComfyUI 工作流（在 ComfyUI 里「导出 (API)」得到的 JSON）</label>
+                <textarea id="st_gpt_image_comfy_workflow" class="st_ai_textarea" rows="6" spellcheck="false" placeholder='{"3": {"class_type": "KSampler", "inputs": {"seed": "%seed%", ...}}, ...}'></textarea>
+                <p class="st_ai_speech_hint st_ai_media_warning" id="st_gpt_image_comfy_status" role="status" aria-live="polite"></p>
+                <p class="st_ai_speech_hint">把工作流里要变的值改成占位符：%prompt%（正面，含额外提示词）、%negative_prompt%、%seed%（随机）、%width% %height%（按尺寸）、%steps% %cfg_scale% %sampler_name% %scheduler%、%MODEL_NAME%（模型栏）。中文写法 %提示词% %种子% 等也认；额外参数里的键也能当占位符，比如 {"steps": 28} 会填进 %steps%。</p>
             </div>
             <div class="st_ai_field">
                 <label for="st_gpt_image_params">额外模型参数（JSON 对象）</label>
                 <textarea id="st_gpt_image_params" class="st_ai_textarea" rows="2" maxlength="4096" placeholder='例如 {"seed":42}；Gemini 对应 generationConfig'></textarea>
-                <p class="st_ai_speech_hint">仅指定协议时生效。按模型文档填写尺寸等参数，不要填写密钥。</p>
+                <p class="st_ai_speech_hint">仅指定协议时生效。按模型文档填写尺寸等参数，不要填写密钥。SD WebUI 填 txt2img 参数，如 {"steps":28,"cfg_scale":6,"sampler_name":"DPM++ 2M"}；ComfyUI 填占位符的值。</p>
             </div>
-            <div class="st_ai_field">
-                <label for="st_gpt_image_api_key">API Key</label>
+            <div class="st_ai_field" data-hide-for="comfyui sdwebui">
+                <label for="st_gpt_image_api_key">API Key（本机或局域网地址可以留空）</label>
                 <input type="password" id="st_gpt_image_api_key" class="st_ai_input" placeholder="sk-...">
             </div>
             <div class="st_ai_field">
