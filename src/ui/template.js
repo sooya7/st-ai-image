@@ -68,14 +68,20 @@ export const PANEL_HTML = `
                     <option value="chat">OpenAI Chat 生图</option>
                     <option value="gemini">Gemini 原生</option>
                     <option value="novelai">NovelAI</option>
+                    <option value="minimax">MiniMax 海螺图像</option>
+                    <option value="dashscope">阿里云百炼（通义万相 / Qwen-Image）</option>
+                    <option value="pollinations">Pollinations（免费）</option>
                     <option value="comfyui">ComfyUI（自建）</option>
                     <option value="sdwebui">SD WebUI（A1111 / Forge，自建）</option>
                     <optgroup label="其他">
+                        <option value="stability">Stability AI</option>
+                        <option value="horde">AI Horde（免费，众包算力）</option>
                         <option value="fal">fal 队列</option>
                         <option value="replicate">Replicate</option>
                     </optgroup>
                 </select>
                 <p class="st_ai_speech_hint" id="st_gpt_image_provider_hint"></p>
+                <div class="st_ai_inline_row st_ai_quick_fill" id="st_gpt_image_quick" data-show-for="auto openai chat"></div>
             </div>
             <div class="st_ai_field">
                 <label>API 预设</label>

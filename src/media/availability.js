@@ -11,10 +11,10 @@ export function isTauriTavern(loc = globalThis.location, win = globalThis) {
 }
 
 /** 只能靠酒馆 /proxy/ 的服务：TauriTavern 里不显示。 */
-export const NEEDS_PROXY = { image: ['replicate'], audio: ['fish'], video: ['runway', 'replicate'] };
+export const NEEDS_PROXY = { image: ['replicate'], audio: ['fish', 'volcengine', 'gptsovits'], video: ['runway', 'replicate', 'kling', 'vidu'] };
 
 /** 放进下拉框「其他」分组的：不常用、或要额外开酒馆跨域代理。 */
-export const MORE = { image: ['fal', 'replicate'], audio: ['fish'], video: ['runway', 'replicate'] };
+export const MORE = { image: ['fal', 'replicate', 'stability', 'horde'], audio: ['elevenlabs', 'azure', 'volcengine', 'gptsovits', 'fish'], video: ['luma', 'kling', 'vidu', 'runway', 'replicate'] };
 
 export const UNAVAILABLE_NOTE = '（TauriTavern 里用不了）';
 

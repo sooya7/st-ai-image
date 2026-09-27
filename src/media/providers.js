@@ -1,11 +1,20 @@
 /** Protocol adapters. No SDK, timers, DOM or network at module load. */
 import { needsKey } from './keys.js';
+import { vendorFor, vendorPlan } from './vendors.js';
 
 export { isLocalBase, needsKey } from './keys.js';
 export const PROVIDERS = {
     image: { openai: 'OpenAI / 兼容生图', chat: 'OpenAI Chat 生图', gemini: 'Gemini 原生', fal: 'fal', replicate: 'Replicate', comfyui: 'ComfyUI（自建）', sdwebui: 'SD WebUI（A1111 / Forge，自建）' },
-    audio: { openai: 'OpenAI 兼容 TTS（Fish、各中转站）', elevenlabs: 'ElevenLabs', azure: 'Azure Speech', fish: 'Fish Audio 原生接口（要开酒馆跨域代理）' },
-    video: { openai: '/videos 兼容服务（Agnes、各中转站）', agnes: 'Agnes AI', fal: 'fal（可灵、万相、Veo 等）', comfyui: 'ComfyUI（自建）', runway: 'Runway（要开酒馆跨域代理）', replicate: 'Replicate' },
+    audio: {
+        openai: 'OpenAI 兼容 TTS（Fish、硅基流动、各中转站）', minimax: 'MiniMax 语音', dashscope: '阿里云百炼（Qwen-TTS / CosyVoice）', gemini: 'Gemini TTS',
+        elevenlabs: 'ElevenLabs', azure: 'Azure Speech',
+        volcengine: '豆包语音（火山引擎，要开酒馆跨域代理）', gptsovits: 'GPT-SoVITS（本地，要开酒馆跨域代理）', fish: 'Fish Audio 原生接口（要开酒馆跨域代理）',
+    },
+    video: {
+        openai: '/videos 兼容服务（Agnes、各中转站）', ark: '即梦 Seedance（火山方舟）', minimax: '海螺（MiniMax）', dashscope: '通义万相（阿里云百炼）',
+        veo: 'Google Veo', zhipu: '智谱 CogVideoX', siliconflow: '硅基流动', luma: 'Luma', fal: 'fal（可灵、万相、Veo 等）', comfyui: 'ComfyUI（自建）',
+        kling: '可灵（要开酒馆跨域代理）', vidu: 'Vidu（要开酒馆跨域代理）', runway: 'Runway（要开酒馆跨域代理）', replicate: 'Replicate', agnes: 'Agnes AI',
+    },
 };
 
 export const DEFAULT_BASES = {
@@ -52,6 +61,8 @@ const xml = (text) => String(text).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', 
 
 /** Result includes polling contract, so the client never guesses endpoints. */
 export function buildRequest(kind, config, prompt) {
+    // 原生接口的各家（MiniMax、百炼、可灵……）由 vendors.js 构造；续查老任务时也走这里重建请求头
+    if (vendorFor(kind, config.provider)) return { ...vendorPlan(kind, config, prompt), queue: !!vendorFor(kind, config.provider).task };
     const { provider, model, key, voice, size, seconds } = config;
     if (!PROVIDERS[kind]?.[provider]) throw new Error('不支持的媒体类型或服务');
     if (!String(key || '').trim() && needsKey(provider, config.base)) throw new Error('请填写此服务的 API Key');

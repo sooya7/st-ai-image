@@ -176,7 +176,7 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
     setProgress(key, resume ? '查询原任务…' : '提交中…');
     let failure = '';
     try {
-        const { downloadVideo, generateMedia } = await import('../media/client.js');
+        const { downloadMedia, generateMedia } = await import('../media/client.js');
         let resumeHandle = null;
         if (record) {
             // 任务地址来自聊天文件，必须与当前配置的 API 同源才会带上密钥去查。
@@ -196,7 +196,7 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
         });
         if (kind === 'video') setProgress(key, '下载视频…');
         // 自建服务（ComfyUI）直接给回文件，不用再下载
-        const blob = result.blob || await downloadVideo(result, { proxy: !!config.proxy });
+        const blob = result.blob || await downloadMedia(result, kind, { proxy: !!config.proxy });
         setProgress(key, '保存到酒馆…');
         const { uploadMediaFile } = await import('../st/files.js');
         const src = await uploadMediaFile(blob, kind);

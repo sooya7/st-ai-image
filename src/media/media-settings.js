@@ -118,6 +118,11 @@ export const MEDIA_DEFAULTS = {
             fish: { base: 'https://api.fish.audio/v1', key: '', model: 's2.1-pro-free', voice: '', language: '', extra: '' },
             elevenlabs: { base: 'https://api.elevenlabs.io/v1', key: '', model: 'eleven_multilingual_v2', voice: '', language: '', extra: '' },
             azure: { base: '', key: '', model: '', voice: 'zh-CN-XiaoxiaoNeural', language: 'zh-CN', extra: '' },
+            minimax: { base: 'https://api.minimax.cn', key: '', model: 'speech-2.8-hd', voice: 'female-shaonv', language: 'auto', extra: '' },
+            dashscope: { base: 'https://dashscope.aliyuncs.com', key: '', model: 'qwen3-tts-flash', voice: 'Cherry', language: '', extra: '' },
+            gemini: { base: 'https://generativelanguage.googleapis.com', key: '', model: 'gemini-3.8-flash-tts', voice: 'Kore', language: '', extra: '' },
+            volcengine: { base: 'https://openspeech.bytedance.com', key: '', model: 'volcano_tts', voice: 'zh_female_shuangkuaisisi_moon_bigtts', language: '', extra: '' },
+            gptsovits: { base: 'http://127.0.0.1:9880', key: '', model: '', voice: '', language: 'zh', extra: '' },
         },
     },
     video: {
@@ -130,6 +135,15 @@ export const MEDIA_DEFAULTS = {
             openai: { base: '', key: '', model: 'sora-2', size: '1280x720', seconds: '4', extra: '' },
             // 自建 ComfyUI：workflow 是「导出 (API)」的 JSON；direct='1' 表示浏览器直连，默认经酒馆后端转发
             comfyui: { base: 'http://127.0.0.1:8188', key: '', model: '', size: '832x480', seconds: '5', extra: '', workflow: '', direct: '' },
+            ark: { base: 'https://ark.cn-beijing.volces.com/api/v3', key: '', model: 'doubao-seedance-2-0-fast-260128', size: '720p', seconds: '5', extra: '' },
+            minimax: { base: 'https://api.minimax.cn', key: '', model: 'MiniMax-Hailuo-2.3', size: '768P', seconds: '6', extra: '' },
+            dashscope: { base: 'https://dashscope.aliyuncs.com', key: '', model: 'wan2.7-t2v', size: '720p', seconds: '5', extra: '' },
+            veo: { base: 'https://generativelanguage.googleapis.com', key: '', model: 'veo-3.1-fast-generate-preview', size: '720p', seconds: '8', extra: '' },
+            zhipu: { base: 'https://open.bigmodel.cn/api/paas/v4', key: '', model: 'cogvideox-3', size: '1920x1080', seconds: '5', extra: '' },
+            siliconflow: { base: 'https://api.siliconflow.cn/v1', key: '', model: 'Wan-AI/Wan2.2-T2V-A14B', size: '1280x720', seconds: '', extra: '' },
+            luma: { base: 'https://agents.lumalabs.ai/v1', key: '', model: 'ray-3.2', size: '720p', seconds: '5', extra: '' },
+            kling: { base: 'https://api-beijing.klingai.com', key: '', model: 'kling-2.6', size: '16:9', seconds: '5', extra: '' },
+            vidu: { base: 'https://api.vidu.cn', key: '', model: 'viduq2', size: '720p', seconds: '5', extra: '' },
         },
     },
 };

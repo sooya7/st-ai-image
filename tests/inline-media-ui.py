@@ -412,6 +412,10 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     expect(page.locator('#st_ai_video_provider')).to_have_value('openai')
     expect(page.locator('#st_ai_video_provider optgroup option[value="runway"]')).to_have_count(1)
     expect(page.locator('#st_ai_video_provider option[value="agnes"]')).to_have_count(0)  # Agnes 并进了 /videos 兼容
+    for value in ('ark', 'minimax', 'dashscope', 'veo', 'zhipu', 'siliconflow', 'fal', 'comfyui'):
+        expect(page.locator(f'#st_ai_video_provider > option[value="{value}"]')).to_have_count(1)
+    for value in ('luma', 'kling', 'vidu', 'runway', 'replicate'):
+        expect(page.locator(f'#st_ai_video_provider optgroup option[value="{value}"]')).to_have_count(1)
     page.locator('#st_ai_video_quick_agnes').click()
     expect(page.locator('#st_ai_video_base')).to_have_value('https://apihub.agnes-ai.com/v1')
     expect(page.locator('#st_ai_video_size')).to_have_value('720P')
@@ -585,8 +589,27 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     assert [nai['parameters']['width'], nai['parameters']['height']] == [1216, 832] and nai['parameters']['v4_prompt']['caption']['base_caption'] == 'nai cat', nai
     saved = page.evaluate("JSON.parse(sessionStorage.getItem('fixture-state')).settings['st-ai-image']")
     assert saved['imageProfiles']['relay']['apiKey'] == 'fixture-image-key' and saved['apiKey'] == 'pst-fixture', saved.get('imageProfiles')
+    # 一键填写：中转类接口下才有；先把当前配置存成 API 预设，再填上这家的地址和模型，Key 清空
+    expect(page.locator('#st_gpt_image_quick')).to_be_hidden()
+    page.locator('#st_gpt_image_provider').select_option('openai')
+    expect(page.locator('#st_gpt_image_quick')).to_be_visible()
+    page.locator('#st_gpt_image_quick button', has_text='智谱 CogView').click()
+    expect(page.locator('#st_gpt_image_api_base')).to_have_value('https://open.bigmodel.cn/api/paas/v4')
+    expect(page.locator('#st_gpt_image_model')).to_have_value('cogview-4-250304')
+    expect(page.locator('#st_gpt_image_api_key')).to_have_value('')
+    presets = page.evaluate("JSON.parse(localStorage.getItem('st-ai-image_presets') || '{}')")
+    auto = [v for k, v in presets.items() if k.startswith('自动保存')]
+    assert auto and auto[0]['apiKey'] == 'fixture-image-key' and auto[0]['apiBase'] == origin + '/mock', presets
+    # 原生接口：选 MiniMax 就换成它的地址、Key 叫法和尺寸
+    page.locator('#st_gpt_image_provider').select_option('minimax')
+    expect(page.locator('#st_gpt_image_api_base')).to_have_value('https://api.minimax.cn')
+    expect(page.locator('#st_gpt_image_api_key_label')).to_have_text('MiniMax API Key')
+    expect(page.locator('#st_gpt_image_quick')).to_be_hidden()
+    page.locator('#st_gpt_image_provider').select_option('pollinations')
+    expect(page.locator('#st_gpt_image_api_key_label')).to_contain_text('可留空')
+    page.locator('#st_gpt_image_provider').select_option('novelai')
     close_panel()
-    checks.append('Per-interface settings: fields, labels, hints and size options follow the chosen interface; each interface remembers its own address/key/model/size (relay-type ones share); NovelAI request (V4.5 body, Bearer token) and zip response decoded into an image')
+    checks.append('Per-interface settings: fields, labels, hints and size options follow the chosen interface; each interface remembers its own address/key/model/size (relay-type ones share); NovelAI request (V4.5 body, Bearer token) and zip response decoded into an image; one-click fill for OpenAI-compatible vendors saves the old config as an API preset first; native vendors (MiniMax, Pollinations) switch labels and defaults')
 
     # ---------- self-hosted: ComfyUI / SD WebUI through the tavern backend ----------
     comfy_image = json.dumps({

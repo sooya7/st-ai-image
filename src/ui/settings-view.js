@@ -81,9 +81,47 @@ const PROVIDER_UI = {
         base: ['WebUI 地址', 'http://127.0.0.1:7860'], model: '留空用 WebUI 当前选中的模型', sizes: SD_SIZES,
         params: 'txt2img 参数，例如 {"steps":28,"cfg_scale":6,"sampler_name":"DPM++ 2M"}。',
     },
+    minimax: {
+        hint: 'MiniMax 开放平台的 Key，允许浏览器直连。模型 image-01（image-01-live 只有国内）；宽高 512–2048。海外账号把地址改成 https://api.minimax.io。',
+        base: ['接口地址', 'https://api.minimax.cn'], key: ['MiniMax API Key', ''], model: 'image-01', sizes: ['1024x1024', '768x1344', '1344x768', '864x1152', '1152x864', '720x1280', '1280x720'],
+        params: '合并进请求体，例如 {"prompt_optimizer":true} 或 {"aspect_ratio":"16:9"}（写了比例就不按尺寸）。',
+    },
+    dashscope: {
+        hint: '阿里云百炼的 Key，允许浏览器直连。万相（wan2.2-t2i-flash 等）是异步任务；qwen-image 系列同步出图，尺寸只收 1328x1328、1664x928、928x1664、1472x1104、1104x1472。国际站把地址改成 https://dashscope-intl.aliyuncs.com，Key 分地域。',
+        base: ['接口地址', 'https://dashscope.aliyuncs.com'], key: ['百炼 API Key', 'sk-...'], model: 'wan2.2-t2i-flash',
+        sizes: ['1024x1024', '768x1344', '1344x768', '1328x1328', '1664x928', '928x1664', '1472x1104', '1104x1472'],
+        params: '合并进 parameters，例如 {"prompt_extend":true,"seed":42}。',
+    },
+    stability: {
+        hint: 'Stability AI 官方接口，允许浏览器直连。模型栏填 core / ultra，或 sd3.5-large / sd3.5-large-turbo / sd3.5-medium；尺寸按比例换算成最接近的 aspect_ratio。请求是表单，不能走酒馆代理。',
+        base: ['接口地址', 'https://api.stability.ai'], key: ['Stability API Key', 'sk-...'], model: 'core', sizes: ['1024x1024', '1216x832', '832x1216', '1344x768', '768x1344', '1536x640', '640x1536'],
+        params: '作为表单字段附加，例如 {"style_preset":"anime","seed":42}。',
+    },
+    pollinations: {
+        hint: '免费生图，不填 Key 也能用（官方文档说要 Key，2026-09-28 实测匿名仍可用，不保证一直能用）。有 Key 就填上，排队更快。模型留空用默认，点刷新能拉模型列表。',
+        base: ['接口地址', 'https://gen.pollinations.ai'], key: ['Pollinations Key（可留空）', 'sk_...'], model: '留空用默认模型', sizes: SD_SIZES,
+        params: '附加到链接参数里，例如 {"enhance":"true"}。',
+    },
+    horde: {
+        hint: '众包的免费算力（aihorde.net），不填 Key 用匿名身份，排队可能很久；注册拿 Key 并贡献算力后会快很多。模型留空由 worker 决定，点刷新能按在线 worker 数拉模型列表。宽高会取整到 64 的倍数。',
+        base: ['接口地址', 'https://aihorde.net'], key: ['AI Horde Key（可留空）', '留空用匿名 0000000000'], model: '留空不指定', sizes: ['512x768', '768x512', '512x512', '832x1216', '1216x832', '1024x1024'],
+        params: '合并进请求体；采样参数写在 params 里，例如 {"params":{"steps":30,"sampler_name":"k_dpmpp_2m"}}。',
+    },
     fal: { hint: 'fal 队列接口。', base: ['API 地址（留空用官方）', 'https://queue.fal.run'], key: ['fal Key', ''], model: 'fal-ai/flux/dev（从模型页面复制路径）', sizes: null, params: '合并进 input，尺寸等按模型文档填。' },
     replicate: { hint: 'Replicate 预测接口。只允许 localhost 打开的酒馆直连，TauriTavern 里用不了。', base: ['API 地址（留空用官方）', 'https://api.replicate.com/v1'], key: ['Replicate API Token', 'r8_...'], model: 'owner/name 或 owner/name:version', sizes: null, params: '合并进 input，尺寸等按模型文档填。' },
 };
+
+/** 兼容 OpenAI 协议的各家：点一下填好地址、模型和参数（Key 要换成这家的）。 */
+const QUICK_FILL = [
+    ['OpenAI 官方', { imageProvider: 'openai', apiBase: 'https://api.openai.com/v1', model: 'gpt-image-2', size: '1024x1024', imageParams: '' }],
+    ['火山即梦 Seedream', { imageProvider: 'openai', apiBase: 'https://ark.cn-beijing.volces.com/api/v3', model: 'doubao-seedream-4-0-250828', size: 'auto', imageParams: '{"size":"2K","watermark":false,"response_format":"b64_json"}' }],
+    ['智谱 CogView', { imageProvider: 'openai', apiBase: 'https://open.bigmodel.cn/api/paas/v4', model: 'cogview-4-250304', size: '1024x1024', imageParams: '' }],
+    ['硅基流动', { imageProvider: 'openai', apiBase: 'https://api.siliconflow.cn/v1', model: 'Kwai-Kolors/Kolors', size: 'auto', imageParams: '{"image_size":"1024x1024"}' }],
+    ['xAI Grok', { imageProvider: 'openai', apiBase: 'https://api.x.ai/v1', model: 'grok-imagine-image-2.0', size: 'auto', imageParams: '{"response_format":"b64_json"}' }],
+    ['Together', { imageProvider: 'openai', apiBase: 'https://api.together.xyz/v1', model: 'black-forest-labs/FLUX.1-schnell', size: 'auto', imageParams: '{"width":1024,"height":1024,"steps":4,"response_format":"base64"}' }],
+    ['Recraft', { imageProvider: 'openai', apiBase: 'https://external.api.recraft.ai/v1', model: 'recraftv3', size: '1024x1024', imageParams: '{"response_format":"b64_json"}' }],
+    ['OpenRouter', { imageProvider: 'chat', apiBase: 'https://openrouter.ai/api/v1', model: 'google/gemini-2.5-flash-image', size: 'auto', imageParams: '' }],
+];
 
 const uiFor = (provider) => ({ ...PROVIDER_UI.relay, ...PROVIDER_UI[provider] });
 
@@ -159,6 +197,32 @@ export async function bindSettingsForm(onChange) {
     fillForm(settings);
     renderPresetOptions();
     renderModelOptions([]);
+
+    // 一键填写：先把当前这组存成 API 预设（有地址和 Key 才存），再填上这家的地址、模型、参数，Key 清空等你填
+    const quick = qs('#st_gpt_image_quick');
+    if (quick && !quick.firstChild) {
+        quick.append(el('span', { class: 'st_ai_speech_hint', text: '一键填写：' }), ...QUICK_FILL.map(([name, values]) => el('button', {
+            type: 'button', class: 'st_ai_btn st_ai_library_btn', text: name, title: `填上 ${name} 的地址和常用模型；当前配置会先存成 API 预设`,
+            onclick: async () => {
+                await flushPending();
+                const current = await getSettings();
+                let savedAs = '';
+                if (current.apiBase && current.apiKey && current.apiBase !== values.apiBase) {
+                    const exists = Object.values(getPresets()).some((p) => p.apiBase === current.apiBase && p.apiKey === current.apiKey);
+                    if (!exists) {
+                        savedAs = `自动保存 ${(() => { try { return new URL(current.apiBase).host; } catch { return current.apiBase; } })()}`;
+                        upsertPreset(savedAs, current);
+                        renderPresetOptions();
+                    }
+                }
+                const sameVendor = current.apiBase === values.apiBase;
+                await saveSettings({ ...switchImageProvider(current, values.imageProvider), ...values, apiKey: sameVendor ? current.apiKey : '' });
+                fillForm(await getSettings());
+                onChange?.('imageProvider');
+                notify.success(`已填好 ${name}，${sameVendor ? '' : '再填上这家的 Key；'}${savedAs ? `原来的配置存成了预设「${savedAs}」` : ''}`.replace(/[，；]$/, ''));
+            },
+        })));
+    }
 
     const commit = async (key, value) => {
         await updateSetting(key, value);

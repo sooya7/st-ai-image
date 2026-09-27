@@ -16,6 +16,7 @@ const pick = (img) => {
     if (typeof img === 'string') return img;
     if (img.b64_json) return `data:image/png;base64,${img.b64_json}`;
     if (img.url) return img.url;
+    if (img.image_url?.url) return img.image_url.url; // OpenRouter：message.images[].image_url.url
     return null;
 };
 
@@ -116,6 +117,15 @@ export async function callImageAPI(prompt, { signal, onProgress } = {}) {
         }, fullPrompt, negative, { signal });
     }
 
+    // 原生接口的各家（vendors.js）：负面提示词单独给，不拼进描述
+    if (VENDOR_IMAGE.has(s.imageProvider)) {
+        const { generateMedia } = await import('../media/client.js');
+        const result = await generateMedia('image', {
+            provider: s.imageProvider, base: s.apiBase, key: s.apiKey, model: s.model, size: s.size, extra: s.imageParams || '{}', negative, timeout: s.imageTimeout,
+        }, fullPrompt, { signal, onProgress: (text) => onProgress?.({ attempt: 1, total: 1, method: `${s.imageProvider} ${text || ''}`.trim(), errors: 0 }) });
+        return result.url;
+    }
+
     if (s.imageProvider && s.imageProvider !== 'auto') {
         const { generateMedia } = await import('../media/client.js');
         const result = await generateMedia('image', {
@@ -172,6 +182,16 @@ export async function callImageAPI(prompt, { signal, onProgress } = {}) {
     throw new Error(`无法生成图片。${errors[0] || '请检查 API 配置和模型名称'}`);
 }
 
+/** 走 vendors.js 原生适配器的生图服务。 */
+const VENDOR_IMAGE = new Set(['minimax', 'dashscope', 'stability', 'pollinations', 'horde']);
+
+/** 没有「列模型」接口的服务给一份常用模型；Pollinations、AI Horde 有公开列表就现拉。 */
+const STATIC_MODELS = {
+    minimax: ['image-01', 'image-01-live'],
+    dashscope: ['wan2.2-t2i-flash', 'wan2.2-t2i-plus', 'wan2.5-t2i-preview', 'qwen-image', 'qwen-image-plus', 'qwen-image-max'],
+    stability: ['core', 'ultra', 'sd3.5-large', 'sd3.5-large-turbo', 'sd3.5-medium'],
+};
+
 const activeWorkflow = (s) => {
     const lib = readWorkflowLibrary(s.comfyWorkflows, s.comfyWorkflowId, s.comfyWorkflow);
     return lib.items[lib.active];
@@ -196,6 +216,18 @@ export async function fetchModelList() {
         return (Array.isArray(list) ? list : []).map((m) => (typeof m === 'string' ? { id: m, name: m } : { id: m.value, name: m.text || m.value })).filter((m) => m.id);
     }
     if (s.imageProvider === 'novelai') return (await import('./novelai.js')).NAI_MODELS;
+    if (STATIC_MODELS[s.imageProvider]) return STATIC_MODELS[s.imageProvider].map((id) => ({ id, name: id }));
+    if (s.imageProvider === 'pollinations' || s.imageProvider === 'horde') {
+        const url = s.imageProvider === 'horde' ? `${String(s.apiBase || 'https://aihorde.net').replace(/\/+$/, '')}/api/v2/status/models?type=image`
+            : `${String(s.apiBase || 'https://gen.pollinations.ai').replace(/\/+$/, '')}/image/models`;
+        const resp = await apiFetch(url, {});
+        if (!resp.ok) throw new Error(`读取模型列表失败 HTTP ${resp.status}`);
+        const list = await resp.json();
+        // Horde 按在线 worker 数排序，人多的排前面（排队快）
+        return (Array.isArray(list) ? list : [])
+            .map((m) => (typeof m === 'string' ? { id: m, name: m } : { id: m.name || m.id, name: m.count ? `${m.name}（${m.count} 个 worker）` : (m.name || m.id), count: m.count || 0 }))
+            .filter((m) => m.id).sort((a, b) => (b.count || 0) - (a.count || 0));
+    }
     if (imageKeyMissing(s)) throw new Error('请先填写 API Key');
     if (!s.apiBase) throw new Error('请先填写 API Base URL');
 
