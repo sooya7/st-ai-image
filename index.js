@@ -95,7 +95,7 @@ function bindImageActions() {
         const prompt = wrapper?.dataset.prompt || btn.dataset.prompt || '';
         if (!wrapper || !prompt) return;
         const s = await getSettings();
-        if (!s.apiKey) return notify.error('请先在设置中填写 API Key');
+        if (!s.apiKey) return notify.error('请先在面板的「图片」页填写 API Key');
 
         // 已入库的正文图：重新生成并把新标记写回聊天记录，刷新后仍然在
         if (wrapper.dataset.historyId) {
@@ -140,7 +140,7 @@ function bindInlineGenerate() {
         const prompt = btn.dataset.prompt;
         if (!prompt) return;
         const s = await getSettings();
-        if (!s.apiKey) return notify.error('请先在设置中填写 API Key');
+        if (!s.apiKey) return notify.error('请先在面板的「图片」页填写 API Key');
 
         const messageId = btn.dataset.messageId === '' ? null : Number(btn.dataset.messageId);
         const originalTag = btn.dataset.originalTag || `[image]${prompt}[/image]`;

@@ -173,9 +173,13 @@
 
 /* 提示词页 */
 .st_ai_prompt_section { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
-.st_ai_prompt_section_head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.st_ai_prompt_section_head h4 { margin: 0; font-size: 13px; color: rgba(255, 255, 255, 0.9); overflow-wrap: anywhere; }
-.st_ai_prompts_form .st_ai_prompt_textarea_field textarea { max-height: 320px; }
+.st_ai_prompt_details > summary { cursor: pointer; color: rgba(255, 255, 255, 0.7); font-size: 12px; padding: 2px 0; }
+.st_ai_prompt_details[open] > summary { margin-bottom: 8px; }
+.st_ai_prompt_details .st_ai_prompt_textarea_field textarea { max-height: 320px; }
+.st_ai_prompt_actions { align-items: flex-start; margin-top: 6px; }
+/* 功能页里的分段标题（图片页：接口与参数；各页：AI 自动标签） */
+.st_ai_section_title { margin: 0; font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.9); }
+.st_ai_tab_content[data-tab="generate"] > .st_ai_section_title { margin: 12px 16px 0; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 .st_ai_media_warning:empty { display: none; }
 
 /* 正文里的语音 / 视频：与内联生图按钮同一套配色 */

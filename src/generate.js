@@ -21,7 +21,7 @@ export async function generateImage(prompt) {
     const clean = String(prompt ?? '').trim();
     if (!clean) { notify.warn('请输入图片描述'); return null; }
     const s = await getSettings();
-    if (!s.apiKey) { notify.error('请先在设置中填写 API Key'); return null; }
+    if (!s.apiKey) { notify.error('请先在面板的「图片」页填写 API Key'); return null; }
 
     if (currentRequest) { notify.warn('已有图片任务，请等待完成，避免重复提交'); return null; }
     const controller = new AbortController();

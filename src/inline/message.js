@@ -64,7 +64,7 @@ export async function saveInlinePrompt(wrapper, newPrompt) {
  */
 export async function regenerateInlineImageInMessage(wrapper, newPrompt) {
     const s = await getSettings();
-    if (!s.apiKey) { notify.error('请先在设置中填写 API Key'); return false; }
+    if (!s.apiKey) { notify.error('请先在面板的「图片」页填写 API Key'); return false; }
     if (!wrapper) return false;
 
     const messageId = getMessageIdFromElement(wrapper);

@@ -254,7 +254,7 @@ def main():
         checks.append(f'Confirmed old header bug on real ST: duplicate X-CSRF-Token → HTTP {status[0]}, single header → {status[1]}')
 
         # Image: generate inline and save to gallery (uses the fixed CSRF headers).
-        open_tab('settings')
+        open_tab('generate')
         page.locator('#st_gpt_image_provider').select_option('openai')
         page.locator('#st_gpt_image_api_base').fill(mock_base)
         page.locator('#st_gpt_image_api_key').fill('real-st-image-key')

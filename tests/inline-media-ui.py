@@ -391,7 +391,7 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     page.locator('#st_ai_video_key').fill('fixture-video-key')
     page.locator('#st_ai_video_proxy').check()
     page.wait_for_timeout(700)
-    assert page.locator('#st_ai_video_panel button').count() == 0
+    assert page.locator('#st_ai_video_panel .st_ai_media_gen, #st_ai_video_panel button:has-text("生成")').count() == 0  # 只有恢复默认，没有生成
     close_panel()
     video_btn = mes(1).locator('.st_ai_media_video .st_ai_media_gen')
     video_btn.click()
@@ -435,32 +435,37 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     assert raw(3).count('src=') == 1
     checks.append('Regenerate swaps in a new file for that tag only')
 
-    # ---------- toggles ----------
-    open_tab('prompts')
-    for section in ('image', 'speech', 'video'):
-        expect(page.locator(f'#st_ai_prompt_{section}_text')).to_be_visible()
-    assert page.locator('#st_ai_speech_auto_inject').count() == 0
+    # ---------- toggles: each feature page holds its own AI-tag prompt ----------
+    assert [t.strip() for t in page.locator('.st_ai_tab').all_inner_texts()] == ['图片', '配音', '视频', '图库']
+    open_tab('speech')
+    expect(page.locator('#st_ai_prompt_speech_auto_inject')).to_be_visible()  # 配音的自动标签就在配音页
+    expect(page.locator('#st_ai_prompt_speech_text')).to_be_hidden()  # 提示词默认折叠
+    assert page.locator('#st_ai_speech_panel #st_ai_prompt_image_auto_inject, #st_ai_speech_panel #st_ai_prompt_video_auto_inject').count() == 0
     page.locator('#st_ai_prompt_speech_auto_inject').check()
     page.wait_for_function("(fixture.prompts['st-ai-image-voice'] || '').includes('什么时候加')")
+    page.locator('#st_ai_prompt_speech_details > summary').click()
     page.locator('#st_ai_prompt_speech_text').fill('[voice] 自定义规则')
     page.wait_for_function("fixture.prompts['st-ai-image-voice'] === '[voice] 自定义规则'")
-    # 在语音设置页改别的字段，不能把提示词页刚存的开关和文本冲掉
-    open_tab('speech')
+    # 同一页里改别的字段，不能把刚存的开关和提示词冲掉
     old_voice = page.locator('#st_ai_speech_voice').input_value()
     page.locator('#st_ai_speech_voice').fill('nova-check')
     page.wait_for_timeout(600)
     page.locator('#st_ai_speech_voice').fill(old_voice)
     page.wait_for_timeout(600)
     assert page.evaluate("fixture.prompts['st-ai-image-voice']") == '[voice] 自定义规则'
-    open_tab('prompts')
     page.locator('#st_ai_prompt_speech_reset').click()
     page.wait_for_function("(fixture.prompts['st-ai-image-voice'] || '').includes('什么时候加')")
     page.locator('#st_ai_prompt_speech_auto_inject').uncheck()
     page.wait_for_function("fixture.prompts['st-ai-image-voice'] === ''")
+    open_tab('video')
+    expect(page.locator('#st_ai_prompt_video_auto_inject')).to_be_visible()
+    open_tab('generate')
+    page.locator('#st_ai_prompt_image_auto_inject').scroll_into_view_if_needed()
     page.locator('#st_ai_prompt_image_auto_inject').uncheck()
     page.wait_for_function("fixture.prompts['st-ai-image'] === ''")
     page.locator('#st_ai_prompt_image_auto_inject').check()
     page.wait_for_function("(fixture.prompts['st-ai-image'] || '').includes('[image]')")
+    expect(page.locator('#st_gpt_image_api_base')).to_be_attached()  # 图片接口设置也在图片页
     open_tab('speech')
     page.locator('#st_ai_speech_enabled').uncheck()
     page.wait_for_timeout(300)
@@ -471,10 +476,10 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     open_tab('speech')
     page.locator('#st_ai_speech_enabled').check()
     close_panel()
-    checks.append('Prompts tab edits image/voice/video prompts (inject, custom text, reset) without clobbering by the voice tab; disabling voice leaves new tags as text while generated players still render')
+    checks.append('One page per feature (图片/配音/视频/图库): each page holds its own AI-tag toggle and folded prompt (inject, custom text, reset) without being clobbered by the same page; disabling voice leaves new tags as text while generated players still render')
 
-    # ---------- image protocols (unchanged image UI) ----------
-    open_tab('settings')
+    # ---------- image protocols (settings now live on the image page) ----------
+    open_tab('generate')
     page.locator('#st_gpt_image_provider').select_option('openai')
     page.locator('#st_gpt_image_api_base').fill(origin + '/mock')
     page.locator('#st_gpt_image_api_key').fill('fixture-image-key')
@@ -486,7 +491,7 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     expect(page.locator('#st_gpt_gen_result img.st_gpt_gen_img')).to_have_count(1, timeout=10000)
     call = posts('/images/generations')[-1]
     assert call['path'] == '/mock/v1/images/generations' and call['auth'] == 'Bearer fixture-image-key'
-    open_tab('settings')
+    open_tab('generate')
     page.locator('#st_gpt_image_provider').select_option('gemini')
     page.locator('#st_gpt_image_model').fill('gemini-image-x')
     page.wait_for_timeout(700)
@@ -495,7 +500,7 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     expect(page.locator('#st_gpt_gen_result img.st_gpt_gen_img')).to_have_count(1, timeout=10000)
     call = posts(':generateContent')[-1]
     assert call['path'] == '/mock/v1beta/models/gemini-image-x:generateContent' and call['goog'] == 'fixture-image-key' and call['auth'] is None
-    open_tab('settings')
+    open_tab('generate')
     page.locator('#st_gpt_image_provider').select_option('auto')
     page.locator('#st_gpt_image_model').fill('image-model-x')
     page.wait_for_timeout(700)
@@ -521,21 +526,18 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
         mes(1).scroll_into_view_if_needed()
         box = mes(1).locator('video').bounding_box()
         assert box['x'] >= 0 and box['x'] + box['width'] <= width, box
-        open_tab('video')
-        assert page.locator('#st_ai_video_panel').evaluate('(n) => n.scrollWidth <= n.clientWidth + 1')
-        page.screenshot(path=str(output / f'mobile-{width}.png'))
-        open_tab('speech')
-        assert page.locator('#st_ai_speech_panel').evaluate('(n) => n.scrollWidth <= n.clientWidth + 1')
-        page.screenshot(path=str(output / f'mobile-{width}-speech.png'))
-        open_tab('prompts')
-        assert page.locator('#st_ai_prompts_panel').evaluate('(n) => n.scrollWidth <= n.clientWidth + 1')
+        for tab in ('video', 'speech', 'generate'):
+            open_tab(tab)
+            panel = page.locator(f'.st_ai_tab_content[data-tab="{tab}"]')
+            assert panel.evaluate('(n) => n.scrollWidth <= n.clientWidth + 1'), tab
+            page.screenshot(path=str(output / f'mobile-{width}-{tab}.png'))
         bar = page.locator('.st_ai_float_tabs').bounding_box()
         for tab in page.locator('.st_ai_tab').all():
             tb = tab.bounding_box()
             assert tb['x'] >= bar['x'] - 1 and tb['x'] + tb['width'] <= bar['x'] + bar['width'] + 1, (tab.text_content(), tb, bar)
-        page.screenshot(path=str(output / f'mobile-{width}-prompts.png'))
+        assert bar['height'] < 50, bar  # 四个标签一行放得下
         close_panel()
-    checks.append('390px / 320px: embedded video, settings and prompts tabs (all six tab buttons) fit without horizontal overflow')
+    checks.append('390px / 320px: embedded video and the image/voice/video pages fit without horizontal overflow; the four tabs stay on one row')
 
     page.wait_for_timeout(500)
     assert page.evaluate('mediaStats.timers.size') == 0

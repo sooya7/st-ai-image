@@ -8,6 +8,7 @@ import { PROVIDERS, apiRoot, extraParams } from '../media/providers.js';
 import { isFishEndpoint } from '../media/voice-presets.js';
 import { getSettings, saveSettings } from '../settings.js';
 import { debounce, el } from './dom.js';
+import { buildPromptSection } from './prompt-section.js';
 import { createVoiceControls } from './voice-settings.js';
 
 const SPEC = {
@@ -51,7 +52,8 @@ export async function mountMediaSettings(root, section) {
     if (!root || root.dataset.mounted) return;
     root.dataset.mounted = '1';
     const spec = SPEC[section];
-    const state = readMediaSettings(await getSettings(), section);
+    const settings = await getSettings();
+    const state = readMediaSettings(settings, section);
     const id = (name) => `st_ai_${section}_${name}`;
     const field = (label, node, extra = []) => el('div', { class: 'st_ai_field', dataset: { field: node.dataset.key || '' } }, [el('label', { for: node.id, text: label }), node, ...extra]);
     const checkbox = (name, text) => {
@@ -95,7 +97,7 @@ export async function mountMediaSettings(root, section) {
         ...profileFields,
         proxy.node,
         timeout ? field('最长等待（秒）', timeout) : null,
-        el('p', { class: 'st_ai_speech_hint', text: `让 AI 自动写${spec.title}标签的系统提示词在「提示词」页。` }),
+        buildPromptSection(section, settings),
         el('p', { class: 'st_ai_speech_hint', text: '密钥与图片 API Key 一样保存在酒馆设置里。停止等待不会取消服务端任务，生成失败不会自动重试。' }),
         warning,
     ]);
@@ -128,7 +130,7 @@ export async function mountMediaSettings(root, section) {
     const save = async ({ rescan = false } = {}) => {
         validate();
         const current = await getSettings();
-        // 提示词开关和文本归提示词页管，从最新存档里取，不用本页打开时的旧副本覆盖
+        // 提示词开关和文本由本页底部的提示词区块单独保存，从最新存档里取，不用本页打开时的旧副本覆盖
         const { autoInject, prompt } = readMediaSettings(current, section);
         await saveSettings({ ...current, [section]: { ...JSON.parse(JSON.stringify(state)), autoInject, prompt } });
         registerSystemPrompt();

@@ -23,12 +23,10 @@ export const PANEL_HTML = `
 <div id="st_ai_float_panel" class="st_ai_hidden">
     <div class="st_ai_float_header">
         <div class="st_ai_float_tabs">
-            <button type="button" class="st_ai_tab active" data-tab="generate"><i class="fa-solid fa-wand-magic-sparkles"></i> 生图</button>
-            <button type="button" class="st_ai_tab" data-tab="speech"><i class="fa-solid fa-volume-high"></i> 语音</button>
+            <button type="button" class="st_ai_tab active" data-tab="generate"><i class="fa-solid fa-image"></i> 图片</button>
+            <button type="button" class="st_ai_tab" data-tab="speech"><i class="fa-solid fa-volume-high"></i> 配音</button>
             <button type="button" class="st_ai_tab" data-tab="video"><i class="fa-solid fa-video"></i> 视频</button>
-            <button type="button" class="st_ai_tab" data-tab="prompts"><i class="fa-solid fa-comment-dots"></i> 提示词</button>
             <button type="button" class="st_ai_tab" data-tab="gallery"><i class="fa-solid fa-images"></i> 图库</button>
-            <button type="button" class="st_ai_tab" data-tab="settings"><i class="fa-solid fa-gear"></i> 设置</button>
         </div>
         <button type="button" id="st_ai_float_close" class="st_ai_btn" title="关闭面板" aria-label="关闭面板"><i class="fa-solid fa-xmark"></i></button>
     </div>
@@ -60,23 +58,7 @@ export const PANEL_HTML = `
         <div id="st_gpt_gen_result" class="st_ai_gen_result">
             <div class="st_ai_gen_placeholder">生成的图片将显示在这里</div>
         </div>
-    </div>
-
-    <div class="st_ai_tab_content" data-tab="speech" id="st_ai_speech_panel"></div>
-    <div class="st_ai_tab_content" data-tab="video" id="st_ai_video_panel"></div>
-    <div class="st_ai_tab_content" data-tab="prompts" id="st_ai_prompts_panel"></div>
-
-    <div class="st_ai_tab_content" data-tab="gallery">
-        <div class="st_ai_gallery_header">
-            <span id="st_gpt_gallery_count" class="st_ai_gallery_count">0 张图片</span>
-            <button type="button" id="st_gpt_image_clear_history" class="st_ai_btn"><i class="fa-solid fa-trash"></i> 清空</button>
-        </div>
-        <div id="st_gpt_image_history_list" class="st_ai_gallery_grid">
-            <div class="st_ai_image_empty">暂无生成记录</div>
-        </div>
-    </div>
-
-    <div class="st_ai_tab_content" data-tab="settings">
+        <h4 class="st_ai_section_title">接口与参数</h4>
         <div class="st_ai_settings_form">
             <div class="st_ai_field">
                 <label>API 预设</label>
@@ -135,7 +117,6 @@ export const PANEL_HTML = `
                     <span>自动识别AI回复中的生图指令</span>
                 </label>
             </div>
-            <p class="st_ai_speech_hint">让 AI 自动写 [image] 标签的系统提示词在「提示词」页。</p>
             <div class="st_ai_field st_ai_prompt_textarea_field">
                 <label for="st_gpt_image_extra_prompt">额外生图提示词（追加到每次生图描述后面）</label>
                 <textarea id="st_gpt_image_extra_prompt" class="st_ai_textarea" rows="2" placeholder="例如: masterpiece, best quality, 8k, highly detailed"></textarea>
@@ -145,7 +126,22 @@ export const PANEL_HTML = `
                 <textarea id="st_gpt_image_negative_prompt" class="st_ai_textarea" rows="2" placeholder="例如: low quality, blurry, deformed, ugly"></textarea>
             </div>
         </div>
+        <div id="st_ai_image_prompt_panel" class="st_ai_settings_form"></div>
     </div>
+
+    <div class="st_ai_tab_content" data-tab="speech" id="st_ai_speech_panel"></div>
+    <div class="st_ai_tab_content" data-tab="video" id="st_ai_video_panel"></div>
+
+    <div class="st_ai_tab_content" data-tab="gallery">
+        <div class="st_ai_gallery_header">
+            <span id="st_gpt_gallery_count" class="st_ai_gallery_count">0 张图片</span>
+            <button type="button" id="st_gpt_image_clear_history" class="st_ai_btn"><i class="fa-solid fa-trash"></i> 清空</button>
+        </div>
+        <div id="st_gpt_image_history_list" class="st_ai_gallery_grid">
+            <div class="st_ai_image_empty">暂无生成记录</div>
+        </div>
+    </div>
+
 </div>`;
 
 /**

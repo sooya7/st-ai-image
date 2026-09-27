@@ -167,7 +167,7 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
         config.voice = resolveVoice({ type: info.voiceType, fallback: config.voice, presets: config.presets }).voice;
     }
     const blocked = !settings.enabled || !media.enabled ? `${LABEL[kind]}功能已在设置中关闭`
-        : !config.key.trim() ? `请先在 设置 → ${kind === 'audio' ? '语音' : '视频'} 里填写 API Key` : '';
+        : !config.key.trim() ? `请先在面板的「${kind === 'audio' ? '配音' : '视频'}」页填写 API Key` : '';
     if (blocked) {
         endTask(key);
         return notify.warn(blocked, TITLE[kind]);

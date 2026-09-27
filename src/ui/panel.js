@@ -6,12 +6,14 @@ import { EVENTS, on } from '../core/bus.js';
 import { log } from '../core/notify.js';
 import { bindDrag, resetDrag } from './drag.js';
 import { el, qs } from './dom.js';
+import { getSettings } from '../settings.js';
+import { buildPromptSection } from './prompt-section.js';
 import { bindSettingsForm } from './settings-view.js';
 import { activateTab } from './tabs.js';
 import { DIALOG_HTML, FALLBACK_BANNER_HTML, PANEL_HTML, PREVIEW_HTML, WAND_BUTTON_HTML, fromHtml } from './template.js';
 
 /** 这些设置一改，注入给 AI 的系统提示词就要重算。 */
-const PROMPT_KEYS = new Set(['enabled', 'preset']); // 提示词本身由提示词页直接重新注册
+const PROMPT_KEYS = new Set(['enabled', 'preset']); // 提示词区块自己会重新注册
 
 const panel = () => qs('#st_ai_float_panel');
 const dialog = () => qs('#st_ai_dialog');
@@ -97,6 +99,9 @@ export async function mountPanel({ onPromptSettingChanged } = {}) {
     await bindSettingsForm((key) => {
         if (PROMPT_KEYS.has(key)) onPromptSettingChanged?.();
     });
+    // 图片页底部的 AI 自动出图区块（配音/视频的在各自页里）
+    const promptRoot = qs('#st_ai_image_prompt_panel');
+    if (promptRoot && !promptRoot.firstChild) promptRoot.replaceChildren(buildPromptSection('image', await getSettings()));
 
     return panel();
 }
