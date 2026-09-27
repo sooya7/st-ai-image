@@ -109,6 +109,37 @@ Anima（circlestone-labs，2B 动漫模型）没有在线 API，走 ComfyUI：�
 - 以前的「额外提示词 / 负面提示词」会自动变成「默认」画师串。
 - 没有做的：预设封面图、分组、卡片网格选择、按角色卡绑定、提示词替换规则。
 
+## 服务一览
+
+「直连」指 TauriTavern 和网页版酒馆都能直接调用。「要代理」指只能在网页版酒馆里勾选「通过酒馆代理」（`config.yaml` 里 `enableCorsProxy: true`），TauriTavern 里不显示这类服务。
+
+2026-09-28 的验证方式：
+- 在 TauriTavern 里用假 Key 请求每一家的真实接口，都返回了对方的鉴权错误，说明跨域能通、请求被对方认了。
+- 要代理的几家，在网页版酒馆里经 `/proxy/` 用假 Key 测过，结果一样。
+- Pollinations 在 TauriTavern 里真的生成了一张图。
+- 其余服务都没有用真 Key 出过成品。
+
+| 类别 | 服务 | 接法 | 直连 | 验证 |
+| --- | --- | --- | --- | --- |
+| 图片 | OpenAI Images / Chat 生图 / Gemini / 旧版兼容 | 原有 | 视服务 | 之前已验证 |
+| 图片 | 火山即梦 Seedream、智谱 CogView、硅基流动、xAI、Together、Recraft、OpenRouter | 「一键填写」到 OpenAI 协议 | 是（火山见下） | 只查了跨域预检 |
+| 图片 | NovelAI | 原生（解 zip） | 是 | 假 Key 401 |
+| 图片 | MiniMax、阿里云百炼（万相异步 / Qwen-Image 同步）、Stability（表单） | 原生 | 是 | 假 Key 鉴权错误 |
+| 图片 | Pollinations（免费） | 原生，没 Key 走 `image.pollinations.ai`，有 Key 走 `gen.pollinations.ai` | 是 | **真实出图** |
+| 图片 | AI Horde（免费，众包） | 原生异步，匿名 Key `0000000000` | 是 | 只测了接口格式 |
+| 配音 | OpenAI 兼容（Fish compat、硅基流动等） | 原有 | 视服务 | 之前已验证 |
+| 配音 | MiniMax（hex 音频）、阿里云百炼（Qwen-TTS / CosyVoice，给链接）、Gemini TTS（WAV / PCM） | 原生 | 是 | 假 Key 鉴权错误 |
+| 配音 | 豆包语音（火山 v1）、GPT-SoVITS（本地 api_v2） | 原生 | **要代理** | 豆包经代理假 Key 报错；GPT-SoVITS 没测 |
+| 视频 | /videos 兼容（Agnes 等）、fal、ComfyUI | 原有 | 是 | 之前已验证 |
+| 视频 | 即梦 Seedance、海螺（V1 / H3 的 V2）、通义万相（2.7 新参数 / 2.6 及以前像素尺寸）、Veo、智谱、硅基流动、Luma（新版 API） | 原生异步 | 是 | 假 Key 鉴权错误 |
+| 视频 | 可灵（API Key 新版 / AK:SK 旧版 JWT）、Vidu | 原生异步 | **要代理** | 经代理假 Key 报错 |
+
+几点说明：
+- **火山方舟**：报错回包不带跨域头，所以 Key 不对时浏览器只能看到「网络请求失败」，扩展会提示「多半是 Key 不对、模型没开通或余额不足」。用真 Key 时成功的回包有没有跨域头还没验证。
+- **结果文件**：多数服务返回的结果链接会过期（10 分钟到 24 小时不等），生成完会马上下载，存进酒馆。下载要结果所在的 CDN 允许跨域：百炼、MiniMax 语音、硅基流动的 OSS 允许；火山、MiniMax 视频、智谱的没测出来。下载失败时，网页版酒馆可以开代理，TauriTavern 里只能换服务。
+- **一键填写**：会先把当前地址和 Key 存成「自动保存 <域名>」的 API 预设，然后清空 Key，免得把中转站的 Key 发给别家。
+- 各家的请求格式按 2026-09-28 的官方文档写。代码在 `src/media/vendors.js`，框架在 `client.js` 的 `runVendorJob`。
+
 ## 设置（插件面板 → 配音 / 视频）
 
 每个服务一套独立的地址、密钥、模型，切换服务不会串。设置和密钥与原有图片 API Key 一样保存在酒馆的 `settings.json`（`extension_settings["st-ai-image"]`）。
@@ -164,7 +195,7 @@ enableCorsProxy: true
 
 本机 Node.js 24.14.1、Chromium 147.0.7727.15、SillyTavern 1.18.0。
 
-**单元测试** `npm test`：95/95 通过（2026-09-28）（标签解析/定位/改写、合并正则、协议请求、代理改写、文件头识别、视频任务轮询等）。
+**单元测试** `npm test`：114/114 通过（2026-09-28）（标签解析/定位/改写、合并正则、协议请求、代理改写、文件头识别、视频任务轮询等）。
 
 **模拟宿主浏览器测试** `python tests/inline-media-ui.py --output <目录>`：18 组通过（2026-09-28）。模拟 ST 的 markdown 拆分、`updateMessageBlock`、`saveChat`、`saveSettingsDebounced`、`/api/files/upload`+CSRF，以及与真实 ST 一样不带 Content-Type 的 `/proxy/`。结果见 `docs/verification/inline-media-result.json`。
 
