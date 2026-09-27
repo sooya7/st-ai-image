@@ -371,11 +371,32 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     checks.append('Regenerate swaps in a new file for that tag only')
 
     # ---------- toggles ----------
+    open_tab('prompts')
+    for section in ('image', 'speech', 'video'):
+        expect(page.locator(f'#st_ai_prompt_{section}_text')).to_be_visible()
+    assert page.locator('#st_ai_speech_auto_inject').count() == 0
+    page.locator('#st_ai_prompt_speech_auto_inject').check()
+    page.wait_for_function("(fixture.prompts['st-ai-image-voice'] || '').includes('什么时候加')")
+    page.locator('#st_ai_prompt_speech_text').fill('[voice] 自定义规则')
+    page.wait_for_function("fixture.prompts['st-ai-image-voice'] === '[voice] 自定义规则'")
+    # 在语音设置页改别的字段，不能把提示词页刚存的开关和文本冲掉
     open_tab('speech')
-    page.locator('#st_ai_speech_auto_inject').check()
-    page.wait_for_function("(fixture.prompts['st-ai-image-voice'] || '').includes('[voice]')")
-    page.locator('#st_ai_speech_auto_inject').uncheck()
+    old_voice = page.locator('#st_ai_speech_voice').input_value()
+    page.locator('#st_ai_speech_voice').fill('nova-check')
+    page.wait_for_timeout(600)
+    page.locator('#st_ai_speech_voice').fill(old_voice)
+    page.wait_for_timeout(600)
+    assert page.evaluate("fixture.prompts['st-ai-image-voice']") == '[voice] 自定义规则'
+    open_tab('prompts')
+    page.locator('#st_ai_prompt_speech_reset').click()
+    page.wait_for_function("(fixture.prompts['st-ai-image-voice'] || '').includes('什么时候加')")
+    page.locator('#st_ai_prompt_speech_auto_inject').uncheck()
     page.wait_for_function("fixture.prompts['st-ai-image-voice'] === ''")
+    page.locator('#st_ai_prompt_image_auto_inject').uncheck()
+    page.wait_for_function("fixture.prompts['st-ai-image'] === ''")
+    page.locator('#st_ai_prompt_image_auto_inject').check()
+    page.wait_for_function("(fixture.prompts['st-ai-image'] || '').includes('[image]')")
+    open_tab('speech')
     page.locator('#st_ai_speech_enabled').uncheck()
     page.wait_for_timeout(300)
     load()
@@ -385,7 +406,7 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     open_tab('speech')
     page.locator('#st_ai_speech_enabled').check()
     close_panel()
-    checks.append('Auto-tag prompt injects/clears; disabling voice leaves new tags as text while generated players still render')
+    checks.append('Prompts tab edits image/voice/video prompts (inject, custom text, reset) without clobbering by the voice tab; disabling voice leaves new tags as text while generated players still render')
 
     # ---------- image protocols (unchanged image UI) ----------
     open_tab('settings')
@@ -438,8 +459,15 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
         open_tab('video')
         assert page.locator('#st_ai_video_panel').evaluate('(n) => n.scrollWidth <= n.clientWidth + 1')
         page.screenshot(path=str(output / f'mobile-{width}.png'))
+        open_tab('prompts')
+        assert page.locator('#st_ai_prompts_panel').evaluate('(n) => n.scrollWidth <= n.clientWidth + 1')
+        bar = page.locator('.st_ai_float_tabs').bounding_box()
+        for tab in page.locator('.st_ai_tab').all():
+            tb = tab.bounding_box()
+            assert tb['x'] >= bar['x'] - 1 and tb['x'] + tb['width'] <= bar['x'] + bar['width'] + 1, (tab.text_content(), tb, bar)
+        page.screenshot(path=str(output / f'mobile-{width}-prompts.png'))
         close_panel()
-    checks.append('390px / 320px: embedded video and settings tabs fit without horizontal overflow')
+    checks.append('390px / 320px: embedded video, settings and prompts tabs (all six tab buttons) fit without horizontal overflow')
 
     page.wait_for_timeout(500)
     assert page.evaluate('mediaStats.timers.size') == 0

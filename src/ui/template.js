@@ -26,6 +26,7 @@ export const PANEL_HTML = `
             <button type="button" class="st_ai_tab active" data-tab="generate"><i class="fa-solid fa-wand-magic-sparkles"></i> 生图</button>
             <button type="button" class="st_ai_tab" data-tab="speech"><i class="fa-solid fa-volume-high"></i> 语音</button>
             <button type="button" class="st_ai_tab" data-tab="video"><i class="fa-solid fa-video"></i> 视频</button>
+            <button type="button" class="st_ai_tab" data-tab="prompts"><i class="fa-solid fa-comment-dots"></i> 提示词</button>
             <button type="button" class="st_ai_tab" data-tab="gallery"><i class="fa-solid fa-images"></i> 图库</button>
             <button type="button" class="st_ai_tab" data-tab="settings"><i class="fa-solid fa-gear"></i> 设置</button>
         </div>
@@ -63,6 +64,7 @@ export const PANEL_HTML = `
 
     <div class="st_ai_tab_content" data-tab="speech" id="st_ai_speech_panel"></div>
     <div class="st_ai_tab_content" data-tab="video" id="st_ai_video_panel"></div>
+    <div class="st_ai_tab_content" data-tab="prompts" id="st_ai_prompts_panel"></div>
 
     <div class="st_ai_tab_content" data-tab="gallery">
         <div class="st_ai_gallery_header">
@@ -133,16 +135,7 @@ export const PANEL_HTML = `
                     <span>自动识别AI回复中的生图指令</span>
                 </label>
             </div>
-            <div class="st_ai_field">
-                <label class="st_ai_checkbox">
-                    <input type="checkbox" id="st_gpt_image_auto_inject_prompt">
-                    <span>AI 自动图文出图 (通过系统提示词注入)</span>
-                </label>
-            </div>
-            <div class="st_ai_field st_ai_prompt_textarea_field" id="st_ai_prompt_container">
-                <label for="st_gpt_image_system_prompt_text">自定义 AI 出图系统提示词</label>
-                <textarea id="st_gpt_image_system_prompt_text" class="st_ai_textarea" rows="4" placeholder="输入自定义提示 AI 出图的系统提示词..."></textarea>
-            </div>
+            <p class="st_ai_speech_hint">让 AI 自动写 [image] 标签的系统提示词在「提示词」页。</p>
             <div class="st_ai_field st_ai_prompt_textarea_field">
                 <label for="st_gpt_image_extra_prompt">额外生图提示词（追加到每次生图描述后面）</label>
                 <textarea id="st_gpt_image_extra_prompt" class="st_ai_textarea" rows="2" placeholder="例如: masterpiece, best quality, 8k, highly detailed"></textarea>

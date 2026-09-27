@@ -28,7 +28,8 @@
 | `src/inline/scanner.js` | 原扫描器，大正则里加入媒体标签（闭合用命名反向引用），注入配音/视频提示词 |
 | `src/st/files.js` | Blob → `/api/files/upload` |
 | `src/media/media-settings.js` | 语音/视频设置默认值，按服务分 profile，存 `extension_settings["st-ai-image"].speech/.video` |
-| `src/ui/media-settings-view.js` | 语音/视频设置页（第一次切过去才加载） |
+| `src/ui/media-settings-view.js` | 语音/视频设置页（第一次切过去才加载）；保存时不碰提示词字段 |
+| `src/ui/prompts-view.js` | 提示词页：图片/配音/视频三段系统提示词和注入开关，各带恢复默认 |
 | `src/media/providers.js`、`client.js` | 各服务请求构造、轮询、下载、酒馆 `/proxy/`、文件头识别（第一次生成时才加载） |
 
 生成后标签改写为 `[voice src="/user/files/…"]原台词[/voice]`，原文和 markdown 保留，刷新后由扫描器重新渲染成播放器。

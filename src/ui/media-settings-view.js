@@ -72,8 +72,6 @@ export async function mountMediaSettings(root, section) {
     const proxy = checkbox('proxy', '通过酒馆代理请求（需在酒馆 config.yaml 设置 enableCorsProxy: true 并重启）');
     const timeout = section === 'video'
         ? el('input', { id: id('timeout'), type: 'number', min: 60, max: 1800, step: 30, class: 'st_ai_input' }) : null;
-    const autoInject = checkbox('auto_inject', `让 AI 自动使用${spec.title}标签（通过系统提示词注入）`);
-    const prompt = el('textarea', { id: id('prompt'), class: 'st_ai_textarea', rows: 4 });
 
     const form = el('form', { class: 'st_ai_speech_form', onsubmit: (e) => e.preventDefault() }, [
         el('p', { class: 'st_ai_speech_hint', text: spec.usage }),
@@ -83,8 +81,7 @@ export async function mountMediaSettings(root, section) {
         ...profileFields,
         proxy.node,
         timeout ? field('最长等待（秒）', timeout) : null,
-        autoInject.node,
-        field(`${spec.title}标签系统提示词`, prompt),
+        el('p', { class: 'st_ai_speech_hint', text: `让 AI 自动写${spec.title}标签的系统提示词在「提示词」页。` }),
         el('p', { class: 'st_ai_speech_hint', text: '密钥与图片 API Key 一样保存在酒馆设置里。停止等待不会取消服务端任务，生成失败不会自动重试。' }),
         warning,
     ]);
@@ -101,8 +98,6 @@ export async function mountMediaSettings(root, section) {
         hint.textContent = spec.hints[state.provider] || '';
         proxy.input.checked = state.proxy;
         if (timeout) timeout.value = state.timeout;
-        autoInject.input.checked = state.autoInject;
-        prompt.value = state.prompt;
     };
 
     /** 只提示，不拦截保存：用户可能正在输入到一半。真正请求时还会再校验一次。 */
@@ -118,7 +113,9 @@ export async function mountMediaSettings(root, section) {
     const save = async ({ rescan = false } = {}) => {
         validate();
         const current = await getSettings();
-        await saveSettings({ ...current, [section]: JSON.parse(JSON.stringify(state)) });
+        // 提示词开关和文本归提示词页管，从最新存档里取，不用本页打开时的旧副本覆盖
+        const { autoInject, prompt } = readMediaSettings(current, section);
+        await saveSettings({ ...current, [section]: { ...JSON.parse(JSON.stringify(state)), autoInject, prompt } });
         registerSystemPrompt();
         if (rescan) scanBurst();
     };
@@ -136,8 +133,6 @@ export async function mountMediaSettings(root, section) {
         state.timeout = String(seconds);
         save();
     });
-    autoInject.input.addEventListener('change', () => { state.autoInject = autoInject.input.checked; save(); });
-    prompt.addEventListener('input', () => { state.prompt = prompt.value; saveSoon(); });
 
     fill();
     validate();

@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { buildRequest } from '../src/media/providers.js';
 import { generateMedia, pendingMediaCount, requestData } from '../src/media/client.js';
-import { mediaRequestConfig, readMediaSettings } from '../src/media/media-settings.js';
+import { DEFAULT_VOICE_PROMPT, mediaRequestConfig, readMediaSettings } from '../src/media/media-settings.js';
 
 const config = { provider: 'openai', model: 'tts-1', voice: 'alloy', key: 'test-only-placeholder', base: 'https://example.test/v1' };
 const blob = () => new Blob(['mock-audio'], { type: 'audio/mpeg' });
@@ -57,6 +57,13 @@ test('语音设置按服务隔离，缺字段/坏数据按默认补齐，未知�
     assert.equal(readMediaSettings({ speech: { provider: 'nope' } }, 'speech').provider, 'openai');
     const config = mediaRequestConfig({ ...media, proxy: true }, 'openai');
     assert.deepEqual([config.provider, config.voice, config.proxy], ['openai', 'nova', true]);
+});
+test('存档里原样的旧默认语音提示词换成新默认，用户改过的保留', () => {
+    const legacy = '## 语音标签' + String.fromCharCode(10) + '需要配音的角色台词用 [voice]台词[/voice] 包裹：只包裹角色说出口的原话，不包含动作、心理和旁白。每条回复最多 2 处，其余正文照常输出。';
+    assert.equal(readMediaSettings({ speech: { prompt: legacy } }, 'speech').prompt, DEFAULT_VOICE_PROMPT);
+    assert.match(DEFAULT_VOICE_PROMPT, /什么时候加/);
+    assert.equal(readMediaSettings({ speech: { prompt: legacy + ' 自定义' } }, 'speech').prompt, legacy + ' 自定义');
+    assert.equal(readMediaSettings({ speech: { prompt: '' } }, 'speech').prompt, '');
 });
 test('Azure SSML 的 xml:lang 取设置里的语言', () => {
     const request = buildRequest('audio', { provider: 'azure', base: 'https://eastasia.tts.speech.microsoft.com', key: 'k', voice: 'ja-JP-NanamiNeural', language: 'ja-JP' }, 'こんにちは');

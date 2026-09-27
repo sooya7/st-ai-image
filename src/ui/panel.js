@@ -11,7 +11,7 @@ import { activateTab } from './tabs.js';
 import { DIALOG_HTML, FALLBACK_BANNER_HTML, PANEL_HTML, PREVIEW_HTML, WAND_BUTTON_HTML, fromHtml } from './template.js';
 
 /** 这些设置一改，注入给 AI 的系统提示词就要重算。 */
-const PROMPT_KEYS = new Set(['enabled', 'autoInjectPrompt', 'systemPrompt', 'preset']);
+const PROMPT_KEYS = new Set(['enabled', 'preset']); // 提示词本身由提示词页直接重新注册
 
 const panel = () => qs('#st_ai_float_panel');
 const dialog = () => qs('#st_ai_dialog');

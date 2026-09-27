@@ -18,12 +18,10 @@ const FIELDS = [
     { id: 'st_gpt_image_api_base', key: 'apiBase', kind: 'text' },
     { id: 'st_gpt_image_api_key', key: 'apiKey', kind: 'text' },
     { id: 'st_gpt_image_model', key: 'model', kind: 'text' },
-    { id: 'st_gpt_image_system_prompt_text', key: 'systemPrompt', kind: 'text' },
     { id: 'st_gpt_image_extra_prompt', key: 'extraPrompt', kind: 'text' },
     { id: 'st_gpt_image_negative_prompt', key: 'negativePrompt', kind: 'text' },
     { id: 'st_gpt_image_enabled', key: 'enabled', kind: 'bool' },
     { id: 'st_gpt_image_auto_detect', key: 'autoDetect', kind: 'bool' },
-    { id: 'st_gpt_image_auto_inject_prompt', key: 'autoInjectPrompt', kind: 'bool' },
     { id: 'st_gpt_image_size', key: 'size', kind: 'select' },
     { id: 'st_gpt_image_quality', key: 'quality', kind: 'select' },
 ];
@@ -45,12 +43,6 @@ function fillForm(settings) {
     }
     const timeout = qs('#st_gpt_image_timeout');
     if (timeout) timeout.value = String(clampSeconds(Number(settings.imageTimeout || LIMITS.imageGenTimeoutMs) / 1000));
-    togglePromptContainer(settings);
-}
-
-/** 关掉自动注入时，系统提示词编辑框没有意义，直接隐藏。 */
-function togglePromptContainer(settings) {
-    qs('#st_ai_prompt_container')?.classList.toggle('st_ai_hidden', !settings.autoInjectPrompt);
 }
 
 function renderPresetOptions(selected = '') {
@@ -83,8 +75,7 @@ export async function bindSettingsForm(onChange) {
     renderModelOptions([]);
 
     const commit = async (key, value) => {
-        const next = await updateSetting(key, value);
-        if (key === 'autoInjectPrompt') togglePromptContainer(next);
+        await updateSetting(key, value);
         onChange?.(key);
     };
 

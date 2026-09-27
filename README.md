@@ -40,7 +40,7 @@
 
 ### AI 自动出图
 
-开启「AI 自动图文出图」后，插件会注入系统提示词，引导 AI 在每轮回复末尾附带 `[image]` 标签。配音、视频的自动标签在各自设置页开启（默认关闭）。
+面板的「提示词」页集中放着图片、配音、视频三段系统提示词：勾选后注入，引导 AI 在回复里自己写标签（图片默认开，配音、视频默认关），每段都可以改写或恢复默认。
 
 ## 配置
 
@@ -52,7 +52,8 @@
 | 模型 | 如 `gpt-image-2`、`gemini-2.5-flash-image`，fal / Replicate 填模型路径 |
 | 额外模型参数 | 指定协议时生效的 JSON 对象 |
 | 额外提示词 / 负面提示词 | 追加到每次生图描述 |
-| 语音 / 视频 设置页 | 服务、地址、密钥、模型、音色或尺寸时长、酒馆代理、自动标签提示词 |
+| 语音 / 视频 设置页 | 服务、地址、密钥、模型、音色或尺寸时长、酒馆代理 |
+| 提示词页 | 图片 / 配音 / 视频三种标签的自动注入开关和系统提示词 |
 
 所有设置（含密钥）保存在酒馆的 `settings.json`，与酒馆其它扩展相同。
 
@@ -80,7 +81,8 @@ st-ai-image/
 │   │   ├── scanner.js  render.js  media.js  message.js  tasks.js
 │   ├── gallery/            # 图库：IndexedDB 与聊天记录同步
 │   ├── ui/                 # 面板、设置页、图库视图、预览、模板、DOM 工具
-│   │   └── media-settings-view.js  # 语音/视频设置页（按需加载）
+│   │   ├── media-settings-view.js  # 语音/视频设置页（按需加载）
+│   │   └── prompts-view.js # 三种标签的系统提示词页（按需加载）
 │   ├── generate.js         # 面板里的生图流程
 │   └── settings.js         # 设置存储（extensionSettings + saveSettingsDebounced）
 ├── tests/                  # Node 单元测试 + Playwright 模拟宿主测试
