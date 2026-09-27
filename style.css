@@ -20,7 +20,7 @@
     align-items: center;
     gap: 12px;
     z-index: 10001;
-    font-size: 13px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.95);
     max-width: 90vw;
     animation: st_ai_banner_in 0.3s ease;
 }
@@ -30,7 +30,7 @@
 }
 
 .st_ai_fallback_banner i.fa-triangle-exclamation {
-    font-size: 16px;
+    font-size: calc(var(--mainFontSize, 15px) * 1.1);
 }
 
 .st_ai_banner_close {
@@ -144,7 +144,7 @@
     padding: 7px 14px;
     border-radius: 8px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.95);
     font-weight: 500;
     transition: all 0.2s;
     letter-spacing: 0.02em;
@@ -161,14 +161,14 @@
 .st_ai_speech_form [hidden] { display: none !important; }
 .st_ai_speech_form select { color-scheme: dark; }
 .st_ai_speech_form label { color: rgba(255, 255, 255, 0.78); }
-.st_ai_speech_hint { color: rgba(255, 255, 255, 0.65); font-size: 12px; margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+.st_ai_speech_hint { color: rgba(255, 255, 255, 0.65); font-size: calc(var(--mainFontSize, 15px) * 0.9); margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
 .st_ai_media_warning { color: #fca5a5; }
 
 /* 工作流库 / 画师串的库控件 */
 .st_ai_library { display: flex; flex-direction: column; gap: 6px; }
 .st_ai_library [hidden], .st_ai_prompt_presets [hidden] { display: none !important; }
 .st_ai_library_actions { flex-wrap: wrap; gap: 6px; }
-.st_ai_library_btn { padding: 4px 10px; font-size: 12px; }
+.st_ai_library_btn { padding: 4px 10px; font-size: calc(var(--mainFontSize, 15px) * 0.9); }
 .st_ai_library_status:empty { display: none; }
 .st_ai_prompt_presets { display: flex; flex-direction: column; gap: 8px; }
 
@@ -181,12 +181,12 @@
 
 /* 提示词页 */
 .st_ai_prompt_section { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
-.st_ai_prompt_details > summary { cursor: pointer; color: rgba(255, 255, 255, 0.7); font-size: 12px; padding: 2px 0; }
+.st_ai_prompt_details > summary { cursor: pointer; color: rgba(255, 255, 255, 0.7); font-size: calc(var(--mainFontSize, 15px) * 0.9); padding: 2px 0; }
 .st_ai_prompt_details[open] > summary { margin-bottom: 8px; }
 .st_ai_prompt_details .st_ai_prompt_textarea_field textarea { max-height: 320px; }
 .st_ai_prompt_actions { align-items: flex-start; margin-top: 6px; }
 /* 功能页里的分段标题（图片页：接口与参数；各页：AI 自动标签） */
-.st_ai_section_title { margin: 0; font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.9); }
+.st_ai_section_title { margin: 0; font-size: calc(var(--mainFontSize, 15px) * 0.95); font-weight: 600; color: rgba(255, 255, 255, 0.9); }
 .st_ai_tab_content[data-tab="generate"] > .st_ai_section_title { margin: 12px 16px 0; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 .st_ai_media_warning:empty { display: none; }
 
@@ -203,7 +203,7 @@
     border-radius: 8px;
     color: #a78bfa;
     padding: 2px 10px;
-    font-size: 12px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
     font-weight: 600;
     cursor: pointer;
     vertical-align: middle;
@@ -223,7 +223,7 @@
     border: 1px solid rgba(99, 102, 241, 0.35);
     background: rgba(99, 102, 241, 0.15);
     color: #a78bfa;
-    font-size: 11px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.84);
     cursor: pointer;
     text-decoration: none;
 }
@@ -231,7 +231,7 @@
 .st_ai_media_regen, .st_ai_media_audio a.st_ai_media_icon { opacity: 0.55; }
 .st_ai_media_regen:hover, .st_ai_media_audio a.st_ai_media_icon:hover { opacity: 1; }
 .st_ai_inline_video { display: block; width: 480px; max-width: 100%; max-height: 360px; border-radius: 10px; background: #000; }
-.st_ai_media_error, .st_ai_media_missing { display: inline-block; color: #fca5a5; font-size: 12px; margin-left: 6px; overflow-wrap: anywhere; }
+.st_ai_media_error, .st_ai_media_missing { display: inline-block; color: #fca5a5; font-size: calc(var(--mainFontSize, 15px) * 0.9); margin-left: 6px; overflow-wrap: anywhere; }
 /* 手机宽度：去掉图标、收窄内边距；六个标签还是放不下就换行，不让按钮被裁掉一半 */
 @media (max-width: 600px) {
     #st_ai_float_panel .st_ai_float_header { padding-inline: 10px; gap: 6px; }
@@ -258,7 +258,7 @@
     cursor: pointer;
     padding: 6px;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: calc(var(--mainFontSize, 15px) * 1.0);
     transition: all 0.15s;
     line-height: 1;
 }
@@ -316,7 +316,7 @@
     border-radius: 10px;
     padding: 10px 12px;
     font-family: inherit;
-    font-size: 13px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.95);
     line-height: 1.5;
     box-sizing: border-box;
     transition: border-color 0.2s, box-shadow 0.2s;
@@ -345,7 +345,7 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 8px;
     padding: 7px 10px;
-    font-size: 12px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
     cursor: pointer;
     transition: border-color 0.2s;
     -webkit-appearance: none;
@@ -372,7 +372,7 @@
     border: none;
     border-radius: 10px;
     padding: 8px 20px;
-    font-size: 13px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.95);
     font-weight: 600;
     cursor: pointer;
     display: flex;
@@ -434,7 +434,7 @@
 .st_ai_gen_placeholder {
     text-align: center;
     color: rgba(255, 255, 255, 0.2);
-    font-size: 13px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.95);
     padding: 32px 0;
 }
 
@@ -452,7 +452,7 @@
 
 .st_ai_gen_result_info {
     margin-top: 10px;
-    font-size: 12px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
     color: rgba(255, 255, 255, 0.4);
     display: flex;
     align-items: center;
@@ -481,7 +481,7 @@
 }
 
 .st_ai_gallery_count {
-    font-size: 12px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
     color: rgba(255, 255, 255, 0.35);
     font-weight: 500;
 }
@@ -549,7 +549,7 @@
 
 .st_ai_gallery_actions .st_ai_btn {
     padding: 4px 6px;
-    font-size: 11px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.84);
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(8px);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -567,7 +567,7 @@
     text-align: center;
     padding: 40px 0;
     color: rgba(255, 255, 255, 0.15);
-    font-size: 13px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.95);
 }
 
 /* --- 设置 Tab --- */
@@ -596,7 +596,7 @@
 
 .st_ai_field label {
     display: block;
-    font-size: 12px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
     font-weight: 500;
     color: rgba(255, 255, 255, 0.5);
     margin-bottom: 6px;
@@ -611,7 +611,7 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 10px;
     padding: 9px 12px;
-    font-size: 13px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.95);
     box-sizing: border-box;
     transition: border-color 0.2s, box-shadow 0.2s;
     overflow: hidden;
@@ -634,7 +634,7 @@
     align-items: center;
     gap: 10px;
     cursor: pointer;
-    font-size: 13px !important;
+    font-size: calc(var(--mainFontSize, 15px) * 0.95) !important;
     color: rgba(255, 255, 255, 0.8) !important;
     font-weight: 400 !important;
     text-transform: none !important;
@@ -657,7 +657,7 @@
     color: rgba(255, 255, 255, 0.6);
     padding: 5px 10px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
     transition: all 0.15s;
 }
 
@@ -760,7 +760,7 @@
 .st_gpt_preview_title {
     color: rgba(255, 255, 255, 0.7);
     font-weight: 600;
-    font-size: 14px;
+    font-size: calc(var(--mainFontSize, 15px) * 1.0);
 }
 
 .st_gpt_preview_img {
@@ -794,7 +794,7 @@
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 8px;
     padding: 10px;
-    font-size: 13px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.95);
     line-height: 1.5;
     font-family: inherit;
     box-sizing: border-box;
@@ -809,7 +809,7 @@
 
 .st_ai_edit_actions .st_gpt_image_btn {
     padding: 6px 14px;
-    font-size: 13px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.95);
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -825,7 +825,7 @@
     border-radius: 8px;
     color: #a78bfa;
     padding: 4px 12px;
-    font-size: 12px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
     font-weight: 600;
     cursor: pointer;
     margin: 2px 4px;
@@ -869,7 +869,7 @@
 .st_gpt_inline_loading,
 .st_gpt_inline_missing {
     color: rgba(255, 255, 255, 0.55);
-    font-size: 12px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
     padding: 4px 0;
 }
 
@@ -903,7 +903,7 @@
     border-radius: 8px;
     color: #fca5a5;
     padding: 4px 10px;
-    font-size: 12px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
     margin: 4px 0;
     max-width: 400px;
     word-break: break-word;
@@ -917,7 +917,7 @@
     padding: 40px 0;
     gap: 10px;
     color: rgba(255, 255, 255, 0.35);
-    font-size: 13px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.95);
 }
 
 .st_ai_spinner {
@@ -937,7 +937,7 @@
 @media (max-width: 600px) {
     .st_ai_tab {
         padding: 6px 10px;
-        font-size: 12px;
+        font-size: calc(var(--mainFontSize, 15px) * 0.9);
     }
 
     .st_ai_gen_controls {
@@ -948,7 +948,7 @@
     .st_ai_select {
         flex: 1;
         min-width: 0;
-        font-size: 13px;
+        font-size: calc(var(--mainFontSize, 15px) * 0.95);
     }
 
     .st_ai_inline_row {
@@ -985,7 +985,7 @@
 
     .st_gpt_inline_gen {
         padding: 6px 14px;
-        font-size: 13px;
+        font-size: calc(var(--mainFontSize, 15px) * 0.95);
     }
 
     .st_gpt_inline_img {
@@ -997,7 +997,7 @@
     .st_ai_textarea,
     .st_ai_select,
     #st_gpt_image_prompt {
-        font-size: 16px;
+        font-size: max(16px, var(--mainFontSize, 15px));
     }
 }
 
@@ -1005,7 +1005,7 @@
 .st_ai_prompt_textarea_field textarea {
     min-height: 80px;
     max-height: 200px;
-    font-size: 12px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
     line-height: 1.6;
 }
 
@@ -1033,4 +1033,4 @@
 .st_gpt_inline_gen_pending {
     opacity: 0.75;
 }
-.st_ai_library_template { width: auto; flex: 0 1 auto; padding: 4px 8px; font-size: 12px; }
+.st_ai_library_template { width: auto; flex: 0 1 auto; padding: 4px 8px; font-size: calc(var(--mainFontSize, 15px) * 0.9); }
