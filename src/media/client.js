@@ -281,6 +281,7 @@ async function runVendorJob(kind, config, prompt, { signal, onProgress, onTask, 
         return media;
     } catch (error) {
         if (controller.signal.aborted && controller.signal.reason instanceof Error && !signal?.aborted) throw controller.signal.reason;
+        if (adapter.networkHint && !plan.proxy && /^网络请求失败/.test(String(error?.message))) throw new Error(adapter.networkHint);
         throw error;
     } finally {
         clearTimeout(timer);

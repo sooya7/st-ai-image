@@ -18,7 +18,7 @@
 export const DEFAULT_VENDOR_BASES = {
     image: {
         minimax: 'https://api.minimax.cn', dashscope: 'https://dashscope.aliyuncs.com', stability: 'https://api.stability.ai',
-        pollinations: 'https://gen.pollinations.ai', horde: 'https://aihorde.net',
+        pollinations: '', horde: 'https://aihorde.net',
     },
     audio: {},
     video: {},
@@ -144,7 +144,8 @@ const IMAGE = {
         result: (data) => (data?.image ? { url: dataUrl(data.image, imageTypeOfBase64(data.image)) } : null),
     },
 
-    // Pollinations：GET 直接回图片。不填 Key 也能用（官方文档说要 Key，2026-09-28 实测匿名仍可用，不保证）
+    // Pollinations：GET 直接回图片。2026-09-28 实测：新域名 gen.pollinations.ai 必须带 Key，
+    // 旧的 image.pollinations.ai/prompt/ 还能匿名用。地址留空就按有没有 Key 自动选
     pollinations: {
         keyOptional: true,
         create: ({ base, key, model, size, extra, negative }, prompt) => {
@@ -152,7 +153,10 @@ const IMAGE = {
             const text = negative ? `${prompt}. Avoid: ${negative}` : prompt;
             const query = new URLSearchParams({ width, height, seed: String(pickSeed(extra) ?? Math.floor(Math.random() * 2 ** 31)), nologo: 'true', ...(model ? { model } : {}) });
             for (const [k, v] of Object.entries(extra)) if (k !== 'seed') query.set(k, String(v));
-            return { url: `${root(base, DEFAULT_VENDOR_BASES.image.pollinations)}/image/${encodeURIComponent(text).slice(0, 6000)}?${query}`, method: 'GET', headers: bearer(key), binary: true };
+            const hasKey = !!String(key || '').trim();
+            const r = root(base, hasKey ? 'https://gen.pollinations.ai' : 'https://image.pollinations.ai');
+            const path = /image\.pollinations\.ai$/i.test(new URL(r).host) ? 'prompt' : 'image';
+            return { url: `${r}/${path}/${encodeURIComponent(text).slice(0, 6000)}?${query}`, method: 'GET', headers: bearer(key), binary: true };
         },
         result: async (blob) => ({ url: await blobToDataUrl(blob) }),
     },
@@ -379,6 +383,7 @@ const failedIf = (list) => (state) => list.includes(state);
 const VIDEO = {
     // 火山方舟 Seedance：参数写 JSON 字段（官方的强校验写法）；链接 24 小时有效
     ark: {
+        networkHint: '火山方舟的报错回包不带跨域头，浏览器只看得到「网络请求失败」：多半是 Key 不对、模型没开通或余额不足，请到方舟控制台确认',
         create: ({ base, model, size, seconds: secs, extra }, prompt) => {
             const shape = videoShape(size);
             return {

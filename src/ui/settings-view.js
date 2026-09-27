@@ -98,8 +98,8 @@ const PROVIDER_UI = {
         params: '作为表单字段附加，例如 {"style_preset":"anime","seed":42}。',
     },
     pollinations: {
-        hint: '免费生图，不填 Key 也能用（官方文档说要 Key，2026-09-28 实测匿名仍可用，不保证一直能用）。有 Key 就填上，排队更快。模型留空用默认，点刷新能拉模型列表。',
-        base: ['接口地址', 'https://gen.pollinations.ai'], key: ['Pollinations Key（可留空）', 'sk_...'], model: '留空用默认模型', sizes: SD_SIZES,
+        hint: '免费生图，不填 Key 也能用：地址留空时，没 Key 走 image.pollinations.ai（匿名，2026-09-28 实测可用，不保证一直能用），有 Key 走 gen.pollinations.ai（更快、模型更多）。模型留空用默认，点刷新能拉模型列表。',
+        base: ['接口地址（留空自动选）', '留空：没 Key 用 image.pollinations.ai，有 Key 用 gen.pollinations.ai'], key: ['Pollinations Key（可留空）', 'sk_...'], model: '留空用默认模型', sizes: SD_SIZES,
         params: '附加到链接参数里，例如 {"enhance":"true"}。',
     },
     horde: {

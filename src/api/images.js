@@ -219,7 +219,7 @@ export async function fetchModelList() {
     if (STATIC_MODELS[s.imageProvider]) return STATIC_MODELS[s.imageProvider].map((id) => ({ id, name: id }));
     if (s.imageProvider === 'pollinations' || s.imageProvider === 'horde') {
         const url = s.imageProvider === 'horde' ? `${String(s.apiBase || 'https://aihorde.net').replace(/\/+$/, '')}/api/v2/status/models?type=image`
-            : `${String(s.apiBase || 'https://gen.pollinations.ai').replace(/\/+$/, '')}/image/models`;
+            : `${String(s.apiBase || 'https://gen.pollinations.ai').replace(/\/+$/, '').replace('image.pollinations.ai', 'gen.pollinations.ai')}/image/models`;
         const resp = await apiFetch(url, {});
         if (!resp.ok) throw new Error(`读取模型列表失败 HTTP ${resp.status}`);
         const list = await resp.json();

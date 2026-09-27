@@ -18,7 +18,7 @@ const FIRST_TIME = {
     minimax: { apiBase: 'https://api.minimax.cn', model: 'image-01', size: '1024x1024' },
     dashscope: { apiBase: 'https://dashscope.aliyuncs.com', model: 'wan2.2-t2i-flash', size: '1024x1024' },
     stability: { apiBase: 'https://api.stability.ai', model: 'core', size: '1024x1024' },
-    pollinations: { apiBase: 'https://gen.pollinations.ai', model: '', size: '1024x1024' },
+    pollinations: { apiBase: '', model: '', size: '1024x1024' },
     horde: { apiBase: 'https://aihorde.net', model: '', size: '512x768' },
     fal: { apiBase: '', model: '' },
     replicate: { apiBase: '', model: '' },

@@ -83,7 +83,7 @@ test('Stability：multipart 表单、按尺寸换成最近的比例、sd3 模型
 
 test('Pollinations：不填 Key 也能用，GET 回图片二进制转成 data URL', async () => {
     const png = new Blob([Buffer.from(PNG_B64, 'base64')], { type: 'image/png' });
-    const server = fakeServer([['/image/', png]]);
+    const server = fakeServer([['/prompt/', png]]);
     const result = await run('image', { provider: 'pollinations', key: '', size: '832x1216', extra: '{"seed":7}' }, 'a cat', server);
     assert.match(result.url, /^data:image\/png;base64,iVBOR/);
     const [call] = server.calls;
@@ -91,8 +91,17 @@ test('Pollinations：不填 Key 也能用，GET 回图片二进制转成 data UR
     assert.equal(call.binary, true);
     assert.equal(call.headers.Authorization, undefined);
     const url = new URL(call.url);
-    assert.equal(url.pathname, '/image/a%20cat');
+    assert.equal(url.origin + url.pathname, 'https://image.pollinations.ai/prompt/a%20cat'); // 没 Key 走旧的匿名域名
     assert.deepEqual([url.searchParams.get('width'), url.searchParams.get('seed')], ['832', '7']);
+    const keyed = fakeServer([['/image/', png]]);
+    await run('image', { provider: 'pollinations', key: 'sk_x' }, 'dog', keyed);
+    assert.match(keyed.calls[0].url, /^https:\/\/gen\.pollinations\.ai\/image\/dog\?/);
+    assert.equal(keyed.calls[0].headers.Authorization, 'Bearer sk_x');
+});
+
+test('火山方舟：错误回包不带跨域头，浏览器只看到网络错误时改成能看懂的提示', async () => {
+    const server = fakeServer([['/contents/generations/tasks', new Error('网络请求失败：请检查地址、HTTPS 和服务端 CORS；没有自动重新提交')]]);
+    await assert.rejects(run('video', { provider: 'ark' }, 'x', server), /多半是 Key 不对/);
 });
 
 test('AI Horde：匿名 Key、Client-Agent；check 排队 → done，再从 status 取图；没有 worker 时说清楚', async () => {
