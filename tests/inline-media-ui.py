@@ -506,6 +506,7 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     expect(page.locator('#st_gpt_gen_result img.st_gpt_gen_img')).to_have_count(1, timeout=10000)
     call = posts('/images/generations')[-1]
     assert call['path'] == '/mock/v1/images/generations' and call['auth'] == 'Bearer fixture-image-key'
+    assert json.loads(call['body'])['prompt'] == 'a red square'  # 默认画师串是空的，描述原样发出
     open_tab('generate')
     page.locator('#st_gpt_image_provider').select_option('gemini')
     page.locator('#st_gpt_image_model').fill('gemini-image-x')
@@ -553,7 +554,48 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     page.locator('#st_gpt_image_comfy_workflow').fill(comfy_image)
     expect(page.locator('#st_gpt_image_comfy_status')).to_contain_text('✓ API 格式，4 个节点')
     page.locator('#st_gpt_image_api_base').fill('http://127.0.0.1:8188')
-    page.locator('#st_gpt_image_negative_prompt').fill('blurry')
+    # 工作流库：新建空白 → 粘贴未标记的工作流 → 自动标记 → 切回「默认」→ 删掉
+    unmarked = json.dumps({
+        '3': {'class_type': 'KSampler', 'inputs': {'seed': 1, 'steps': 20, 'cfg': 8, 'positive': ['6', 0], 'negative': ['7', 0], 'latent_image': ['5', 0]}},
+        '5': {'class_type': 'EmptyLatentImage', 'inputs': {'width': 1024, 'height': 1024, 'batch_size': 1}},
+        '6': {'class_type': 'CLIPTextEncode', 'inputs': {'text': 'scenery'}},
+        '7': {'class_type': 'CLIPTextEncode', 'inputs': {'text': 'watermark'}},
+        '9': {'class_type': 'SaveImage', 'inputs': {'images': ['8', 0]}},
+    })
+    page.locator('#st_ai_image_workflow_new').click()
+    page.locator('#st_ai_image_workflow_name').fill('SDXL 测试')
+    page.locator('#st_ai_image_workflow_name_ok').click()
+    expect(page.locator('#st_ai_image_workflow_select')).to_have_value('SDXL 测试')
+    expect(page.locator('#st_gpt_image_comfy_workflow')).to_have_value('')
+    page.locator('#st_gpt_image_comfy_workflow').fill(unmarked)
+    expect(page.locator('#st_gpt_image_comfy_status')).to_contain_text('没有占位符')
+    page.locator('#st_ai_image_workflow_automark').click()
+    expect(page.locator('#st_gpt_image_comfy_status')).to_contain_text('%prompt%')
+    marked = json.loads(page.locator('#st_gpt_image_comfy_workflow').input_value())
+    assert marked['6']['inputs']['text'] == '%prompt%' and marked['7']['inputs']['text'] == '%negative_prompt%' and marked['5']['inputs']['width'] == '%width%', marked
+    page.locator('#st_ai_image_workflow_select').select_option('默认')
+    expect(page.locator('#st_gpt_image_comfy_workflow')).to_have_value(comfy_image)
+    page.wait_for_timeout(600)
+    saved = page.evaluate("JSON.parse(sessionStorage.getItem('fixture-state')).settings['st-ai-image']")
+    assert list(saved['comfyWorkflows']) == ['默认', 'SDXL 测试'] and saved['comfyWorkflowId'] == '默认', saved.get('comfyWorkflows')
+    assert json.loads(saved['comfyWorkflows']['SDXL 测试'])['6']['inputs']['text'] == '%prompt%'
+    page.locator('#st_ai_image_workflow_select').select_option('SDXL 测试')
+    page.locator('#st_ai_image_workflow_delete').click()
+    expect(page.locator('#st_ai_image_workflow_delete')).to_have_text('再点确认删除')
+    page.locator('#st_ai_image_workflow_delete').click()
+    expect(page.locator('#st_ai_image_workflow_select option')).to_have_count(1)
+    expect(page.locator('#st_gpt_image_comfy_workflow')).to_have_value(comfy_image)
+    # 画师串：新建一个，填前置和负面，生成时拼进去
+    page.locator('#st_ai_prompt_preset_new').click()
+    page.locator('#st_ai_prompt_preset_name').fill('厚涂')
+    page.locator('#st_ai_prompt_preset_name_ok').click()
+    expect(page.locator('#st_ai_prompt_preset_select')).to_have_value('厚涂')
+    page.locator('#st_ai_prompt_preset_prefix').fill('artist:wlop,\nthick paint')
+    page.locator('#st_ai_prompt_preset_negative').fill('blurry')
+    page.locator('#st_ai_prompt_preset_select').scroll_into_view_if_needed()
+    page.screenshot(path=str(output / 'image-prompt-presets.png'))
+    page.locator('#st_ai_image_workflow_select').scroll_into_view_if_needed()
+    page.screenshot(path=str(output / 'image-workflow-library.png'))
     page.wait_for_timeout(700)
     page.locator('#st_gpt_image_prompt').fill('comfy cat')
     page.locator('#st_gpt_image_generate_btn').click()
@@ -561,7 +603,7 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     page.wait_for_timeout(300)
     call = SD_CALLS[-1]
     assert call['path'] == '/api/sd/comfy/generate' and call['csrf'] and call['url'] == 'http://127.0.0.1:8188', call
-    assert call['texts'] == ['masterpiece, comfy cat', 'blurry'] and isinstance(call['seed'], int), call
+    assert call['texts'] == ['masterpiece, artist:wlop, thick paint, comfy cat', 'blurry'] and isinstance(call['seed'], int), call
     page.locator('#st_gpt_image_provider').select_option('sdwebui')
     expect(page.locator('#st_gpt_image_sd_auth')).to_be_visible()
     expect(page.locator('#st_gpt_image_comfy_workflow')).to_be_hidden()
@@ -576,9 +618,9 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
             break
         page.wait_for_timeout(100)
     call = SD_CALLS[-1]
-    assert call['path'] == '/api/sd/generate' and call['csrf'] and call['auth'] == 'user:pass' and call['prompt'] == 'webui dog' and call['url'] == 'http://127.0.0.1:7860', call
+    assert call['path'] == '/api/sd/generate' and call['csrf'] and call['auth'] == 'user:pass' and call['prompt'] == 'artist:wlop, thick paint, webui dog' and call['url'] == 'http://127.0.0.1:7860', call
     expect(page.locator('#st_gpt_gen_result img.st_gpt_gen_img')).to_have_count(1, timeout=10000)
-    page.locator('#st_gpt_image_negative_prompt').fill('')
+    page.locator('#st_ai_prompt_preset_select').select_option('默认')
     page.wait_for_timeout(600)
     close_panel()
 
@@ -588,7 +630,8 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     expect(page.locator('#st_ai_video_workflow')).to_be_visible()
     expect(page.locator('#st_ai_video_direct')).to_be_visible()
     expect(page.locator('#st_ai_video_proxy')).to_be_hidden()
-    expect(page.locator('#st_ai_video_panel .st_ai_media_warning').first).to_contain_text('还没有填 ComfyUI 工作流')
+    expect(page.locator('#st_ai_video_workflow_status')).to_contain_text('还没有填工作流')
+    expect(page.locator('#st_ai_video_workflow_lib_select')).to_have_value('默认')  # 视频也有自己的工作流库
     page.locator('#st_ai_video_workflow').fill(json.dumps({
         '1': {'class_type': 'WanTextEncode', 'inputs': {'text': '%提示词%', 'frames': '%frames%'}},
         '2': {'class_type': 'VHS_VideoCombine', 'inputs': {'frame_rate': '%fps%'}},
@@ -600,7 +643,7 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     call = SD_CALLS[-1]
     assert call['path'] == '/api/sd/comfy/generate' and call['texts'] == ['COMFY 海边日落'], call
     assert re.fullmatch(r'\[video src="/user/files/st-ai-video-[^"]+\.webm"\]COMFY 海边日落\[/video\]', raw(8)), raw(8)
-    checks.append('Self-hosted: ComfyUI (image + video) and SD WebUI through the tavern backend (/api/sd/comfy/generate, /api/sd/generate) with CSRF; placeholders filled (incl. 中文别名); no Key needed; fields shown per service; API-format workflow checked live; video saved and embedded')
+    checks.append('Workflow library (new/auto-mark/switch/delete, persisted) and 画师串 presets (new, prefix/negative applied to ComfyUI and SD WebUI); self-hosted: ComfyUI (image + video) and SD WebUI through the tavern backend (/api/sd/comfy/generate, /api/sd/generate) with CSRF; placeholders filled (incl. 中文别名); no Key needed; fields shown per service; API-format workflow checked live; video saved and embedded')
 
     # ---------- mobile ----------
     for width in [390, 320]:

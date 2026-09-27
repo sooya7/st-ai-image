@@ -30,7 +30,33 @@ export function openPanel(tab) {
         try { host.showModal(); }
         catch (e) { log.warn('showModal 失败，退化成内联显示:', e); host.setAttribute('open', ''); }
     }
+    mountImageLibraries();
     if (tab) activateTab(tab);
+}
+
+let librariesMounted = null;
+/** 画师串和生图工作流库第一次打开面板时才加载（会用到工作流解析代码，不拖慢页面加载）。 */
+function mountImageLibraries() {
+    librariesMounted ||= (async () => {
+        const [{ mountPromptPresets }, { createWorkflowLibrary }, { readWorkflowLibrary }, { getSettings, peekSettings, saveSettings }] = await Promise.all([
+            import('./prompt-presets-view.js'), import('./workflow-library.js'), import('../core/library.js'), import('../settings.js'),
+        ]);
+        await getSettings();
+        mountPromptPresets(qs('#st_ai_prompt_preset_panel'));
+        const holder = qs('#st_ai_image_workflow_lib');
+        if (holder && !holder.firstChild) {
+            const lib = createWorkflowLibrary({
+                id: 'st_ai_image_workflow',
+                textarea: qs('#st_gpt_image_comfy_workflow'),
+                status: qs('#st_gpt_image_comfy_status'),
+                read: () => { const s = peekSettings(); return readWorkflowLibrary(s.comfyWorkflows, s.comfyWorkflowId, s.comfyWorkflow); },
+                write: async ({ items, active }) => saveSettings({ ...(await getSettings()), comfyWorkflows: items, comfyWorkflowId: active }),
+                exportName: 'st-ai-image-ComfyUI生图工作流.json',
+            });
+            holder.replaceChildren(lib.node);
+        }
+    })().catch((e) => { librariesMounted = null; log.warn('画师串/工作流库加载失败:', e); });
+    return librariesMounted;
 }
 
 export function closePanel() {

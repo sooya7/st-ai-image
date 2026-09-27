@@ -3,6 +3,7 @@
  * 每个服务一套独立的地址/密钥/模型，切换服务不会串配置。
  */
 import { blankPresets, fishPresets, isFishEndpoint, normalizePresets, usableTypes } from './voice-presets.js';
+import { readWorkflowLibrary } from '../core/library.js';
 
 /** 提示词里的占位符：注入时换成当前服务音色预设表里已配音色的类型名。 */
 export const VOICE_TYPES_TOKEN = '{{音色类型}}';
@@ -143,6 +144,11 @@ export function readMediaSettings(settings, section) {
     for (const [id, fields] of Object.entries(defaults.profiles)) {
         profiles[id] = {};
         for (const [field, fallback] of Object.entries(fields)) profiles[id][field] = str(saved.profiles?.[id]?.[field], fallback, field === 'workflow' ? 400000 : 4096);
+        if (id === 'comfyui' && section === 'video') {
+            // 视频工作流库：workflow 是当前选中那份的副本，生成直接用它
+            const lib = readWorkflowLibrary(saved.profiles?.[id]?.workflows, saved.profiles?.[id]?.workflowId, profiles[id].workflow);
+            Object.assign(profiles[id], { workflows: lib.items, workflowId: lib.active, workflow: lib.items[lib.active] });
+        }
         if (section === 'speech') {
             // 音色预设表：存过就用存的；没存过按服务给初始表（Fish 带推荐音色，其他只有类型名）
             profiles[id].presets = normalizePresets(saved.profiles?.[id]?.presets)

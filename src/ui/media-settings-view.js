@@ -6,7 +6,8 @@ import { registerSystemPrompt, scanBurst } from '../inline/scanner.js';
 import { mediaRequestConfig, readMediaSettings } from '../media/media-settings.js';
 import { PROVIDERS, apiRoot, extraParams } from '../media/providers.js';
 import { isFishEndpoint } from '../media/voice-presets.js';
-import { SELF_HOSTED, parseWorkflow, serviceRoot } from '../media/selfhosted.js';
+import { SELF_HOSTED, serviceRoot } from '../media/selfhosted.js';
+import { createWorkflowLibrary } from './workflow-library.js';
 import { getSettings, saveSettings } from '../settings.js';
 import { debounce, el } from './dom.js';
 import { buildPromptSection } from './prompt-section.js';
@@ -90,6 +91,18 @@ export async function mountMediaSettings(root, section) {
             : el('input', { id: id(key), type: type || 'text', class: 'st_ai_input', autocomplete: 'off', dataset: { key } });
         inputs[key] = node;
         if (key === 'voice' && voice) return [voice.defaultField(label, node), voice.presetsField];
+        if (key === 'workflow') {
+            // 视频工作流库：选中的那份写回 profile.workflow，生成直接用
+            const status = el('p', { class: 'st_ai_speech_hint', id: id('workflow_status'), role: 'status', 'aria-live': 'polite' });
+            const comfy = () => state.profiles.comfyui;
+            const lib = createWorkflowLibrary({
+                id: id('workflow_lib'), textarea: node, status,
+                read: () => ({ items: comfy().workflows, active: comfy().workflowId }),
+                write: ({ items, active }) => { Object.assign(comfy(), { workflows: items, workflowId: active, workflow: items[active] ?? '' }); return save(); },
+                exportName: 'st-ai-image-ComfyUI视频工作流.json',
+            });
+            return el('div', { class: 'st_ai_field', dataset: { field: key } }, [el('label', { for: node.id, text: label }), lib.node, node, status]);
+        }
         return field(label, node);
     }).flat();
     const proxy = checkbox('proxy', '通过酒馆代理请求（需在酒馆 config.yaml 设置 enableCorsProxy: true 并重启）');
@@ -140,8 +153,6 @@ export async function mountMediaSettings(root, section) {
         const problems = [];
         if (SELF_HOSTED.has(state.provider)) {
             try { serviceRoot(profile.base, state.provider); } catch (e) { problems.push(`地址：${e.message}`); }
-            if (!String(profile.workflow || '').trim()) problems.push('还没有填 ComfyUI 工作流');
-            else try { parseWorkflow(profile.workflow); } catch (e) { problems.push(e.message); }
         } else try { if (profile.base) apiRoot(profile.base, state.provider); } catch (e) { problems.push(`API 地址：${e.message}`); }
         try { extraParams(profile.extra); } catch (e) { problems.push(`额外参数：${e.message}`); }
         if (state.proxy && state.provider === 'azure') problems.push('当前服务不能走酒馆代理，请取消勾选');
@@ -161,6 +172,7 @@ export async function mountMediaSettings(root, section) {
     enabled.input.addEventListener('change', () => { state.enabled = enabled.input.checked; save({ rescan: true }); });
     provider.addEventListener('change', () => { state.provider = provider.value; fill(); save(); });
     for (const [key, node] of Object.entries(inputs)) {
+        if (key === 'workflow') continue; // 工作流库自己保存
         node.addEventListener('input', () => {
             state.profiles[state.provider][key] = node.value.trim();
             if (key === 'base' || key === 'voice') voice?.sync({ keepCustom: key === 'voice' });

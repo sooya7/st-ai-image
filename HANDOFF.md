@@ -32,6 +32,9 @@
 | `src/ui/voice-settings.js` | 配音页的默认音色下拉框和可编辑的音色预设表（按服务分开存） |
 | `src/media/selfhosted.js` | 自建服务：ComfyUI 工作流占位符填充、挑输出、经酒馆 `/api/sd/comfy/generate` 或直连 `/prompt`→`/history`→`/view`；SD WebUI 经 `/api/sd/generate` 或直连 txt2img |
 | `src/media/keys.js` | `needsKey`/`isLocalBase`：本机/局域网地址和自建服务 Key 可留空（页面加载就用，所以不放 providers.js） |
+| `src/core/library.js` | 「名字 → 内容」库的纯函数（改名/删除/导入/迁移），画师串拼接 `applyPromptPreset`，工作流库读取 |
+| `src/ui/library-control.js` | 库控件：下拉框 + 新建/另存为/重命名/删除/导入/导出，起名和确认都在控件内（不用 prompt/confirm） |
+| `src/ui/workflow-library.js` / `src/ui/prompt-presets-view.js` | ComfyUI 工作流库（图片、视频共用，含自动标记）和画师串；编辑有 400ms 缓冲，切换前先 flush |
 | `src/ui/prompt-section.js` | 各功能页底部的 AI 自动标签区块（开关 + 折叠的提示词 + 恢复默认）；面板按功能分页：图片/配音/视频/图库 |
 | `src/media/providers.js`、`client.js` | 各服务请求构造、轮询、下载、酒馆 `/proxy/`、文件头识别（第一次生成时才加载） |
 

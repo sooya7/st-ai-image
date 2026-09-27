@@ -8,6 +8,7 @@ import { apiFetch } from '../core/net.js';
 import { log } from '../core/notify.js';
 import { ensureSafeImageUrl, summarizeApiError } from '../core/text.js';
 import { needsKey } from '../media/keys.js';
+import { applyPromptPreset, pickPromptPreset, readPromptPresets, readWorkflowLibrary } from '../core/library.js';
 import { getSettings } from '../settings.js';
 
 const pick = (img) => {
@@ -94,15 +95,15 @@ const isNetworkError = (e) => /Failed to fetch|Network|请求超时|请求失败
 export async function callImageAPI(prompt, { signal, onProgress } = {}) {
     const s = await getSettings();
     const base = normalizeApiBase(s.apiBase);
-    const extra = String(s.extraPrompt || '').trim();
-    const fullPrompt = extra ? `${extra}, ${prompt}` : prompt;
-    const negative = String(s.negativePrompt || '').trim();
+    // 画师串：前置, 描述, 后置；负面单独给。开了随机就每张图随机挑一个有内容的
+    const presets = readPromptPresets(s);
+    const { prompt: fullPrompt, negative } = applyPromptPreset(prompt, pickPromptPreset(presets.items, presets.active, { random: presets.random }));
 
     if (s.imageProvider === 'comfyui' || s.imageProvider === 'sdwebui') {
         const { generateMedia } = await import('../media/client.js');
         const result = await generateMedia('image', {
             provider: s.imageProvider, base: s.apiBase, model: s.model, size: s.size, extra: s.imageParams || '{}',
-            negative, workflow: s.comfyWorkflow, auth: s.sdAuth, viaTavern: s.selfHostedViaSt !== false, timeout: s.imageTimeout,
+            negative, workflow: activeWorkflow(s), auth: s.sdAuth, viaTavern: s.selfHostedViaSt !== false, timeout: s.imageTimeout,
         }, fullPrompt, { signal, onProgress: () => onProgress?.({ attempt: 1, total: 1, method: s.imageProvider, errors: 0 }) });
         return result.url;
     }
@@ -162,6 +163,11 @@ export async function callImageAPI(prompt, { signal, onProgress } = {}) {
     }
     throw new Error(`无法生成图片。${errors[0] || '请检查 API 配置和模型名称'}`);
 }
+
+const activeWorkflow = (s) => {
+    const lib = readWorkflowLibrary(s.comfyWorkflows, s.comfyWorkflowId, s.comfyWorkflow);
+    return lib.items[lib.active];
+};
 
 /** 图片接口缺 Key：自建服务和本机/局域网地址允许留空。 */
 export function imageKeyMissing(s) {

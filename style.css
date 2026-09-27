@@ -164,6 +164,14 @@
 .st_ai_speech_hint { color: rgba(255, 255, 255, 0.65); font-size: 12px; margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
 .st_ai_media_warning { color: #fca5a5; }
 
+/* 工作流库 / 画师串的库控件 */
+.st_ai_library { display: flex; flex-direction: column; gap: 6px; }
+.st_ai_library [hidden], .st_ai_prompt_presets [hidden] { display: none !important; }
+.st_ai_library_actions { flex-wrap: wrap; gap: 6px; }
+.st_ai_library_btn { padding: 4px 10px; font-size: 12px; }
+.st_ai_library_status:empty { display: none; }
+.st_ai_prompt_presets { display: flex; flex-direction: column; gap: 8px; }
+
 /* 音色预设表 */
 .st_ai_voice_rows { display: flex; flex-direction: column; gap: 6px; }
 .st_ai_voice_row { flex-wrap: nowrap; }

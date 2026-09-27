@@ -52,8 +52,8 @@
 
 | 占位符 | 值 |
 | --- | --- |
-| `%prompt%` `%提示词%` `%正面提示词%` | 标签里的描述（图片还会加上「额外提示词」） |
-| `%negative_prompt%` `%负面提示词%` | 负面提示词（图片页） |
+| `%prompt%` `%提示词%` `%正面提示词%` | 标签里的描述（图片会拼上画师串的前置、后置） |
+| `%negative_prompt%` `%负面提示词%` | 画师串的负面（图片页） |
 | `%seed%` `%种子%` | 随机；额外参数写 `{"seed": 123}` 可固定 |
 | `%width%` `%height%` `%宽度%` `%高度%` | 按尺寸设置（`832x480`、`832*480`、`832:480` 都行） |
 | `%steps%` `%cfg_scale%` `%sampler_name%` `%scheduler%` | 默认 20 / 7 / euler / normal |
@@ -65,6 +65,27 @@
 - **输出节点**：生图用 SaveImage；视频用 VHS Video Combine 或 SaveVideo。经酒馆转发时，酒馆只取第一个图片输出（没有才取 gifs），所以视频工作流里不要再放 SaveImage/PreviewImage，否则拿回来的是那张图；浏览器直连时扩展会按类型挑。
 - **SD WebUI**：发 `/sdapi/v1/txt2img`，额外参数里写 txt2img 的字段（如 `{"steps": 28, "sampler_name": "DPM++ 2M", "enable_hr": true}`）；「模型」栏填了会通过 `override_settings.sd_model_checkpoint` 临时切模型。模型列表按钮经酒馆读取 `/api/sd/models` 或 `/api/sd/comfy/models`。
 - 自建视频不支持断线续查：刷新页面后任务还在 ComfyUI 里跑完，结果留在 ComfyUI 的 output 目录，但不会写回聊天。
+
+### 工作流库与自动标记
+
+- 图片页和视频页各有一个 ComfyUI 工作流库：下拉框切换，新建 / 另存为 / 重命名 / 删除（点两次确认）/ 导入 / 导出。导入认单份「导出 (API)」工作流（用文件名当名字），也认本扩展或 st-chatu8 导出的「名字 → 工作流」文件；同名的自动加序号，不覆盖。
+- 以前填的那一份工作流会自动变成库里的「默认」。
+- 「自动标记占位符」：顺着 KSampler 的 positive / negative 连线找到两个提示词节点（中间隔着 ConditioningCombine 之类也能找到），把文字换成 `%prompt%` / `%negative_prompt%`；种子、步数、CFG、采样器、调度器、`ckpt_name`、空 Latent 的宽高也换成占位符，并列出改了哪几处。已经是连线或已含占位符的值不动。LoRA、ControlNet 等其他参数不自动改，需要的话手动写占位符并在额外参数里给值。
+
+## 画师串（提示词预设）
+
+图片页的「画师串」是一组可切换的提示词预设，每个有三栏：
+
+- **前置正面**：放在描述前面，适合画师串、画风、质量词（如 `artist:wlop, artist:ask, masterpiece`）；
+- **后置正面**：放在描述后面；
+- **负面**：负面提示词。
+
+生成时拼成「前置, 描述, 后置」（换行当逗号，重复的逗号合并，标签和权重括号不改），负面单独传：ComfyUI 填进 `%negative_prompt%`，SD WebUI 用 `negative_prompt`，OpenAI 类接口附在描述后面。勾选「每张图随机用一个画师串」后，每张图从有内容的画师串里随机挑一个。
+
+- 所有图片服务都会用，不只是自建服务。
+- 管理方式和工作流库一样（新建 / 另存为 / 重命名 / 删除 / 导入 / 导出）。可以导入 st-chatu8 导出的固定提示词预设（`fixedPrompt` / `fixedPrompt_end` / `negativePrompt` 会对应到三栏）。
+- 以前的「额外提示词 / 负面提示词」会自动变成「默认」画师串。
+- 没有做的：预设封面图、分组、卡片网格选择、按角色卡绑定、提示词替换规则。
 
 ## 设置（插件面板 → 配音 / 视频）
 

@@ -98,9 +98,10 @@ export const PANEL_HTML = `
             </div>
             <div class="st_ai_field" data-show-for="comfyui">
                 <label for="st_gpt_image_comfy_workflow">ComfyUI 工作流（在 ComfyUI 里「导出 (API)」得到的 JSON）</label>
+                <div id="st_ai_image_workflow_lib"></div>
                 <textarea id="st_gpt_image_comfy_workflow" class="st_ai_textarea" rows="6" spellcheck="false" placeholder='{"3": {"class_type": "KSampler", "inputs": {"seed": "%seed%", ...}}, ...}'></textarea>
                 <p class="st_ai_speech_hint st_ai_media_warning" id="st_gpt_image_comfy_status" role="status" aria-live="polite"></p>
-                <p class="st_ai_speech_hint">把工作流里要变的值改成占位符：%prompt%（正面，含额外提示词）、%negative_prompt%、%seed%（随机）、%width% %height%（按尺寸）、%steps% %cfg_scale% %sampler_name% %scheduler%、%MODEL_NAME%（模型栏）。中文写法 %提示词% %种子% 等也认；额外参数里的键也能当占位符，比如 {"steps": 28} 会填进 %steps%。</p>
+                <p class="st_ai_speech_hint">把工作流里要变的值改成占位符：%prompt%（正面，含画师串）、%negative_prompt%、%seed%（随机）、%width% %height%（按尺寸）、%steps% %cfg_scale% %sampler_name% %scheduler%、%MODEL_NAME%（模型栏）。中文写法 %提示词% %种子% 等也认；额外参数里的键也能当占位符，比如 {"steps": 28} 会填进 %steps%。</p>
             </div>
             <div class="st_ai_field">
                 <label for="st_gpt_image_params">额外模型参数（JSON 对象）</label>
@@ -135,14 +136,7 @@ export const PANEL_HTML = `
                     <span>自动识别AI回复中的生图指令</span>
                 </label>
             </div>
-            <div class="st_ai_field st_ai_prompt_textarea_field">
-                <label for="st_gpt_image_extra_prompt">额外生图提示词（追加到每次生图描述后面）</label>
-                <textarea id="st_gpt_image_extra_prompt" class="st_ai_textarea" rows="2" placeholder="例如: masterpiece, best quality, 8k, highly detailed"></textarea>
-            </div>
-            <div class="st_ai_field st_ai_prompt_textarea_field">
-                <label for="st_gpt_image_negative_prompt">负面提示词（不希望出现的内容）</label>
-                <textarea id="st_gpt_image_negative_prompt" class="st_ai_textarea" rows="2" placeholder="例如: low quality, blurry, deformed, ugly"></textarea>
-            </div>
+            <div class="st_ai_field" id="st_ai_prompt_preset_panel"></div>
         </div>
         <div id="st_ai_image_prompt_panel" class="st_ai_settings_form"></div>
     </div>

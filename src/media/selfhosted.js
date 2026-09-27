@@ -71,6 +71,50 @@ export function parseWorkflow(text) {
     return data;
 }
 
+const MARK_KEYS = {
+    seed: '%seed%', noise_seed: '%seed%', steps: '%steps%', cfg: '%cfg_scale%', sampler_name: '%sampler_name%',
+    scheduler: '%scheduler%', ckpt_name: '%MODEL_NAME%',
+};
+const SIZE_NODES = /EmptyLatent|EmptySD3Latent|EmptyHunyuanLatent|EmptyMochiLatent|WanImageToVideo|EmptyLTXVLatent/i;
+
+/**
+ * 自动标记占位符：顺着采样器的 positive / negative 连线找到两个提示词节点，把文字换成 %prompt% / %negative_prompt%；
+ * 种子、步数、CFG、采样器、调度器、模型、空 Latent 的宽高也换成占位符。
+ * 已经是连线（数组）或已经含占位符的值不动。返回 { workflow, changes: ['节点#3 seed → %seed%', ...] }。
+ */
+export function autoMarkWorkflow(input) {
+    const workflow = JSON.parse(JSON.stringify(input));
+    const changes = [];
+    const set = (id, key, value) => {
+        const inputs = workflow[id]?.inputs;
+        if (!inputs || !(key in inputs) || Array.isArray(inputs[key]) || String(inputs[key]).includes('%')) return;
+        inputs[key] = value;
+        changes.push(`#${id} ${workflow[id].class_type}.${key} → ${value}`);
+    };
+    const textNode = (ref) => {
+        // positive/negative 可能先经过 ConditioningCombine 之类的中间节点，最多往上找 4 层
+        let id = Array.isArray(ref) ? String(ref[0]) : null;
+        for (let depth = 0; id && depth < 4; depth++) {
+            const node = workflow[id];
+            if (!node) return null;
+            if (typeof node.inputs?.text === 'string' || typeof node.inputs?.prompt === 'string') return id;
+            const next = Object.values(node.inputs || {}).find((v) => Array.isArray(v) && workflow[String(v[0])]);
+            id = next ? String(next[0]) : null;
+        }
+        return null;
+    };
+    for (const [id, node] of Object.entries(workflow)) {
+        const inputs = node?.inputs || {};
+        for (const [side, token] of [['positive', '%prompt%'], ['negative', '%negative_prompt%']]) {
+            const target = textNode(inputs[side]);
+            if (target) set(target, typeof workflow[target].inputs.text === 'string' ? 'text' : 'prompt', token);
+        }
+        for (const [key, token] of Object.entries(MARK_KEYS)) set(id, key, token);
+        if (SIZE_NODES.test(node?.class_type || '')) { set(id, 'width', '%width%'); set(id, 'height', '%height%'); }
+    }
+    return { workflow, changes };
+}
+
 /** 把占位符填进工作流，返回新对象；有占位符没给值时报错并列出名字。 */
 export function fillWorkflow(workflow, values) {
     const missing = new Set();

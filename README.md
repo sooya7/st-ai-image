@@ -15,6 +15,7 @@
 - **多协议** — 图片：OpenAI Images、Chat 生图、Gemini 原生、fal、Replicate、旧版自动兼容；配音：OpenAI 兼容 TTS、Fish Audio、ElevenLabs、Azure；视频：Runway、Agnes、fal、Replicate、/videos 兼容
 - **自建服务** — ComfyUI（生图、视频，工作流占位符与 st-chatu8 兼容）、SD WebUI（A1111 / Forge）；默认经酒馆后端转发，不用开跨域，TauriTavern 也能用；本机/局域网地址 Key 可留空
 - **API 预设 / 模型列表** — 保存多组图片 API 配置，从接口拉取模型
+- **画师串 / 工作流库** — 画师串（前置、后置、负面，可随机）和 ComfyUI 工作流都能存多份切换、导入导出，可导入 st-chatu8 的固定提示词预设；工作流可一键自动标记占位符
 
 ## 安装
 
@@ -52,7 +53,8 @@
 | API Key | 图片 API 密钥 |
 | 模型 | 如 `gpt-image-2`、`gemini-2.5-flash-image`，fal / Replicate 填模型路径 |
 | 额外模型参数 | 指定协议时生效的 JSON 对象 |
-| 额外提示词 / 负面提示词 | 追加到每次生图描述 |
+| 画师串 | 可切换的提示词预设：前置正面、后置正面、负面，可随机；所有图片服务都用 |
+| ComfyUI 工作流库 | 图片、视频各一个；新建 / 导入 / 导出，自动标记占位符 |
 | 配音 / 视频 页 | 服务、地址、密钥、模型、默认音色与可编辑的音色预设表（配音）或尺寸时长（视频）、酒馆代理 |
 | 各页底部 | 这项功能的 AI 自动标签开关和系统提示词 |
 
