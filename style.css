@@ -167,7 +167,7 @@
 /* 工作流库 / 画师串的库控件 */
 .st_ai_library { display: flex; flex-direction: column; gap: 6px; }
 .st_ai_library [hidden], .st_ai_prompt_presets [hidden] { display: none !important; }
-.st_ai_library_actions { flex-wrap: wrap; gap: 6px; }
+.st_ai_library_actions, .st_ai_quick_fill { flex-wrap: wrap; gap: 6px; }
 .st_ai_library_btn { padding: 4px 10px; font-size: calc(var(--mainFontSize, 15px) * 0.9); }
 .st_ai_library_status:empty { display: none; }
 .st_ai_prompt_presets { display: flex; flex-direction: column; gap: 8px; }
