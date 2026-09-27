@@ -12,8 +12,9 @@
 - **AI 自动带标签** — 可分别为图片、配音、视频注入系统提示词，让 AI 在回复里输出标签
 - **手动静默生图** — 在面板「图片」页输入描述生成
 - **图库管理** — 生成记录保存在 IndexedDB，支持浏览、删除、重新生成
-- **多协议** — 图片：OpenAI Images、Chat 生图、Gemini 原生、fal、Replicate、旧版自动兼容；配音：OpenAI 兼容 TTS、Fish Audio、ElevenLabs、Azure；视频：Runway、Agnes、fal、Replicate、/videos 兼容
-- **自建服务** — ComfyUI（生图、视频，工作流占位符与 st-chatu8 兼容）、SD WebUI（A1111 / Forge）；默认经酒馆后端转发，不用开跨域，TauriTavern 也能用；本机/局域网地址 Key 可留空
+- **多协议** — 图片：OpenAI Images、Chat 生图、Gemini 原生、NovelAI（V4.5 / V4 / V3）、fal、Replicate、旧版自动兼容；配音：OpenAI 兼容 TTS、Fish Audio、ElevenLabs、Azure；视频：Runway、Agnes、fal、Replicate、/videos 兼容
+- **自建服务** — ComfyUI（生图、视频，工作流占位符与 st-chatu8 兼容）、SD WebUI（A1111 / Forge）；默认经酒馆后端转发，不用开跨域，TauriTavern 也能用；本机/局域网地址 Key 可留空；自带 SDXL 和 Anima 工作流模板
+- **按接口显示设置** — 切到哪个接口只显示它用得上的字段、提示和尺寸；每个接口各记各的地址、Key、模型、额外参数、尺寸（OpenAI / Chat / Gemini / 旧版兼容常是同一个中转站，共用一组）
 - **API 预设 / 模型列表** — 保存多组图片 API 配置，从接口拉取模型
 - **画师串 / 工作流库** — 画师串（前置、后置、负面，可随机）和 ComfyUI 工作流都能存多份切换、导入导出，可导入 st-chatu8 的固定提示词预设；工作流可一键自动标记占位符
 
@@ -48,13 +49,11 @@
 
 | 字段 | 说明 |
 |------|------|
-| 中转 API 地址 | 图片 API 地址（如 `https://api.openai.com/v1`） |
-| 生图接口协议 | 旧版兼容（按模型猜端点，仅端点不支持时降级）或指定协议 |
-| API Key | 图片 API 密钥 |
-| 模型 | 如 `gpt-image-2`、`gemini-2.5-flash-image`，fal / Replicate 填模型路径 |
-| 额外模型参数 | 指定协议时生效的 JSON 对象 |
+| 生图接口 | 中转站（旧版兼容，按模型猜端点，仅端点不支持时降级）或指定接口；下面的字段、提示、尺寸选项跟着接口变 |
+| 地址 / Key / 模型 | 每个接口各存一份，切回来还是上次填的；NovelAI 地址留空用官方，令牌填 `pst-` 开头的 Persistent API Token |
+| 额外参数 | 指定接口时生效的 JSON 对象（NovelAI 合并进 `parameters`，ComfyUI 是占位符的值） |
 | 画师串 | 可切换的提示词预设：前置正面、后置正面、负面，可随机；所有图片服务都用 |
-| ComfyUI 工作流库 | 图片、视频各一个；新建 / 导入 / 导出，自动标记占位符 |
+| ComfyUI 工作流库 | 图片、视频各一个；新建 / 从模板新建（SDXL、Anima）/ 导入 / 导出，自动标记占位符 |
 | 配音 / 视频 页 | 服务、地址、密钥、模型、默认音色与可编辑的音色预设表（配音）或尺寸时长（视频）、酒馆代理 |
 | 各页底部 | 这项功能的 AI 自动标签开关和系统提示词 |
 

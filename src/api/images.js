@@ -108,6 +108,14 @@ export async function callImageAPI(prompt, { signal, onProgress } = {}) {
         return result.url;
     }
 
+    if (s.imageProvider === 'novelai') {
+        const [{ generateNovelAI }, { extraParams }] = await Promise.all([import('./novelai.js'), import('../media/providers.js')]);
+        onProgress?.({ attempt: 1, total: 1, method: 'novelai', errors: 0 });
+        return generateNovelAI({
+            base: s.apiBase, key: s.apiKey, model: s.model, size: s.size, extra: extraParams(s.imageParams || '{}'), timeout: Number(s.imageTimeout) || LIMITS.imageGenTimeoutMs,
+        }, fullPrompt, negative, { signal });
+    }
+
     if (s.imageProvider && s.imageProvider !== 'auto') {
         const { generateMedia } = await import('../media/client.js');
         const result = await generateMedia('image', {
@@ -174,7 +182,7 @@ export function imageKeyMissing(s) {
     return !String(s?.apiKey || '').trim() && needsKey(s?.imageProvider, s?.apiBase || '');
 }
 
-/** 拉取模型列表（OpenAI 兼容 /v1/models；自建服务走酒馆的 /api/sd/models、/api/sd/comfy/models）。 */
+/** 拉取模型列表（OpenAI 兼容 /v1/models；自建服务走酒馆的 /api/sd/models、/api/sd/comfy/models；NovelAI 用内置列表）。 */
 export async function fetchModelList() {
     const s = await getSettings();
     if (s.imageProvider === 'comfyui' || s.imageProvider === 'sdwebui') {
@@ -187,6 +195,7 @@ export async function fetchModelList() {
         const list = await resp.json();
         return (Array.isArray(list) ? list : []).map((m) => (typeof m === 'string' ? { id: m, name: m } : { id: m.value, name: m.text || m.value })).filter((m) => m.id);
     }
+    if (s.imageProvider === 'novelai') return (await import('./novelai.js')).NAI_MODELS;
     if (imageKeyMissing(s)) throw new Error('请先填写 API Key');
     if (!s.apiBase) throw new Error('请先填写 API Base URL');
 

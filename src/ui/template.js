@@ -35,13 +35,13 @@ export const PANEL_HTML = `
         <div class="st_ai_gen_area">
             <textarea id="st_gpt_image_prompt" class="st_ai_textarea" rows="3" placeholder="输入图片描述..."></textarea>
             <div class="st_ai_gen_controls">
-                <select id="st_gpt_image_size" class="st_ai_select">
+                <select id="st_gpt_image_size" class="st_ai_select" title="尺寸" data-show-for="auto openai novelai comfyui sdwebui">
                     <option value="1024x1024">1024x1024</option>
                     <option value="1536x1024">1536x1024</option>
                     <option value="1024x1536">1024x1536</option>
                     <option value="auto">Auto</option>
                 </select>
-                <select id="st_gpt_image_quality" class="st_ai_select">
+                <select id="st_gpt_image_quality" class="st_ai_select" title="质量" data-show-for="auto openai">
                     <option value="auto">Auto</option>
                     <option value="high">High</option>
                     <option value="medium">Medium</option>
@@ -61,6 +61,21 @@ export const PANEL_HTML = `
         <h4 class="st_ai_section_title">接口与参数</h4>
         <div class="st_ai_settings_form">
             <div class="st_ai_field">
+                <label for="st_gpt_image_provider">生图接口</label>
+                <select id="st_gpt_image_provider" class="st_ai_input">
+                    <option value="auto">中转站（自动试接口，旧版兼容）</option>
+                    <option value="openai">OpenAI Images / 兼容中转</option>
+                    <option value="chat">OpenAI Chat 生图</option>
+                    <option value="gemini">Gemini 原生</option>
+                    <option value="novelai">NovelAI</option>
+                    <option value="comfyui">ComfyUI（自建）</option>
+                    <option value="sdwebui">SD WebUI（A1111 / Forge，自建）</option>
+                    <option value="fal">fal 队列</option>
+                    <option value="replicate">Replicate</option>
+                </select>
+                <p class="st_ai_speech_hint" id="st_gpt_image_provider_hint"></p>
+            </div>
+            <div class="st_ai_field">
                 <label>API 预设</label>
                 <div class="st_ai_inline_row">
                     <select id="st_gpt_preset_select" class="st_ai_input st_ai_flex_fill"></select>
@@ -69,22 +84,20 @@ export const PANEL_HTML = `
                 </div>
             </div>
             <div class="st_ai_field">
-                <label for="st_gpt_image_api_base">API 地址（自建服务填 http://本机:端口）</label>
-                <input type="text" id="st_gpt_image_api_base" class="st_ai_input" placeholder="https://your-proxy.com/v1 · ComfyUI http://127.0.0.1:8188 · WebUI http://127.0.0.1:7860">
+                <label for="st_gpt_image_api_base" id="st_gpt_image_api_base_label">API 地址</label>
+                <input type="text" id="st_gpt_image_api_base" class="st_ai_input" placeholder="https://your-proxy.com/v1">
+            </div>
+            <div class="st_ai_field" data-hide-for="comfyui sdwebui">
+                <label for="st_gpt_image_api_key" id="st_gpt_image_api_key_label">API Key</label>
+                <input type="password" id="st_gpt_image_api_key" class="st_ai_input" autocomplete="off" placeholder="sk-...">
             </div>
             <div class="st_ai_field">
-                <label for="st_gpt_image_provider">生图接口协议</label>
-                <select id="st_gpt_image_provider" class="st_ai_input">
-                    <option value="auto">旧版兼容（仅端点不支持时降级）</option>
-                    <option value="openai">OpenAI Images</option>
-                    <option value="chat">OpenAI Chat 生图</option>
-                    <option value="gemini">Gemini 原生</option>
-                    <option value="fal">fal 队列</option>
-                    <option value="replicate">Replicate</option>
-                    <option value="comfyui">ComfyUI（自建）</option>
-                    <option value="sdwebui">SD WebUI（A1111 / Forge，自建）</option>
-                </select>
-                <p class="st_ai_speech_hint">切换协议不会替换地址、密钥或模型，请使用对应服务的配置。fal / Replicate 的模型填写平台路径。</p>
+                <label for="st_gpt_image_model" id="st_gpt_image_model_label">模型</label>
+                <div class="st_ai_inline_row">
+                    <input type="text" id="st_gpt_image_model" class="st_ai_input st_ai_flex_fill" placeholder="gpt-image-2">
+                    <button type="button" id="st_gpt_fetch_models" class="st_ai_btn" title="获取模型列表" aria-label="获取模型列表"><i class="fa-solid fa-rotate"></i></button>
+                </div>
+                <select id="st_gpt_model_list" class="st_ai_input st_ai_model_list"></select>
             </div>
             <div class="st_ai_field" data-show-for="comfyui sdwebui">
                 <label class="st_ai_checkbox">
@@ -101,24 +114,12 @@ export const PANEL_HTML = `
                 <div id="st_ai_image_workflow_lib"></div>
                 <textarea id="st_gpt_image_comfy_workflow" class="st_ai_textarea" rows="6" spellcheck="false" placeholder='{"3": {"class_type": "KSampler", "inputs": {"seed": "%seed%", ...}}, ...}'></textarea>
                 <p class="st_ai_speech_hint st_ai_media_warning" id="st_gpt_image_comfy_status" role="status" aria-live="polite"></p>
-                <p class="st_ai_speech_hint">把工作流里要变的值改成占位符：%prompt%（正面，含画师串）、%negative_prompt%、%seed%（随机）、%width% %height%（按尺寸）、%steps% %cfg_scale% %sampler_name% %scheduler%、%MODEL_NAME%（模型栏）。中文写法 %提示词% %种子% 等也认；额外参数里的键也能当占位符，比如 {"steps": 28} 会填进 %steps%。</p>
+                <p class="st_ai_speech_hint">占位符：%prompt%（正面，含画师串）、%negative_prompt%、%seed%（随机）、%width% %height%（按上面的尺寸）、%MODEL_NAME%（模型栏）。「自动标记」只换提示词、种子和尺寸，工作流里调好的步数、CFG、采样器不动；想在这里改，就把值换成 %steps% %cfg_scale% %sampler_name% %scheduler%，再在额外参数里给，比如 {"steps": 28}（不给用 20 / 7 / euler / normal）。中文写法 %提示词% %种子% 也认。</p>
             </div>
-            <div class="st_ai_field">
-                <label for="st_gpt_image_params">额外模型参数（JSON 对象）</label>
-                <textarea id="st_gpt_image_params" class="st_ai_textarea" rows="2" maxlength="4096" placeholder='例如 {"seed":42}；Gemini 对应 generationConfig'></textarea>
-                <p class="st_ai_speech_hint">仅指定协议时生效。按模型文档填写尺寸等参数，不要填写密钥。SD WebUI 填 txt2img 参数，如 {"steps":28,"cfg_scale":6,"sampler_name":"DPM++ 2M"}；ComfyUI 填占位符的值。</p>
-            </div>
-            <div class="st_ai_field" data-hide-for="comfyui sdwebui">
-                <label for="st_gpt_image_api_key">API Key（本机或局域网地址可以留空）</label>
-                <input type="password" id="st_gpt_image_api_key" class="st_ai_input" placeholder="sk-...">
-            </div>
-            <div class="st_ai_field">
-                <label for="st_gpt_image_model">模型</label>
-                <div class="st_ai_inline_row">
-                    <input type="text" id="st_gpt_image_model" class="st_ai_input st_ai_flex_fill" placeholder="gpt-image-2">
-                    <button type="button" id="st_gpt_fetch_models" class="st_ai_btn" title="获取模型列表" aria-label="获取模型列表"><i class="fa-solid fa-rotate"></i></button>
-                </div>
-                <select id="st_gpt_model_list" class="st_ai_input st_ai_model_list"></select>
+            <div class="st_ai_field" data-hide-for="auto">
+                <label for="st_gpt_image_params">额外参数（JSON 对象）</label>
+                <textarea id="st_gpt_image_params" class="st_ai_textarea" rows="2" maxlength="4096" placeholder='{"seed":42}'></textarea>
+                <p class="st_ai_speech_hint" id="st_gpt_image_params_hint"></p>
             </div>
             <div class="st_ai_field">
                 <label for="st_gpt_image_timeout">生图超时时间（秒）</label>

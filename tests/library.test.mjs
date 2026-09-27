@@ -6,6 +6,7 @@ import {
 } from '../src/core/library.js';
 import { autoMarkWorkflow, fillWorkflow, parseWorkflow, placeholderValues } from '../src/media/selfhosted.js';
 import { readMediaSettings } from '../src/media/media-settings.js';
+import { WORKFLOW_TEMPLATES } from '../src/media/workflow-templates.js';
 
 const presetOpts = { normalizeItem: normalizePromptPreset, blank: blankPromptPreset };
 
@@ -77,22 +78,35 @@ const SDXL = {
     9: { class_type: 'SaveImage', inputs: { filename_prefix: 'ComfyUI', images: ['8', 0] } },
 };
 
-test('自动标记：顺着 positive/negative 找提示词节点，种子/步数/CFG/采样/模型/尺寸换成占位符，连线不动', () => {
+test('自动标记：顺着 positive/negative 找提示词节点，种子和尺寸换成占位符；步数/CFG/采样/模型保留工作流调好的值', () => {
     const { workflow, changes } = autoMarkWorkflow(SDXL);
     assert.equal(workflow[6].inputs.text, '%prompt%');
     assert.equal(workflow[7].inputs.text, '%negative_prompt%');
-    assert.deepEqual([workflow[3].inputs.seed, workflow[3].inputs.steps, workflow[3].inputs.cfg, workflow[3].inputs.sampler_name, workflow[3].inputs.scheduler],
-        ['%seed%', '%steps%', '%cfg_scale%', '%sampler_name%', '%scheduler%']);
-    assert.equal(workflow[4].inputs.ckpt_name, '%MODEL_NAME%');
+    assert.equal(workflow[3].inputs.seed, '%seed%');
+    assert.deepEqual([workflow[3].inputs.steps, workflow[3].inputs.cfg, workflow[3].inputs.sampler_name, workflow[3].inputs.scheduler], [20, 8, 'euler', 'normal']);
+    assert.equal(workflow[4].inputs.ckpt_name, 'sd_xl_base_1.0.safetensors');
     assert.deepEqual([workflow[5].inputs.width, workflow[5].inputs.height, workflow[5].inputs.batch_size], ['%width%', '%height%', 1]);
     assert.deepEqual(workflow[3].inputs.positive, ['6', 0]);
     assert.equal(workflow[3].inputs.denoise, 1);
-    assert.equal(changes.length, 10);
+    assert.equal(changes.length, 5);
     assert.equal(SDXL[6].inputs.text, 'beautiful scenery'); // 不改原对象
     assert.equal(autoMarkWorkflow(workflow).changes.length, 0); // 标过的不重复标
     // 标完就能直接填
-    const filled = fillWorkflow(parseWorkflow(JSON.stringify(workflow)), placeholderValues({ prompt: '1girl', negative: 'bad', size: '832x1216', model: 'anything.safetensors', random: () => 1 }));
-    assert.deepEqual([filled[6].inputs.text, filled[7].inputs.text, filled[5].inputs.width, filled[4].inputs.ckpt_name], ['1girl', 'bad', 832, 'anything.safetensors']);
+    const filled = fillWorkflow(parseWorkflow(JSON.stringify(workflow)), placeholderValues({ prompt: '1girl', negative: 'bad', size: '832x1216', random: () => 1 }));
+    assert.deepEqual([filled[6].inputs.text, filled[7].inputs.text, filled[5].inputs.width, filled[3].inputs.seed, filled[3].inputs.cfg], ['1girl', 'bad', 832, 1, 8]);
+});
+
+test('工作流模板：SDXL 和 Anima 都是标好的 API 格式，填完没有剩下的占位符；Anima 保留 30 步 CFG 4 和默认负面', () => {
+    for (const [name, template] of Object.entries(WORKFLOW_TEMPLATES)) {
+        const text = JSON.stringify(template);
+        assert.ok(isSingleWorkflow(template), name);
+        const filled = fillWorkflow(parseWorkflow(text), placeholderValues({ prompt: '1girl', negative: 'bad', size: '832x1216', model: 'noob.safetensors', random: () => 7 }));
+        assert.doesNotMatch(JSON.stringify(filled), /%\w+%/, name);
+        assert.equal(autoMarkWorkflow(template).changes.length, 0, name); // 已经标好
+    }
+    const anima = fillWorkflow(WORKFLOW_TEMPLATES.Anima, placeholderValues({ prompt: 'cat', negative: 'dog', size: '1024x1024', random: () => 7 }));
+    assert.deepEqual([anima[3].inputs.steps, anima[3].inputs.cfg, anima[3].inputs.scheduler, anima[1].inputs.unet_name], [30, 4, 'simple', 'anima-base-v1.0.safetensors']);
+    assert.match(anima[7].inputs.text, /^worst quality, .*sepia, dog$/);
 });
 
 test('自动标记：提示词经过中间节点（ConditioningCombine 等）也能找到', () => {

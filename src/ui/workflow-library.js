@@ -31,8 +31,9 @@ export function describeWorkflow(text) {
  * @param {() => { items: Record<string,string>, active: string }} o.read
  * @param {(lib: { items: Record<string,string>, active: string }) => Promise<void>|void} o.write
  * @param {string} o.exportName
+ * @param {Record<string, object>} [o.templates] 「从模板新建」的选项：名字 → API 格式工作流
  */
-export function createWorkflowLibrary({ id, textarea, status, read, write, exportName }) {
+export function createWorkflowLibrary({ id, textarea, status, read, write, exportName, templates }) {
     const check = () => {
         const { text, bad } = describeWorkflow(textarea.value);
         status.textContent = text;
@@ -74,6 +75,27 @@ export function createWorkflowLibrary({ id, textarea, status, read, write, expor
         },
     });
 
+    // 从内置模板新建一份（只有生图库传 templates）
+    const templateSelect = templates && el('select', {
+        id: `${id}_template`, class: 'st_ai_input st_ai_library_template', 'aria-label': '从模板新建工作流',
+    }, [el('option', { value: '', text: '从模板新建…' }), ...Object.keys(templates).map((name) => el('option', { value: name, text: name }))]);
+    templateSelect?.addEventListener('change', async () => {
+        const name = templateSelect.value;
+        templateSelect.value = '';
+        if (!templates[name]) return;
+        try {
+            await flush();
+            const lib = read();
+            const key = uniqueName(lib.items, name);
+            await write({ items: { ...lib.items, [key]: JSON.stringify(templates[name], null, 2) }, active: key });
+            control.render();
+            show();
+            control.say(`已从模板新建「${key}」；模型文件名和本机不一样的话在框里改`);
+        } catch (e) {
+            control.say(e.message, true);
+        }
+    });
+
     const control = createLibraryControl({
         id, noun: '工作流',
         names: () => Object.keys(read().items),
@@ -107,7 +129,7 @@ export function createWorkflowLibrary({ id, textarea, status, read, write, expor
             return added;
         },
         onExport: () => ({ fileName: exportName, data: read().items }),
-        extra: [autoMark],
+        extra: templateSelect ? [autoMark, templateSelect] : [autoMark],
     });
     show();
     return { node: control.node, refresh: () => { control.render(); show(); } };

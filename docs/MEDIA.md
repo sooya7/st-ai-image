@@ -36,6 +36,28 @@
 - 「默认音色」是下拉框，选项是表里填了音色的类型，也可以选「自定义音色 ID」。
 - 写回时 `type` 保留：`[voice type="御姐" src="/user/files/…"]快进来[/voice]`，重新生成还是同一个类型。
 
+## 按接口显示设置
+
+图片页先选「生图接口」，下面只显示这个接口用得上的东西：
+- 质量下拉框只在 OpenAI 类接口出现；尺寸选项按接口换（OpenAI 是 1024x1024 / 1536x1024 / 1024x1536，NovelAI、ComfyUI、WebUI 是 832x1216 这类竖图横图），Chat / Gemini / fal / Replicate 不用尺寸就不显示。
+- 地址、Key、模型的叫法和示例、额外参数的说明、接口说明都跟着换；自建服务不显示 Key，ComfyUI 显示工作流库，WebUI 显示账号密码。
+- **每个接口各记各的**地址、Key、模型、额外参数、尺寸（存在 `imageProfiles` 里）。OpenAI Images / Chat 生图 / Gemini / 旧版兼容通常是同一个中转站同一把 Key，所以共用一组，互相切不换值。第一次切到 NovelAI / ComfyUI / WebUI 时填好默认地址。输入后马上切走也会先存进原来的接口。
+- 套用「API 预设」时也按换接口处理，当前接口填的不会丢。
+
+## NovelAI
+
+- 选「NovelAI」，填令牌（NovelAI 网页：设置 → Account → Get Persistent API Token，`pst-` 开头）。地址留空用官方 `https://image.novelai.net`，用反代就填反代地址（填到域名即可，写全 `/ai/generate-image` 也认）。
+- 官方接口允许跨域（`Access-Control-Allow-Origin: *`，2026-09-28 实测），浏览器和 TauriTavern 都直接连，不经酒馆转发；反代要自己允许跨域。
+- 请求按网页版 V4 / V4.5 的格式：画师串拼好的提示词同时进 `input` 和 `v4_prompt`，负面同时进 `negative_prompt` 和 `v4_negative_prompt`；默认 28 步、CFG 5、`k_euler_ancestral` + `karras`、打开质量词（`qualityToggle`），种子随机。额外参数合并进 `parameters`，可以覆盖这些，比如 `{"steps": 23, "qualityToggle": false}`。V3 模型会忽略 `v4_*` 字段。
+- 模型列表按钮给内置列表：`nai-diffusion-4-5-full`（默认）、`4-5-curated`、`4-full`、`4-curated-preview`、`3`、`furry-3`；新模型可以直接手填。
+- 返回的 zip 在浏览器里解开（不压缩和 deflate 都认）；反代直接回图片或 JSON（`images[0]` / `image` / `data[0].b64_json`）也认。
+- 报错：401 令牌不对，402 没订阅或 Anlas 不够（Opus 在 1024×1024 以内、28 步以内不扣），429 同时只能生成一张。
+- 没做：角色分区提示词（`characterPrompts`）、图生图、Vibe Transfer、放大。
+
+## Anima 等本地模型
+
+Anima（circlestone-labs，2B 动漫模型）没有在线 API，走 ComfyUI：图片页选 ComfyUI → 工作流库「从模板新建…」→「Anima」。模板照 ComfyUI 官方模板：`UNETLoader` 加载 `anima-base-v1.0.safetensors`，`CLIPLoader`（`qwen_3_06b_base.safetensors`，type `stable_diffusion`），`VAELoader`（`qwen_image_vae.safetensors`），30 步、CFG 4、`euler` / `simple`，负面默认带官方那串质量词再接画师串的负面。本机文件名不同（比如还在用 preview3）就在框里改。另一个模板「SDXL（单个 checkpoint）」适合 Illustrious / NoobAI / Pony，模型用模型栏（`%MODEL_NAME%`，可以点刷新拉 checkpoint 列表）。
+
 ## 自建服务（ComfyUI / SD WebUI）
 
 图片页的「生图接口协议」和视频页的「服务」里可以选：
@@ -68,9 +90,9 @@
 
 ### 工作流库与自动标记
 
-- 图片页和视频页各有一个 ComfyUI 工作流库：下拉框切换，新建 / 另存为 / 重命名 / 删除（点两次确认）/ 导入 / 导出。导入认单份「导出 (API)」工作流（用文件名当名字），也认本扩展或 st-chatu8 导出的「名字 → 工作流」文件；同名的自动加序号，不覆盖。
+- 图片页和视频页各有一个 ComfyUI 工作流库：下拉框切换，新建 / 另存为 / 重命名 / 删除（点两次确认）/ 导入 / 导出；图片库还能「从模板新建」（SDXL、Anima）。导入认单份「导出 (API)」工作流（用文件名当名字），也认本扩展或 st-chatu8 导出的「名字 → 工作流」文件；同名的自动加序号，不覆盖。
 - 以前填的那一份工作流会自动变成库里的「默认」。
-- 「自动标记占位符」：顺着 KSampler 的 positive / negative 连线找到两个提示词节点（中间隔着 ConditioningCombine 之类也能找到），把文字换成 `%prompt%` / `%negative_prompt%`；种子、步数、CFG、采样器、调度器、`ckpt_name`、空 Latent 的宽高也换成占位符，并列出改了哪几处。已经是连线或已含占位符的值不动。LoRA、ControlNet 等其他参数不自动改，需要的话手动写占位符并在额外参数里给值。
+- 「自动标记占位符」：顺着 KSampler 的 positive / negative 连线找到两个提示词节点（中间隔着 ConditioningCombine 之类也能找到），把文字换成 `%prompt%` / `%negative_prompt%`；种子和空 Latent 的宽高也换成占位符，并列出改了哪几处。**步数、CFG、采样器、调度器、模型不动**：这些是按模型调好的（Anima 要 30 步 CFG 4，换成占位符会被默认的 20 / 7 顶掉）；想在酒馆这边改就手动换成 `%steps%` 等并在额外参数里给值。已经是连线或已含占位符的值不动。LoRA、ControlNet 等其他参数不自动改，需要的话手动写占位符并在额外参数里给值。
 
 ## 画师串（提示词预设）
 
@@ -136,9 +158,9 @@ enableCorsProxy: true
 
 本机 Node.js 24.14.1、Chromium 147.0.7727.15、SillyTavern 1.18.0。
 
-**单元测试** `npm test`：62/62 通过（标签解析/定位/改写、合并正则、协议请求、代理改写、文件头识别、视频任务轮询等）。
+**单元测试** `npm test`：93/93 通过（2026-09-28）（标签解析/定位/改写、合并正则、协议请求、代理改写、文件头识别、视频任务轮询等）。
 
-**模拟宿主浏览器测试** `python tests/inline-media-ui.py --output <目录>`：15 组通过。模拟 ST 的 markdown 拆分、`updateMessageBlock`、`saveChat`、`saveSettingsDebounced`、`/api/files/upload`+CSRF，以及与真实 ST 一样不带 Content-Type 的 `/proxy/`。结果见 `docs/verification/inline-media-result.json`。
+**模拟宿主浏览器测试** `python tests/inline-media-ui.py --output <目录>`：18 组通过（2026-09-28）。模拟 ST 的 markdown 拆分、`updateMessageBlock`、`saveChat`、`saveSettingsDebounced`、`/api/files/upload`+CSRF，以及与真实 ST 一样不带 Content-Type 的 `/proxy/`。结果见 `docs/verification/inline-media-result.json`。
 
 **真实 SillyTavern 1.18.0**（独立数据目录，媒体服务为本地模拟）：8 项通过，扩展报错 0：
 

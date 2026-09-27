@@ -1033,3 +1033,4 @@
 .st_gpt_inline_gen_pending {
     opacity: 0.75;
 }
+.st_ai_library_template { width: auto; flex: 0 1 auto; padding: 4px 8px; font-size: 12px; }

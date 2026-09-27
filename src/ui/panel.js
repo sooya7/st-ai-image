@@ -38,8 +38,8 @@ let librariesMounted = null;
 /** 画师串和生图工作流库第一次打开面板时才加载（会用到工作流解析代码，不拖慢页面加载）。 */
 function mountImageLibraries() {
     librariesMounted ||= (async () => {
-        const [{ mountPromptPresets }, { createWorkflowLibrary }, { readWorkflowLibrary }, { getSettings, peekSettings, saveSettings }] = await Promise.all([
-            import('./prompt-presets-view.js'), import('./workflow-library.js'), import('../core/library.js'), import('../settings.js'),
+        const [{ mountPromptPresets }, { createWorkflowLibrary }, { readWorkflowLibrary }, { getSettings, peekSettings, saveSettings }, { WORKFLOW_TEMPLATES }] = await Promise.all([
+            import('./prompt-presets-view.js'), import('./workflow-library.js'), import('../core/library.js'), import('../settings.js'), import('../media/workflow-templates.js'),
         ]);
         await getSettings();
         mountPromptPresets(qs('#st_ai_prompt_preset_panel'));
@@ -52,6 +52,7 @@ function mountImageLibraries() {
                 read: () => { const s = peekSettings(); return readWorkflowLibrary(s.comfyWorkflows, s.comfyWorkflowId, s.comfyWorkflow); },
                 write: async ({ items, active }) => saveSettings({ ...(await getSettings()), comfyWorkflows: items, comfyWorkflowId: active }),
                 exportName: 'st-ai-image-ComfyUI生图工作流.json',
+                templates: WORKFLOW_TEMPLATES,
             });
             holder.replaceChildren(lib.node);
         }

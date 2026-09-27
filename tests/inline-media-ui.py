@@ -22,6 +22,7 @@ import threading
 import time
 import wave
 import zlib
+import zipfile
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, expect
@@ -126,6 +127,11 @@ class Handler(SimpleHTTPRequestHandler):
             if any('Video' in n['class_type'] for n in workflow.values()):
                 return self.reply(200, {'format': 'webm', 'data': base64.b64encode(VIDEO).decode()})
             return self.reply(200, {'format': 'png', 'data': PNG_B64})
+        if self.path == '/nai/ai/generate-image':
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+                z.writestr('image_0.png', png_1x1())
+            return self.reply(200, buf.getvalue(), 'application/x-zip-compressed')
         if self.path == '/mock/v1/audio/speech':
             text = json.loads(body)['input']
             if 'FAIL' in text:
@@ -535,6 +541,44 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     assert tried[0].endswith('/images/generations') and tried[1].endswith('/chat/completions'), tried
     close_panel()
     checks.append('Image protocols: OpenAI Images and Gemini native requests; legacy mode does not resubmit on 500 but falls back on 404')
+
+    # ---------- per-interface settings + NovelAI ----------
+    open_tab('generate')
+    expect(page.locator('#st_gpt_image_quality')).to_be_visible()
+    expect(page.locator('#st_gpt_image_params')).to_be_hidden()  # 旧版兼容模式不用额外参数
+    page.locator('#st_gpt_image_provider').select_option('novelai')
+    expect(page.locator('#st_gpt_image_api_key_label')).to_contain_text('NovelAI 令牌')
+    expect(page.locator('#st_gpt_image_provider_hint')).to_contain_text('Persistent API Token')
+    expect(page.locator('#st_gpt_image_quality')).to_be_hidden()
+    expect(page.locator('#st_gpt_image_size')).to_have_value('832x1216')
+    expect(page.locator('#st_gpt_image_api_base')).to_have_value('https://image.novelai.net')
+    expect(page.locator('#st_gpt_image_api_key')).to_have_value('')  # 中转站的 Key 不会带过来
+    expect(page.locator('#st_gpt_image_model')).to_have_value('nai-diffusion-4-5-full')
+    page.locator('#st_gpt_image_api_base').fill(origin + '/nai')
+    page.locator('#st_gpt_image_api_key').fill('pst-fixture')
+    page.locator('#st_gpt_image_size').select_option('1216x832')
+    page.screenshot(path=str(output / 'image-novelai-settings.png'))
+    # 不等防抖直接切走：刚填的也要记在 NovelAI 名下
+    page.locator('#st_gpt_image_provider').select_option('openai')
+    expect(page.locator('#st_gpt_image_api_base')).to_have_value(origin + '/mock')
+    expect(page.locator('#st_gpt_image_api_key')).to_have_value('fixture-image-key')
+    expect(page.locator('#st_gpt_image_model')).to_have_value('image-model-x')
+    expect(page.locator('#st_gpt_image_quality')).to_be_visible()
+    page.locator('#st_gpt_image_provider').select_option('novelai')
+    expect(page.locator('#st_gpt_image_api_base')).to_have_value(origin + '/nai')
+    expect(page.locator('#st_gpt_image_api_key')).to_have_value('pst-fixture')
+    expect(page.locator('#st_gpt_image_size')).to_have_value('1216x832')
+    page.locator('#st_gpt_image_prompt').fill('nai cat')
+    page.locator('#st_gpt_image_generate_btn').click()
+    expect(page.locator('#st_gpt_gen_result img.st_gpt_gen_img')).to_have_count(1, timeout=10000)
+    call = posts('/nai/ai/generate-image')[-1]
+    nai = json.loads(call['body'])
+    assert call['auth'] == 'Bearer pst-fixture' and nai['input'] == 'nai cat' and nai['model'] == 'nai-diffusion-4-5-full', call
+    assert [nai['parameters']['width'], nai['parameters']['height']] == [1216, 832] and nai['parameters']['v4_prompt']['caption']['base_caption'] == 'nai cat', nai
+    saved = page.evaluate("JSON.parse(sessionStorage.getItem('fixture-state')).settings['st-ai-image']")
+    assert saved['imageProfiles']['relay']['apiKey'] == 'fixture-image-key' and saved['apiKey'] == 'pst-fixture', saved.get('imageProfiles')
+    close_panel()
+    checks.append('Per-interface settings: fields, labels, hints and size options follow the chosen interface; each interface remembers its own address/key/model/size (relay-type ones share); NovelAI request (V4.5 body, Bearer token) and zip response decoded into an image')
 
     # ---------- self-hosted: ComfyUI / SD WebUI through the tavern backend ----------
     comfy_image = json.dumps({

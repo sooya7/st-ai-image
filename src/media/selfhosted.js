@@ -71,15 +71,14 @@ export function parseWorkflow(text) {
     return data;
 }
 
-const MARK_KEYS = {
-    seed: '%seed%', noise_seed: '%seed%', steps: '%steps%', cfg: '%cfg_scale%', sampler_name: '%sampler_name%',
-    scheduler: '%scheduler%', ckpt_name: '%MODEL_NAME%',
-};
+// 步数、CFG、采样器、调度器、模型不自动标记：它们是工作流作者按模型调好的（Anima 要 30 步 CFG 4，
+// 换成占位符就会被默认的 20 / 7 顶掉）。想在酒馆这边改的，自己换成 %steps% 等占位符。
+const MARK_KEYS = { seed: '%seed%', noise_seed: '%seed%' };
 const SIZE_NODES = /EmptyLatent|EmptySD3Latent|EmptyHunyuanLatent|EmptyMochiLatent|WanImageToVideo|EmptyLTXVLatent/i;
 
 /**
  * 自动标记占位符：顺着采样器的 positive / negative 连线找到两个提示词节点，把文字换成 %prompt% / %negative_prompt%；
- * 种子、步数、CFG、采样器、调度器、模型、空 Latent 的宽高也换成占位符。
+ * 种子、空 Latent 的宽高也换成占位符。
  * 已经是连线（数组）或已经含占位符的值不动。返回 { workflow, changes: ['节点#3 seed → %seed%', ...] }。
  */
 export function autoMarkWorkflow(input) {

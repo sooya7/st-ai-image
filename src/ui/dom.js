@@ -77,8 +77,10 @@ export const replaceContent = (node, ...children) => {
 
 export const debounce = (fn, wait) => {
     let timer = null;
-    return (...args) => {
+    const run = (...args) => {
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => { timer = null; fn(...args); }, wait);
     };
+    run.cancel = () => { clearTimeout(timer); timer = null; };
+    return run;
 };

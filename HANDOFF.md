@@ -2,7 +2,7 @@
 
 更新时间：2026-09-26（Asia/Shanghai）。接手前请重新检查 Git 与远端。
 
-**当前状态：2.2.0，图片 / 配音 / 视频都嵌在聊天正文里生成，面板里的语音、视频页只做设置。63 项单元测试、15 组模拟宿主浏览器测试、8 项真实 SillyTavern 1.18.0 验收全部通过，SOOYA 三个真实渠道各完成一次端到端生成：mikoto 生图（直连）、Fish 配音（经酒馆代理）、Agnes 视频（直连，含断线续查）。已合入 `master`（未建 PR，直接本地合并推送）。** 使用说明与验证结果见 [docs/MEDIA.md](docs/MEDIA.md)，真实渠道证据在 `docs/verification/real-vendor-*.json`。
+**当前状态：2.2.0，图片 / 配音 / 视频都嵌在聊天正文里生成，面板里的语音、视频页只做设置。2026-09-28：93 项单元测试、18 组模拟宿主浏览器测试通过（8 项真实 SillyTavern 1.18.0 验收是 2.2.0 时做的），SOOYA 三个真实渠道各完成一次端到端生成：mikoto 生图（直连）、Fish 配音（经酒馆代理）、Agnes 视频（直连，含断线续查）。已合入 `master`（未建 PR，直接本地合并推送）。** 使用说明与验证结果见 [docs/MEDIA.md](docs/MEDIA.md)，真实渠道证据在 `docs/verification/real-vendor-*.json`。
 
 ## 1. 项目入口与用户要求
 
@@ -31,6 +31,9 @@
 | `src/ui/media-settings-view.js` | 配音/视频页（第一次切过去才加载）；保存时不碰提示词字段 |
 | `src/ui/voice-settings.js` | 配音页的默认音色下拉框和可编辑的音色预设表（按服务分开存） |
 | `src/media/selfhosted.js` | 自建服务：ComfyUI 工作流占位符填充、挑输出、经酒馆 `/api/sd/comfy/generate` 或直连 `/prompt`→`/history`→`/view`；SD WebUI 经 `/api/sd/generate` 或直连 txt2img |
+| `src/api/novelai.js` | NovelAI：V4.5 请求体、浏览器里解 zip、报错说明；官方接口允许跨域，直连 |
+| `src/core/image-profiles.js` | 图片接口各记各的地址/Key/模型/额外参数/尺寸；中转类（auto/openai/chat/gemini）共用一组 |
+| `src/media/workflow-templates.js` | 内置 ComfyUI 生图模板：SDXL、Anima |
 | `src/media/keys.js` | `needsKey`/`isLocalBase`：本机/局域网地址和自建服务 Key 可留空（页面加载就用，所以不放 providers.js） |
 | `src/core/library.js` | 「名字 → 内容」库的纯函数（改名/删除/导入/迁移），画师串拼接 `applyPromptPreset`，工作流库读取 |
 | `src/ui/library-control.js` | 库控件：下拉框 + 新建/另存为/重命名/删除/导入/导出，起名和确认都在控件内（不用 prompt/confirm） |
@@ -66,7 +69,7 @@
 ```powershell
 Set-Location 'C:\Users\iulze\Documents\Codex\2026-09-26\new-chat-2\outputs\st-ai-image'
 npm test                                                    # 63 项
-python tests/inline-media-ui.py --output ./test-output      # 模拟宿主 15 组（需要 Playwright；ffmpeg 可选）
+python tests/inline-media-ui.py --output ./test-output      # 模拟宿主 18 组（需要 Playwright；ffmpeg 可选）
 python tests/real-st-check.py --st http://127.0.0.1:8123 --data <临时数据目录> --output ./test-output
 # 真实渠道（各调一次付费接口，脚本在工作区 work/ 下，不在仓库）：
 python ..\..\work\real-vendor-check.py  --st http://127.0.0.1:8123 --data <临时数据目录> --output <结果目录>
