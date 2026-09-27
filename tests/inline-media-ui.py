@@ -253,7 +253,7 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     # ---------- settings-only speech tab ----------
     open_tab('speech')
     expect(page.locator('#st_ai_speech_base')).to_be_visible()
-    assert page.locator('#st_ai_speech_panel button').count() == 0
+    assert page.locator('#st_ai_speech_panel button:not(#st_ai_speech_voice_preview)').count() == 0  # 只有试听，没有生成
     assert page.locator('#st_ai_speech_panel audio, #st_ai_speech_panel video').count() == 0
     page.locator('#st_ai_speech_base').fill(origin + '/mock/v1')
     page.locator('#st_ai_speech_key').fill('fixture-voice-key')
@@ -295,22 +295,57 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     assert re.fullmatch(r'重复两遍：\[voice\]嗯\[/voice\] 和 \[voice src="/user/files/st-ai-audio-[^"]+"\]嗯\[/voice\]', raw(3)), raw(3)
     checks.append('Two identical tags in one message: only the clicked (second) tag receives the src')
 
-    # ---------- per-character voices ----------
+    # ---------- preset voices ----------
+    FISH = {'bodies': []}
+
+    def fish_route(route):
+        if route.request.method == 'OPTIONS':
+            return route.fulfill(status=204, headers={'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'POST'})
+        FISH['bodies'].append(json.loads(route.request.post_data))
+        route.fulfill(status=200, body=AUDIO, headers={'Content-Type': 'audio/wav', 'Access-Control-Allow-Origin': '*'})
+
+    page.route('https://api.fish.audio/**', fish_route)
     open_tab('speech')
-    page.locator('#st_ai_speech_voices').fill('# 注释行\n林晚=voice-linwan\n店主：voice-owner')
+    old_base = page.locator('#st_ai_speech_base').input_value()
+    old_voice = page.locator('#st_ai_speech_voice').input_value()
+    expect(page.locator('#st_ai_speech_voice_preset')).to_be_hidden()  # 非 Fish 地址：没有预设，只有 ID 输入框
+    expect(page.locator('#st_ai_speech_voice')).to_be_visible()
+    page.locator('#st_ai_speech_base').fill('https://api.fish.audio/compat/v1')
+    expect(page.locator('#st_ai_speech_voice_preset')).to_be_visible()
+    page.locator('#st_ai_speech_voice_preset').select_option(label='温柔女声（温柔、抑扬顿挫）')
+    expect(page.locator('#st_ai_speech_voice')).to_be_hidden()
+    page.locator('#st_ai_speech_voice_preset').scroll_into_view_if_needed()
+    page.screenshot(path=str(output / 'settings-voice-preset.png'))
+    page.wait_for_timeout(700)
+    saved = page.evaluate("JSON.parse(sessionStorage.getItem('fixture-state')).settings['st-ai-image'].speech.profiles.openai")
+    assert saved['voice'] == 'faccba1a8ac54016bcfc02761285e67f' and saved['base'] == 'https://api.fish.audio/compat/v1', saved
+    page.locator('#st_ai_speech_voice_preview').click()
+    page.wait_for_function("document.querySelector('#st_ai_speech_voice_preview').textContent === '试听'", timeout=10000)
+    assert [b['voice'] for b in FISH['bodies']] == ['faccba1a8ac54016bcfc02761285e67f'], FISH
+    assert page.locator('#st_ai_speech_panel .st_ai_media_warning').inner_text() == ''
+    page.locator('#st_ai_speech_voice_preset').select_option('__custom__')
+    expect(page.locator('#st_ai_speech_voice')).to_be_visible()
+    page.locator('#st_ai_speech_voice_preset').select_option(label='温柔女声（温柔、抑扬顿挫）')
+    close_panel()
+
+    expect(mes(7).locator('.st_ai_media_gen').first).to_have_attribute('title', '林晚 · 御姐：快进来')
+    for i in range(3):
+        mes(7).locator('.st_ai_media_gen').first.click()
+        expect(mes(7).locator('.st_ai_media_play')).to_have_count(i + 1, timeout=10000)
+    voices = [b['voice'] for b in FISH['bodies'][1:]]
+    # type 命中预设 → 预设；没写 type → 默认音色；不认识的 type → 默认音色
+    assert voices == ['c189c7cff21c400ba67592406202a3a0', 'faccba1a8ac54016bcfc02761285e67f', 'faccba1a8ac54016bcfc02761285e67f'], voices
+    assert re.fullmatch(r'林晚招手：\[voice type="御姐" name="林晚" src="/user/files/st-ai-audio-[^"]+"\]快进来\[/voice\] 店主笑道：\[voice src="/user/files/st-ai-audio-[^"]+"\]欢迎光临\[/voice\] \[voice type="不存在" src="/user/files/st-ai-audio-[^"]+"\]嗯哼\[/voice\]', raw(7)), raw(7)
+    expect(mes(7).locator('.st_ai_voice_text').first).to_have_text('快进来')
+
+    open_tab('speech')
+    page.locator('#st_ai_speech_base').fill(old_base)
+    expect(page.locator('#st_ai_speech_voice_preset')).to_be_hidden()
+    page.locator('#st_ai_speech_voice').fill(old_voice)
     page.wait_for_timeout(700)
     close_panel()
-    expect(mes(7).locator('.st_ai_media_gen').first).to_have_attribute('title', '林晚：快进来')
-    before = len(posts('audio/speech'))
-    mes(7).locator('.st_ai_media_gen').first.click()
-    expect(mes(7).locator('.st_ai_media_play')).to_have_count(1, timeout=10000)
-    mes(7).locator('.st_ai_media_gen').click()
-    expect(mes(7).locator('.st_ai_media_play')).to_have_count(2, timeout=10000)
-    voices = [json.loads(r['body'])['voice'] for r in posts('audio/speech')[before:]]
-    assert voices == ['voice-linwan', 'voice-owner'], voices
-    assert re.fullmatch(r'林晚招手：\[voice name="林晚" src="/user/files/st-ai-audio-[^"]+"\]快进来\[/voice\] 店主笑道：\[voice src="/user/files/st-ai-audio-[^"]+"\]欢迎光临\[/voice\]', raw(7)), raw(7)
-    expect(mes(7).locator('.st_ai_voice_text').first).to_have_text('快进来')
-    checks.append('Per-character voices: tag name → table, else message sender → table, else default voice; name kept when src is written back')
+    page.unroute('https://api.fish.audio/**')
+    checks.append('Preset voices: dropdown only for Fish endpoints, preview plays one sample, [voice type=…] maps to the preset, missing/unknown type falls back to the default; type/name kept on write-back')
 
     before = len(posts('audio/speech'))
     mes(2).locator('.st_ai_media_gen').click()

@@ -2,8 +2,36 @@
  * 语音/视频设置。与图片设置一样存在 extensionSettings（随酒馆 settings.json 落盘），
  * 每个服务一套独立的地址/密钥/模型，切换服务不会串配置。
  */
+import { VOICE_PRESETS } from './voice-presets.js';
+
+const typesOf = (group) => VOICE_PRESETS.filter((p) => p.group === group).map((p) => p.type).join('、');
 
 export const DEFAULT_VOICE_PROMPT = `## 语音标签
+角色说出一句有分量的台词时，用 [voice type="音色类型"]台词[/voice] 把这句原话包起来，界面会用对应的声音为它配音。
+
+音色类型只能从下面选，按说话角色的性别、年龄和性格挑最贴合的一个；同一个角色每次都用同一个：
+- 女声：${typesOf('女声')}
+- 男声：${typesOf('男声')}
+
+什么时候加：
+- 情绪强烈的话：表白、争吵、哭诉、怒吼、撒娇、道歉
+- 推动剧情的关键台词：宣告、承诺、揭示秘密、做出决定
+- 角色登场或换场后开口的第一句
+
+什么时候不加：
+- 旁白、动作、神态、心理活动
+- 用户扮演的角色说的话
+- "嗯""好的""是吗"这类附和、寒暄
+- 这条回复里没有值得配音的台词时，一处都不加
+
+写法：
+- 只包裹说出口的原话，引号、说话人和动作写在标签外，例如：林晚攥紧衣角，小声说："[voice type="青涩少女"]别走，好不好？[/voice]"
+- 一个标签只放一个角色的一句或一小段连续的话，不超过 60 字
+- 标签里的台词就是正文，不要在标签外再写一遍
+- 每条回复最多 2 处；几个角色都有关键台词时，可以各加一处`;
+
+/** d5b76cf 的默认值：按角色名查音色表。 */
+const VOICE_PROMPT_NAMED = `## 语音标签
 角色说出一句有分量的台词时，用 [voice name="说话角色的名字"]台词[/voice] 把这句原话包起来，界面会用这个角色的音色为它配音。
 
 什么时候加：
@@ -49,7 +77,7 @@ const VOICE_PROMPT_SINGLE = `## 语音标签
 /** 以前版本的默认提示词。存档里原样是这些文本的，读取时换成当前默认值。 */
 const LEGACY_PROMPTS = {
     speech: [`## 语音标签
-需要配音的角色台词用 [voice]台词[/voice] 包裹：只包裹角色说出口的原话，不包含动作、心理和旁白。每条回复最多 2 处，其余正文照常输出。`, VOICE_PROMPT_SINGLE],
+需要配音的角色台词用 [voice]台词[/voice] 包裹：只包裹角色说出口的原话，不包含动作、心理和旁白。每条回复最多 2 处，其余正文照常输出。`, VOICE_PROMPT_SINGLE, VOICE_PROMPT_NAMED],
     video: [],
 };
 
@@ -60,10 +88,10 @@ export const MEDIA_DEFAULTS = {
     speech: {
         enabled: true, provider: 'openai', proxy: false, autoInject: false, prompt: DEFAULT_VOICE_PROMPT,
         profiles: {
-            openai: { base: 'https://api.openai.com/v1', key: '', model: 'tts-1', voice: 'alloy', voices: '', language: '', extra: '' },
-            fish: { base: 'https://api.fish.audio/v1', key: '', model: 's2.1-pro-free', voice: '', voices: '', language: '', extra: '' },
-            elevenlabs: { base: 'https://api.elevenlabs.io/v1', key: '', model: 'eleven_multilingual_v2', voice: '', voices: '', language: '', extra: '' },
-            azure: { base: '', key: '', model: '', voice: 'zh-CN-XiaoxiaoNeural', voices: '', language: 'zh-CN', extra: '' },
+            openai: { base: 'https://api.openai.com/v1', key: '', model: 'tts-1', voice: 'alloy', language: '', extra: '' },
+            fish: { base: 'https://api.fish.audio/v1', key: '', model: 's2.1-pro-free', voice: '', language: '', extra: '' },
+            elevenlabs: { base: 'https://api.elevenlabs.io/v1', key: '', model: 'eleven_multilingual_v2', voice: '', language: '', extra: '' },
+            azure: { base: '', key: '', model: '', voice: 'zh-CN-XiaoxiaoNeural', language: 'zh-CN', extra: '' },
         },
     },
     video: {
