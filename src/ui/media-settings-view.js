@@ -12,10 +12,12 @@ const SPEC = {
     speech: {
         title: '语音',
         providers: PROVIDERS.audio,
-        usage: '在 AI 回复里用 [voice]台词[/voice]（也可写 [语音]、[配音]）标出要朗读的台词，正文里会出现「配音」按钮；生成后台词旁变成播放键，文件存在酒馆的 user/files。',
+        usage: '在 AI 回复里用 [voice]台词[/voice]（也可写 [语音]、[配音]）标出要朗读的台词，写成 [voice name="角色名"] 可按下方的角色音色表换音色；正文里会出现「配音」按钮，生成后台词旁变成播放键，文件存在酒馆的 user/files。',
         fields: [
             ['base', 'API 根地址'], ['key', 'API Key', 'password'], ['model', '模型'],
-            ['voice', '音色 / Voice ID'], ['language', '语言（SSML xml:lang）'], ['extra', '额外参数（JSON 对象）', 'textarea'],
+            ['voice', '默认音色 / Voice ID'],
+            ['voices', '按角色分配音色（每行一条：角色名=音色 ID）', 'textarea', '林晚=音色 ID\n陈默=另一个音色 ID'],
+            ['language', '语言（SSML xml:lang）'], ['extra', '额外参数（JSON 对象）', 'textarea'],
         ],
         hidden: { azure: ['model'], openai: ['language'], fish: ['language'], elevenlabs: ['language'] },
         hints: {
@@ -62,12 +64,12 @@ export async function mountMediaSettings(root, section) {
     const hint = el('p', { class: 'st_ai_speech_hint' });
     const warning = el('p', { class: 'st_ai_speech_hint st_ai_media_warning', role: 'status', 'aria-live': 'polite' });
     const inputs = {};
-    const profileFields = spec.fields.map(([key, label, type]) => {
+    const profileFields = spec.fields.map(([key, label, type, placeholder]) => {
         const node = type === 'textarea'
-            ? el('textarea', { id: id(key), class: 'st_ai_textarea', rows: 2, maxlength: 4096, dataset: { key }, placeholder: '例如 {"seed": 1}；不要填写密钥' })
+            ? el('textarea', { id: id(key), class: 'st_ai_textarea', rows: key === 'voices' ? 3 : 2, maxlength: 4096, dataset: { key }, placeholder: placeholder || '例如 {"seed": 1}；不要填写密钥' })
             : el('input', { id: id(key), type: type || 'text', class: 'st_ai_input', autocomplete: 'off', dataset: { key } });
         inputs[key] = node;
-        return field(label, node);
+        return field(label, node, key === 'voices' ? [el('p', { class: 'st_ai_speech_hint', text: '先按标签里写的 name 找，再按这条消息的发言角色（角色卡名、群聊成员名）找，都没配到就用默认音色。角色名不区分大小写，# 开头的行是注释。' })] : []);
     });
     const proxy = checkbox('proxy', '通过酒馆代理请求（需在酒馆 config.yaml 设置 enableCorsProxy: true 并重启）');
     const timeout = section === 'video'

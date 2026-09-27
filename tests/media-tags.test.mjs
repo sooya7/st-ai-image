@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    buildMediaTag, hasMediaTag, locateMediaTag, mediaFileName, mediaJobKey, parseMediaTag, replaceMediaTag, sanitizeMediaSrc,
+    buildMediaTag, hasMediaTag, locateMediaTag, mediaFileName, mediaJobKey, parseMediaTag, parseVoiceMap, replaceMediaTag, resolveVoice, sanitizeMediaSrc,
 } from '../src/media/tags.js';
 import { IMAGE_REQUEST_SOURCE } from '../src/core/constants.js';
 import { MEDIA_TAG_SOURCE } from '../src/media/tags.js';
@@ -18,7 +18,7 @@ test('识别中英文语音/视频标签，要求闭合且同名', () => {
 });
 
 test('解析类型、文字与 src；只认本扩展写入的 /user/files 地址', () => {
-    assert.deepEqual(parseMediaTag('[voice] 你好 [/voice]'), { name: 'voice', kind: 'audio', rawSrc: '', src: '', text: '你好' });
+    assert.deepEqual(parseMediaTag('[voice] 你好 [/voice]'), { name: 'voice', kind: 'audio', rawSrc: '', src: '', speaker: '', text: '你好' });
     const done = parseMediaTag('[视频 src="/user/files/st-ai-video-1-abc.mp4"]海边[/视频]');
     assert.equal(done.kind, 'video');
     assert.equal(done.src, '/user/files/st-ai-video-1-abc.mp4');
@@ -84,4 +84,30 @@ test('拼进扫描器的大正则后仍能正确匹配（反向引用不串组�
     const found = [...text.matchAll(re)].map((m) => m[0]);
     assert.deepEqual(found, ['[image]猫[/image]', '[voice]"*轻声*你好"[/voice]', '[视频 src="/user/files/st-ai-video-1-a.mp4"]海边[/视频]']);
     assert.equal(parseMediaTag(found[2]).src, '/user/files/st-ai-video-1-a.mp4');
+});
+test('说话人：name/角色 属性，英文/中文引号或不加引号，属性顺序不限；写回时保留', () => {
+    const src = '/user/files/st-ai-audio-1-abc.mp3';
+    assert.equal(parseMediaTag('[voice name="林晚"]快进来[/voice]').speaker, '林晚');
+    assert.equal(parseMediaTag('[语音 角色=“陈默”]嗯[/语音]').speaker, '陈默');
+    assert.equal(parseMediaTag('[voice name=林晚]x[/voice]').speaker, '林晚'); // ST 把 "…" 渲染成 <q> 后，DOM 文字里没有引号
+    const both = parseMediaTag(`[voice src="${src}" speaker="Anna"]hi[/voice]`);
+    assert.deepEqual([both.speaker, both.src], ['Anna', src]);
+    assert.equal(parseMediaTag('[video name="x"]海边[/video]').kind, 'video');
+    assert.equal(buildMediaTag('voice', '快进来', src, '林晚'), `[voice name="林晚" src="${src}"]快进来[/voice]`);
+    const raw = '林晚招手：[voice name="林晚"]快进来[/voice]';
+    const located = locateMediaTag(raw, { kind: 'audio', text: '快进来' });
+    assert.equal(located.info.speaker, '林晚');
+    assert.equal(replaceMediaTag(raw, located, buildMediaTag(located.info.name, located.info.text, src, located.info.speaker)), `林晚招手：[voice name="林晚" src="${src}"]快进来[/voice]`);
+    // text.js 靠第 3 组取正文，加了属性分组后序号不能变
+    assert.equal(`a[voice name="林晚" src="${src}"]台词[/voice]b`.replace(new RegExp(MEDIA_TAG_SOURCE, 'gi'), '$3'), 'a台词b');
+});
+
+test('角色音色表：一行一条，认中英文等号/冒号和注释；按 name → 发言角色 → 默认 的顺序选', () => {
+    const table = '# 注释\n林晚 = v-lin\n店主：v-owner\nAnna=v-anna\n坏行\n=缺名字';
+    assert.deepEqual([...parseVoiceMap(table)], [['林晚', 'v-lin'], ['店主', 'v-owner'], ['anna', 'v-anna']]);
+    assert.deepEqual(resolveVoice({ speaker: '林晚', sender: '店主', fallback: 'def', table }), { voice: 'v-lin', matched: '林晚' });
+    assert.deepEqual(resolveVoice({ speaker: '路人', sender: '店主', fallback: 'def', table }), { voice: 'v-owner', matched: '店主' });
+    assert.deepEqual(resolveVoice({ speaker: 'ANNA', fallback: 'def', table }), { voice: 'v-anna', matched: 'ANNA' });
+    assert.deepEqual(resolveVoice({ speaker: '路人', sender: '旁白', fallback: 'def', table }), { voice: 'def', matched: '' });
+    assert.deepEqual(resolveVoice({ fallback: 'def' }), { voice: 'def', matched: '' });
 });

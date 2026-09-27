@@ -272,6 +272,7 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     assert len(speech) == 1, speech
     sent = json.loads(speech[0]['body'])
     assert sent['input'] == '"轻声晚上好"' and speech[0]['auth'] == 'Bearer fixture-voice-key', sent
+    assert sent['voice'] == 'alloy', sent  # 没写 name、发言人也没配：用默认音色
     text1 = raw(1)
     match = re.search(r'\[voice src="(/user/files/st-ai-audio-[^"]+\.wav)"\]"\*轻声\*晚上好"\[/voice\]', text1)
     assert match, text1
@@ -293,6 +294,23 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     expect(mes(3).locator('.st_ai_media_play')).to_have_count(1, timeout=10000)
     assert re.fullmatch(r'重复两遍：\[voice\]嗯\[/voice\] 和 \[voice src="/user/files/st-ai-audio-[^"]+"\]嗯\[/voice\]', raw(3)), raw(3)
     checks.append('Two identical tags in one message: only the clicked (second) tag receives the src')
+
+    # ---------- per-character voices ----------
+    open_tab('speech')
+    page.locator('#st_ai_speech_voices').fill('# 注释行\n林晚=voice-linwan\n店主：voice-owner')
+    page.wait_for_timeout(700)
+    close_panel()
+    expect(mes(7).locator('.st_ai_media_gen').first).to_have_attribute('title', '林晚：快进来')
+    before = len(posts('audio/speech'))
+    mes(7).locator('.st_ai_media_gen').first.click()
+    expect(mes(7).locator('.st_ai_media_play')).to_have_count(1, timeout=10000)
+    mes(7).locator('.st_ai_media_gen').click()
+    expect(mes(7).locator('.st_ai_media_play')).to_have_count(2, timeout=10000)
+    voices = [json.loads(r['body'])['voice'] for r in posts('audio/speech')[before:]]
+    assert voices == ['voice-linwan', 'voice-owner'], voices
+    assert re.fullmatch(r'林晚招手：\[voice name="林晚" src="/user/files/st-ai-audio-[^"]+"\]快进来\[/voice\] 店主笑道：\[voice src="/user/files/st-ai-audio-[^"]+"\]欢迎光临\[/voice\]', raw(7)), raw(7)
+    expect(mes(7).locator('.st_ai_voice_text').first).to_have_text('快进来')
+    checks.append('Per-character voices: tag name → table, else message sender → table, else default voice; name kept when src is written back')
 
     before = len(posts('audio/speech'))
     mes(2).locator('.st_ai_media_gen').click()

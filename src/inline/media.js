@@ -8,7 +8,7 @@
 import { errMsg, log, notify } from '../core/notify.js';
 import { readMediaSettings, mediaRequestConfig } from '../media/media-settings.js';
 import {
-    buildMediaTag, locateMediaTag, mediaJobKey, normalizeMediaText, parseMediaTag, replaceMediaTag,
+    buildMediaTag, locateMediaTag, mediaJobKey, normalizeMediaText, parseMediaTag, replaceMediaTag, resolveVoice,
 } from '../media/tags.js';
 import { getSettings } from '../settings.js';
 import { getMessageIdFromElement } from '../st/chat-dom.js';
@@ -51,13 +51,13 @@ function clearJobRecord(messageId, jobKey) {
 
 // ---------- 渲染 ----------
 
-function generateButton(kind, text, key, resumable) {
+function generateButton(kind, text, key, resumable, speaker = '') {
     const task = getTask(key);
     const label = task ? task.label || '生成中…' : resumable ? '继续查询视频任务' : kind === 'audio' ? '配音' : '生成视频';
     return el('button', {
         type: 'button',
         class: `st_ai_media_gen${task ? ' st_ai_media_gen_pending' : ''}`,
-        title: text,
+        title: speaker ? `${speaker}：${text}` : text,
         disabled: task ? true : undefined,
         dataset: { taskKey: key, resume: resumable ? '1' : '' },
     }, [icon(task ? 'fa-spinner fa-spin' : kind === 'audio' ? 'fa-volume-high' : 'fa-video'), ` ${label}`]);
@@ -90,7 +90,7 @@ export function renderMediaWrapper(wrapper, { error = '' } = {}) {
     if (info.kind === 'audio') {
         const controls = info.src && !pending
             ? [el('button', { type: 'button', class: 'st_ai_media_icon st_ai_media_play', title: '播放', 'aria-label': '播放配音', dataset: { src: info.src } }, [icon('fa-play')]), ...actionButtons('audio', info.src)]
-            : [generateButton('audio', info.text, key, false)];
+            : [generateButton('audio', info.text, key, false, info.speaker)];
         wrapper.append(el('span', { class: 'st_ai_media_controls' }, controls), el('span', { class: 'st_ai_voice_text', text: info.text }));
     } else if (info.src && !pending) {
         const video = el('video', { class: 'st_ai_inline_video', controls: true, playsinline: true, preload: 'none', src: info.src, title: info.text });
@@ -161,6 +161,10 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
     const record = resume ? jobRecord(messageId, jobKey) : null;
     const provider = record?.provider && media.profiles[record.provider] ? record.provider : media.provider;
     const config = mediaRequestConfig(media, provider);
+    if (kind === 'audio') {
+        // 多角色：标签里的 name → 这条消息的发言角色 → 默认音色
+        config.voice = resolveVoice({ speaker: info.speaker, sender: getMessage(messageId)?.name, fallback: config.voice, table: config.voices }).voice;
+    }
     const blocked = !settings.enabled || !media.enabled ? `${LABEL[kind]}功能已在设置中关闭`
         : !config.key.trim() ? `请先在 设置 → ${kind === 'audio' ? '语音' : '视频'} 里填写 API Key` : '';
     if (blocked) {
@@ -201,7 +205,7 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
         // mes 与当前 swipe 各自定位一次再替换，两者内容不同步时也不会改错位置。
         const changed = rewriteMessageText(messageId, (value) => {
             const located = locateMediaTag(value, { kind, text, ordinal });
-            return located ? replaceMediaTag(value, located, buildMediaTag(located.info.name, located.info.text, src)) : value;
+            return located ? replaceMediaTag(value, located, buildMediaTag(located.info.name, located.info.text, src, located.info.speaker)) : value;
         });
         if (!changed) {
             notify.warn(`文件已保存为 ${src}，但消息里找不到原标签（可能已被编辑），没有写入`, `${LABEL[kind]}已生成`);

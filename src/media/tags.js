@@ -2,14 +2,19 @@
  * 正文里的语音/视频标签（纯函数，不碰 DOM）。
  *
  *   [voice]台词[/voice]            → 待生成
- *   [voice src="/user/files/…"]台词[/voice] → 已生成，文件存在酒馆服务器
+ *   [voice name="林晚"]台词[/voice] → 指定说话人，按设置里的角色音色表选音色
+ *   [voice name="林晚" src="/user/files/…"]台词[/voice] → 已生成，文件存在酒馆服务器
  *
  * 生成后只往标签里补 src，台词/描述原样保留：AI 上下文不变，刷新后也能重新渲染。
  */
 
 const NAMES = { voice: 'audio', 语音: 'audio', 配音: 'audio', video: 'video', 视频: 'video' };
 // 闭合标签用命名反向引用：这段会被拼进扫描器的大正则，写 \1 会指向别人的分组。
-export const MEDIA_TAG_SOURCE = String.raw`\[\s*(?<mediaTag>voice|语音|配音|video|视频)(?:\s+src\s*=\s*"([^"\]]*)")?\s*\]([\s\S]+?)\[\s*\/\s*\k<mediaTag>\s*\]`;
+// 分组固定为 1=标签名、2=属性串、3=正文（text.js 用 $3 取正文）。属性值可用英文/中文引号或不加引号。
+const ATTR = String.raw`\s+[A-Za-z一-鿿]+\s*=\s*(?:"[^"\]]*"|“[^”\]]*”|[^\s"“\]]+)`;
+export const MEDIA_TAG_SOURCE = String.raw`\[\s*(?<mediaTag>voice|语音|配音|video|视频)((?:${ATTR})*)\s*\]([\s\S]+?)\[\s*\/\s*\k<mediaTag>\s*\]`;
+const ATTR_ITEM = /([A-Za-z一-鿿]+)\s*=\s*(?:"([^"\]]*)"|“([^”\]]*)”|([^\s"“\]]+))/g;
+const SPEAKER_KEYS = new Set(['name', 'speaker', 'character', '角色', '说话人']);
 const QUICK = /\[\s*\/\s*(?:voice|语音|配音|video|视频)\s*\]/i;
 
 /** 只渲染本扩展自己写进去的文件，AI 编造的地址或外链一律不当媒体加载。 */
@@ -26,23 +31,64 @@ export function hasMediaTag(text) {
     return QUICK.test(value) && new RegExp(MEDIA_TAG_SOURCE, 'i').test(value);
 }
 
-/** 解析一段完整标签文本；不是媒体标签返回 null。 */
+function parseAttrs(source) {
+    const attrs = {};
+    for (const m of String(source ?? '').matchAll(ATTR_ITEM)) attrs[m[1].toLowerCase()] = (m[2] ?? m[3] ?? m[4] ?? '').trim();
+    return attrs;
+}
+
+/** 说话人名只留可读字符并限长：它会写回聊天、参与音色匹配，不能夹带引号或方括号。 */
+const cleanSpeaker = (value) => String(value ?? '').replace(/["“”[\]\r\n]/g, '').trim().slice(0, 40);
+
+/** 解析一段完整标签文本；不是媒体标签返回 null。name 是标签名（voice/语音…），speaker 是说话人。 */
 export function parseMediaTag(tagText) {
     const match = new RegExp(`^${MEDIA_TAG_SOURCE}$`, 'i').exec(String(tagText ?? '').trim());
     if (!match) return null;
     const name = match[1];
+    const attrs = parseAttrs(match[2]);
+    const speakerKey = Object.keys(attrs).find((key) => SPEAKER_KEYS.has(key));
     return {
         name,
         kind: NAMES[name.toLowerCase()] || NAMES[name],
-        rawSrc: match[2] || '',
-        src: sanitizeMediaSrc(match[2]),
+        rawSrc: attrs.src || '',
+        src: sanitizeMediaSrc(attrs.src),
+        speaker: speakerKey ? cleanSpeaker(attrs[speakerKey]) : '',
         text: match[3].trim(),
     };
 }
 
-export function buildMediaTag(name, text, src = '') {
+export function buildMediaTag(name, text, src = '', speaker = '') {
     const safe = sanitizeMediaSrc(src);
-    return `[${name}${safe ? ` src="${safe}"` : ''}]${text}[/${name}]`;
+    const who = cleanSpeaker(speaker);
+    return `[${name}${who ? ` name="${who}"` : ''}${safe ? ` src="${safe}"` : ''}]${text}[/${name}]`;
+}
+
+/** 解析「角色名=音色」表：一行一条，# 开头是注释，也认中文等号和冒号。键是小写角色名。 */
+export function parseVoiceMap(source) {
+    const map = new Map();
+    for (const line of String(source ?? '').split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const at = trimmed.search(/[=＝:：]/);
+        if (at <= 0) continue;
+        const who = cleanSpeaker(trimmed.slice(0, at)).toLowerCase();
+        const voice = trimmed.slice(at + 1).trim();
+        if (who && voice) map.set(who, voice);
+    }
+    return map;
+}
+
+/**
+ * 选音色：标签里写的说话人 → 这条消息的发言角色 → 默认音色。
+ * 返回 { voice, matched }，matched 是命中的角色名，没命中为空。
+ */
+export function resolveVoice({ speaker = '', sender = '', fallback = '', table = '' } = {}) {
+    const map = parseVoiceMap(table);
+    for (const who of [speaker, sender]) {
+        const key = cleanSpeaker(who).toLowerCase();
+        if (key && map.has(key)) return { voice: map.get(key), matched: cleanSpeaker(who) };
+    }
+    return { voice: fallback, matched: '' };
 }
 
 /** 渲染后的文字会丢掉 markdown 符号，比较时只看字母和数字。 */
