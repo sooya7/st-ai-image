@@ -113,19 +113,24 @@ Anima（circlestone-labs，2B 动漫模型）没有在线 API，走 ComfyUI：�
 
 每个服务一套独立的地址、密钥、模型，切换服务不会串。设置和密钥与原有图片 API Key 一样保存在酒馆的 `settings.json`（`extension_settings["st-ai-image"]`）。
 
+下拉框只把常用、能直连的放在上面；不常用或只能走酒馆代理的放在「其他」分组。**TauriTavern 没有酒馆的 `/proxy/`**，所以在那里不列只能走代理的服务（Fish 原生、Runway、Replicate），也不显示「通过酒馆代理」开关；以前已经选了这类服务的，会照旧列出并注明「TauriTavern 里用不了」，不会被悄悄换掉。
+
 | 服务 | 浏览器能否直连 | 说明 |
 | --- | --- | --- |
-| OpenAI / 兼容 TTS | 官方可以 | 兼容中转不允许跨域时勾选酒馆代理 |
-| Fish Audio | **不可以** | 必须勾选「通过酒馆代理」；音色填 reference_id；模型放在 model 请求头（免费档 s2.1-pro-free 写进请求体会按付费计费） |
+| OpenAI 兼容 TTS | 官方可以 | 兼容中转不允许跨域时勾选酒馆代理。**用 Fish 点「一键填写：Fish Audio」**：地址填 `https://api.fish.audio/compat/v1`、模型填免费档 `fish-audio/s2.1-pro-free`，能直连，TauriTavern 也行 |
 | ElevenLabs | 可以 | Voice ID 在控制台复制 |
-| Azure Speech | 视资源配置 | 根地址填区域端点；SSML 请求**不能**走酒馆代理 |
-| Runway | **不可以** | 必须勾选「通过酒馆代理」 |
-| Replicate | **不可以** | 必须勾选「通过酒馆代理」；模型填 `owner/name[:version]` |
+| Azure Speech | 可以 | 根地址填区域端点；SSML 请求**不能**走酒馆代理 |
+| Fish Audio 原生（其他） | **不可以** | 必须勾选「通过酒馆代理」；音色填 reference_id；模型放在 model 请求头（免费档 s2.1-pro-free 写进请求体会按付费计费）。一般用上面的一键填写就行 |
+| /videos 兼容（默认） | 视服务而定 | JSON 请求（与 SOOYA 线上实现一致），可走酒馆代理；OpenAI 官方不允许直连，Sora 已计划停用 |
 | Agnes AI | 可以 | /videos 协议，JSON 请求，必填 mode: text（自动加）；尺寸填 720P 档位 |
-| fal | 可以 | 模型填平台路径，时长/比例写进额外参数 |
-| /videos 兼容 | 视服务而定 | JSON 请求（与 SOOYA 线上实现一致），可走酒馆代理 |
+| fal | 可以 | 一个 Key 能用可灵、万相、Veo、Seedance 等；模型填平台路径，时长/比例写进额外参数 |
+| ComfyUI（自建） | 经酒馆后端 | 见下文「自建服务」 |
+| Runway（其他） | **不可以** | 必须勾选「通过酒馆代理」 |
+| Replicate（其他） | 只允许 `localhost:*` | 其他地址要勾选「通过酒馆代理」；模型填 `owner/name[:version]` |
 
-「能否直连」是 2026-09-26 用不带密钥的 CORS 预检实测的：Runway、Replicate 的预检不返回 `Access-Control-Allow-Origin`，浏览器会拦截；fal、OpenAI、Gemini、ElevenLabs 允许。
+「能否直连」是用不带密钥的 CORS 预检实测的（2026-09-26，2026-09-28 又用 `http://tauri.localhost`、`http://localhost:8000`、`http://127.0.0.1:8000` 三个来源复测）：Fish 原生、Runway 对哪个来源都不返回 `Access-Control-Allow-Origin`；Replicate 只放行 `localhost`；fal、OpenAI、Gemini、ElevenLabs、Azure、NovelAI 允许。
+
+视频默认服务从 Runway 改成了 /videos 兼容（Runway 只能走代理）；以前存过 Runway 的不受影响。图片页的 Replicate 同理，在 TauriTavern 里不显示。
 
 ### 酒馆代理
 
@@ -158,7 +163,7 @@ enableCorsProxy: true
 
 本机 Node.js 24.14.1、Chromium 147.0.7727.15、SillyTavern 1.18.0。
 
-**单元测试** `npm test`：93/93 通过（2026-09-28）（标签解析/定位/改写、合并正则、协议请求、代理改写、文件头识别、视频任务轮询等）。
+**单元测试** `npm test`：94/94 通过（2026-09-28）（标签解析/定位/改写、合并正则、协议请求、代理改写、文件头识别、视频任务轮询等）。
 
 **模拟宿主浏览器测试** `python tests/inline-media-ui.py --output <目录>`：18 组通过（2026-09-28）。模拟 ST 的 markdown 拆分、`updateMessageBlock`、`saveChat`、`saveSettingsDebounced`、`/api/files/upload`+CSRF，以及与真实 ST 一样不带 Content-Type 的 `/proxy/`。结果见 `docs/verification/inline-media-result.json`。
 

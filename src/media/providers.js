@@ -4,8 +4,8 @@ import { needsKey } from './keys.js';
 export { isLocalBase, needsKey } from './keys.js';
 export const PROVIDERS = {
     image: { openai: 'OpenAI / 兼容生图', chat: 'OpenAI Chat 生图', gemini: 'Gemini 原生', fal: 'fal', replicate: 'Replicate', comfyui: 'ComfyUI（自建）', sdwebui: 'SD WebUI（A1111 / Forge，自建）' },
-    audio: { openai: 'OpenAI / 兼容 TTS', fish: 'Fish Audio', elevenlabs: 'ElevenLabs', azure: 'Azure Speech' },
-    video: { runway: 'Runway', agnes: 'Agnes AI', fal: 'fal', replicate: 'Replicate', openai: '/videos 兼容服务（官方 Sora 已计划停用）', comfyui: 'ComfyUI（自建）' },
+    audio: { openai: 'OpenAI 兼容 TTS（Fish、各中转站）', elevenlabs: 'ElevenLabs', azure: 'Azure Speech', fish: 'Fish Audio 原生接口（要开酒馆跨域代理）' },
+    video: { openai: '/videos 兼容服务', agnes: 'Agnes AI', fal: 'fal（可灵、万相、Veo 等）', comfyui: 'ComfyUI（自建）', runway: 'Runway（要开酒馆跨域代理）', replicate: 'Replicate' },
 };
 
 export const DEFAULT_BASES = {

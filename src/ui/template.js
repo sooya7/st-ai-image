@@ -70,8 +70,10 @@ export const PANEL_HTML = `
                     <option value="novelai">NovelAI</option>
                     <option value="comfyui">ComfyUI（自建）</option>
                     <option value="sdwebui">SD WebUI（A1111 / Forge，自建）</option>
-                    <option value="fal">fal 队列</option>
-                    <option value="replicate">Replicate</option>
+                    <optgroup label="其他">
+                        <option value="fal">fal 队列</option>
+                        <option value="replicate">Replicate</option>
+                    </optgroup>
                 </select>
                 <p class="st_ai_speech_hint" id="st_gpt_image_provider_hint"></p>
             </div>

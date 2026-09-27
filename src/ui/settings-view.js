@@ -6,6 +6,7 @@ import { fetchModelList } from '../api/images.js';
 import { LIMITS } from '../core/constants.js';
 import { errMsg, notify } from '../core/notify.js';
 import { switchImageProvider } from '../core/image-profiles.js';
+import { NEEDS_PROXY, UNAVAILABLE_NOTE, isTauriTavern } from '../media/availability.js';
 import { isValidApiBaseUrl } from '../core/text.js';
 import {
     getPresets, getSettings, removePreset, saveSettings, updateSetting, upsertPreset,
@@ -81,7 +82,7 @@ const PROVIDER_UI = {
         params: 'txt2img 参数，例如 {"steps":28,"cfg_scale":6,"sampler_name":"DPM++ 2M"}。',
     },
     fal: { hint: 'fal 队列接口。', base: ['API 地址（留空用官方）', 'https://queue.fal.run'], key: ['fal Key', ''], model: 'fal-ai/flux/dev（从模型页面复制路径）', sizes: null, params: '合并进 input，尺寸等按模型文档填。' },
-    replicate: { hint: 'Replicate 预测接口。', base: ['API 地址（留空用官方）', 'https://api.replicate.com/v1'], key: ['Replicate API Token', 'r8_...'], model: 'owner/name 或 owner/name:version', sizes: null, params: '合并进 input，尺寸等按模型文档填。' },
+    replicate: { hint: 'Replicate 预测接口。只允许 localhost 打开的酒馆直连，TauriTavern 里用不了。', base: ['API 地址（留空用官方）', 'https://api.replicate.com/v1'], key: ['Replicate API Token', 'r8_...'], model: 'owner/name 或 owner/name:version', sizes: null, params: '合并进 input，尺寸等按模型文档填。' },
 };
 
 const uiFor = (provider) => ({ ...PROVIDER_UI.relay, ...PROVIDER_UI[provider] });
@@ -100,6 +101,17 @@ function renderSizeOptions(sizes, current) {
     select.value = current && list.includes(current) ? current : list[0];
 }
 
+/** TauriTavern 里藏起只能走酒馆代理的接口；当前选中的留着并注明。 */
+function syncProviderOptions(current) {
+    const tauri = isTauriTavern();
+    for (const option of document.querySelectorAll('#st_gpt_image_provider option')) {
+        option.dataset.label ??= option.textContent;
+        const blocked = tauri && NEEDS_PROXY.image.includes(option.value);
+        option.hidden = blocked && option.value !== current;
+        option.textContent = option.dataset.label + (blocked ? UNAVAILABLE_NOTE : '');
+    }
+}
+
 /** 按接口显示字段：data-show-for 只在这些接口下显示，data-hide-for 在这些接口下隐藏；再换上这个接口的叫法和提示。 */
 function syncProviderFields(provider, settings) {
     for (const node of document.querySelectorAll('#st_ai_float_panel [data-show-for], #st_ai_float_panel [data-hide-for]')) {
@@ -107,6 +119,7 @@ function syncProviderFields(provider, settings) {
         const hide = node.dataset.hideFor?.split(/\s+/);
         node.classList.toggle('st_ai_hidden', show ? !show.includes(provider) : hide.includes(provider));
     }
+    syncProviderOptions(provider);
     const ui = uiFor(provider);
     setText('#st_gpt_image_provider_hint', ui.hint || '');
     setText('#st_gpt_image_api_base_label', ui.base[0]);

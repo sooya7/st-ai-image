@@ -121,7 +121,7 @@ export const MEDIA_DEFAULTS = {
         },
     },
     video: {
-        enabled: true, provider: 'runway', proxy: false, autoInject: false, prompt: DEFAULT_VIDEO_PROMPT, timeout: '600',
+        enabled: true, provider: 'openai', proxy: false, autoInject: false, prompt: DEFAULT_VIDEO_PROMPT, timeout: '600',
         profiles: {
             runway: { base: 'https://api.dev.runwayml.com/v1', key: '', model: 'gen4.5', size: '1280:720', seconds: '5', extra: '' },
             agnes: { base: 'https://apihub.agnes-ai.com/v1', key: '', model: 'agnes-video-2.5-flash', size: '720P', seconds: '5', extra: '' },
