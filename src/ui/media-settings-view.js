@@ -10,7 +10,7 @@ import { isTauriTavern, providerOptions } from '../media/availability.js';
 import { SELF_HOSTED, serviceRoot } from '../media/selfhosted.js';
 import { createWorkflowLibrary } from './workflow-library.js';
 import { getSettings, saveSettings } from '../settings.js';
-import { debounce, el } from './dom.js';
+import { debounce, el, helpBox } from './dom.js';
 import { buildPromptSection } from './prompt-section.js';
 import { createVoiceControls } from './voice-settings.js';
 
@@ -155,17 +155,16 @@ export async function mountMediaSettings(root, section) {
         ? el('input', { id: id('timeout'), type: 'number', min: 60, max: 1800, step: 30, class: 'st_ai_input' }) : null;
 
     const form = el('form', { class: 'st_ai_speech_form', onsubmit: (e) => e.preventDefault() }, [
-        el('p', { class: 'st_ai_speech_hint', text: spec.usage }),
+        helpBox(`${spec.usage}\n\n密钥与图片 API Key 一样保存在酒馆设置里。停止等待不会取消服务端任务，生成失败不会自动重试。`, '用法'),
         enabled.node,
         field('服务', provider),
         quick,
-        hint,
+        helpBox(hint, '这个服务怎么填'),
         ...profileFields,
         proxy.node,
         direct?.node,
         timeout ? field('最长等待（秒）', timeout) : null,
         buildPromptSection(section, settings),
-        el('p', { class: 'st_ai_speech_hint', text: '密钥与图片 API Key 一样保存在酒馆设置里。停止等待不会取消服务端任务，生成失败不会自动重试。' }),
         warning,
     ]);
 

@@ -80,7 +80,7 @@ export const PANEL_HTML = `
                         <option value="replicate">Replicate</option>
                     </optgroup>
                 </select>
-                <p class="st_ai_speech_hint" id="st_gpt_image_provider_hint"></p>
+                <details class="st_ai_help"><summary>这个接口怎么填</summary><p class="st_ai_speech_hint" id="st_gpt_image_provider_hint"></p></details>
                 <div class="st_ai_inline_row st_ai_quick_fill" id="st_gpt_image_quick" data-show-for="auto openai chat"></div>
             </div>
             <div class="st_ai_field">
@@ -122,12 +122,12 @@ export const PANEL_HTML = `
                 <div id="st_ai_image_workflow_lib"></div>
                 <textarea id="st_gpt_image_comfy_workflow" class="st_ai_textarea" rows="6" spellcheck="false" placeholder='{"3": {"class_type": "KSampler", "inputs": {"seed": "%seed%", ...}}, ...}'></textarea>
                 <p class="st_ai_speech_hint st_ai_media_warning" id="st_gpt_image_comfy_status" role="status" aria-live="polite"></p>
-                <p class="st_ai_speech_hint">占位符：%prompt%（正面，含画师串）、%negative_prompt%、%seed%（随机）、%width% %height%（按上面的尺寸）、%MODEL_NAME%（模型栏）。「自动标记」只换提示词、种子和尺寸，工作流里调好的步数、CFG、采样器不动；想在这里改，就把值换成 %steps% %cfg_scale% %sampler_name% %scheduler%，再在额外参数里给，比如 {"steps": 28}（不给用 20 / 7 / euler / normal）。中文写法 %提示词% %种子% 也认。</p>
+                <details class="st_ai_help"><summary>占位符说明</summary><p class="st_ai_speech_hint">占位符：%prompt%（正面，含画师串）、%negative_prompt%、%seed%（随机）、%width% %height%（按上面的尺寸）、%MODEL_NAME%（模型栏）。「自动标记」只换提示词、种子和尺寸，工作流里调好的步数、CFG、采样器不动；想在这里改，就把值换成 %steps% %cfg_scale% %sampler_name% %scheduler%，再在额外参数里给，比如 {"steps": 28}（不给用 20 / 7 / euler / normal）。中文写法 %提示词% %种子% 也认。</p></details>
             </div>
             <div class="st_ai_field" data-hide-for="auto">
                 <label for="st_gpt_image_params">额外参数（JSON 对象）</label>
                 <textarea id="st_gpt_image_params" class="st_ai_textarea" rows="2" maxlength="4096" placeholder='{"seed":42}'></textarea>
-                <p class="st_ai_speech_hint" id="st_gpt_image_params_hint"></p>
+                <details class="st_ai_help"><summary>说明</summary><p class="st_ai_speech_hint" id="st_gpt_image_params_hint"></p></details>
             </div>
             <div class="st_ai_field">
                 <label for="st_gpt_image_timeout">生图超时时间（秒）</label>
