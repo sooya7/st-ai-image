@@ -992,13 +992,8 @@
         max-height: 300px;
     }
 
-    /* iOS 聚焦 <16px 的输入框会自动放大整页，看起来就是"界面超出屏幕" */
-    .st_ai_input,
-    .st_ai_textarea,
-    .st_ai_select,
-    #st_gpt_image_prompt {
-        font-size: max(16px, var(--mainFontSize, 15px));
-    }
+    /* 输入框不再强制 16px：酒馆和 TauriTavern 的 viewport 都是 maximum-scale=1，iOS 聚焦不会放大页面；
+       强制 16px 只会让输入框、下拉框比旁边的说明文字大一圈 */
 }
 
 /* --- 系统提示词文本框 --- */
