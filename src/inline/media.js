@@ -92,7 +92,7 @@ export function renderMediaWrapper(wrapper, { error = '' } = {}) {
     if (info.kind === 'audio') {
         const controls = info.src && !pending
             ? [el('button', { type: 'button', class: 'st_ai_media_icon st_ai_media_play', title: '播放', 'aria-label': '播放配音', dataset: { src: info.src } }, [icon('fa-play')]), ...actionButtons('audio', info.src)]
-            : [generateButton('audio', info.text, key, false, [info.speaker, info.voiceType].filter(Boolean).join(' · '))];
+            : [generateButton('audio', info.text, key, false, [info.speaker, info.voiceType, info.emotion].filter(Boolean).join(' · '))];
         wrapper.append(el('span', { class: 'st_ai_media_controls' }, controls), el('span', { class: 'st_ai_voice_text', text: info.text }));
     } else if (info.src && !pending) {
         const video = el('video', { class: 'st_ai_inline_video', controls: true, playsinline: true, preload: 'none', src: info.src, title: info.text });
@@ -166,6 +166,7 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
     if (kind === 'audio') {
         // 标签里的 type 在当前服务的音色预设表里且配了音色就用它，否则用默认音色
         config.voice = resolveVoice({ type: info.voiceType, fallback: config.voice, presets: config.presets }).voice;
+        config.emotion = info.emotion;
     }
     const blocked = !settings.enabled || !media.enabled ? `${LABEL[kind]}功能已在设置中关闭`
         : !config.key.trim() && needsKey(provider, config.base) ? `请先在面板的「${kind === 'audio' ? '配音' : '视频'}」页填写 API Key` : '';

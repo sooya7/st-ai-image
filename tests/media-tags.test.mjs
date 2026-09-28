@@ -18,7 +18,7 @@ test('识别中英文语音/视频标签，要求闭合且同名', () => {
 });
 
 test('解析类型、文字与 src；只认本扩展写入的 /user/files 地址', () => {
-    assert.deepEqual(parseMediaTag('[voice] 你好 [/voice]'), { name: 'voice', kind: 'audio', rawSrc: '', src: '', voiceType: '', speaker: '', text: '你好' });
+    assert.deepEqual(parseMediaTag('[voice] 你好 [/voice]'), { name: 'voice', kind: 'audio', rawSrc: '', src: '', voiceType: '', speaker: '', emotion: '', text: '你好' });
     const done = parseMediaTag('[视频 src="/user/files/st-ai-video-1-abc.mp4"]海边[/视频]');
     assert.equal(done.kind, 'video');
     assert.equal(done.src, '/user/files/st-ai-video-1-abc.mp4');
@@ -28,6 +28,15 @@ test('解析类型、文字与 src；只认本扩展写入的 /user/files 地址
     assert.equal(sanitizeMediaSrc('user/files/st-ai-audio-1-x.mp3'), '/user/files/st-ai-audio-1-x.mp3');
     assert.equal(parseMediaTag('[voice src="https://evil.test/x.mp3"]嗨[/voice]').src, '');
     assert.equal(parseMediaTag('[image]x[/image]'), null);
+});
+
+test('emotion：中英文键名和中文引号都认，写回时保留', () => {
+    const info = parseMediaTag('[voice type="御姐" emotion="哽咽，小声"]别走[/voice]');
+    assert.deepEqual([info.voiceType, info.emotion], ['御姐', '哽咽，小声']);
+    assert.equal(parseMediaTag('[语音 情绪=“气急败坏地大喊”]站住！[/语音]').emotion, '气急败坏地大喊');
+    assert.equal(parseMediaTag('[voice 语气=撒娇]好不好嘛[/voice]').emotion, '撒娇');
+    assert.equal(buildMediaTag('voice', '别走', '/user/files/st-ai-audio-1-a.mp3', info),
+        '[voice type="御姐" emotion="哽咽，小声" src="/user/files/st-ai-audio-1-a.mp3"]别走[/voice]');
 });
 
 test('写回：保留原标签名和文字，只补 src；替换不受 $ 影响', () => {

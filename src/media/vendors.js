@@ -15,6 +15,8 @@
  * 各家接口格式来自官方文档（2026-09-28 查阅），跨域情况是同日用 http://tauri.localhost 来源实测的预检。
  */
 
+import { emotionInstruction, minimaxEmotion, volcEmotion } from './emotion.js';
+
 export const DEFAULT_VENDOR_BASES = {
     image: {
         minimax: 'https://api.minimax.cn', dashscope: 'https://dashscope.aliyuncs.com', stability: 'https://api.stability.ai',
@@ -229,13 +231,14 @@ const httpsOss = (url) => String(url || '').replace(/^http:\/\/([^/]+\.aliyuncs\
 const AUDIO = {
     // MiniMax T2A v2：同步，音频是 hex 串；业务错误在 base_resp 里
     minimax: {
-        create: ({ base, model, voice, language, extra }, text) => {
+        create: ({ base, model, voice, language, emotion, extra }, text) => {
             const { voice_setting = {}, audio_setting = {}, ...rest } = extra;
+            const mood = emotion ? minimaxEmotion(emotion, model || 'speech-2.8-hd') : '';
             return {
                 url: `${root(base, 'https://api.minimax.cn')}/v1/t2a_v2`, headers: json,
                 body: {
                     model: model || 'speech-2.8-hd', text, stream: false, output_format: 'hex', language_boost: language || 'auto',
-                    voice_setting: { voice_id: voice || 'female-shaonv', speed: 1, vol: 1, pitch: 0, ...voice_setting },
+                    voice_setting: { voice_id: voice || 'female-shaonv', speed: 1, vol: 1, pitch: 0, ...voice_setting, ...(mood ? { emotion: mood } : {}) },
                     audio_setting: { sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 1, ...audio_setting },
                     ...rest,
                 },
@@ -252,7 +255,7 @@ const AUDIO = {
 
     // 阿里云百炼：Qwen-TTS 走 multimodal-generation，CosyVoice 走 SpeechSynthesizer；都给回一个 24 小时有效的音频链接
     dashscope: {
-        create: ({ base, model, voice, language, extra }, text) => {
+        create: ({ base, model, voice, language, emotion, extra }, text) => {
             const r = root(base, 'https://dashscope.aliyuncs.com');
             const m = model || 'qwen3-tts-flash';
             if (/^cosyvoice|^qwen-audio/i.test(m)) {
@@ -263,7 +266,14 @@ const AUDIO = {
             }
             return {
                 url: `${r}/api/v1/services/aigc/multimodal-generation/generation`, headers: json,
-                body: { model: m, input: { text, voice: voice || 'Cherry', ...(language ? { language_type: language } : {}), ...extra } },
+                body: {
+                    model: m,
+                    input: {
+                        text, voice: voice || 'Cherry', ...(language ? { language_type: language } : {}), ...extra,
+                        // 只有 qwen3-tts-instruct 系列认 instructions（CosyVoice 的参数名是 instruction，只对部分音色生效，不送）
+                        ...(emotion && /instruct/i.test(m) ? { instructions: emotionInstruction(emotion), optimize_instructions: true } : {}),
+                    },
+                },
             };
         },
         check: dashscopeCheck,
@@ -278,7 +288,7 @@ const AUDIO = {
     // Gemini TTS：3.8 起单次请求直接回 WAV、音色字段改成 voiceConfig.voice；旧模型回裸 PCM、字段是 prebuiltVoiceConfig
     gemini: {
         auth: (key) => ({ 'x-goog-api-key': String(key || '').trim() }),
-        create: ({ base, model, voice, extra }, text) => {
+        create: ({ base, model, voice, emotion, extra }, text) => {
             const m = String(model || 'gemini-3.8-flash-tts').replace(/^models\//, '');
             const legacy = /gemini-(2\.|3\.[0-7])/i.test(m);
             const name = voice || 'Kore';
@@ -287,7 +297,8 @@ const AUDIO = {
             return {
                 url: `${r}/v1beta/models/${encodeURIComponent(m)}:generateContent`, headers: json,
                 body: {
-                    contents: [{ role: 'user', parts: [{ text }] }],
+                    // Gemini TTS 靠提示语控制语气（官方写法「Say cheerfully: …」），提示语本身不会读出来
+                    contents: [{ role: 'user', parts: [{ text: emotion ? `用「${emotion}」的语气说：${text}` : text }] }],
                     generationConfig: {
                         responseModalities: ['AUDIO'],
                         speechConfig: { voiceConfig: legacy ? { prebuiltVoiceConfig: { voiceName: name } } : { voice: name } },
@@ -317,18 +328,20 @@ const AUDIO = {
     // 火山引擎豆包语音（v1 HTTP）：不允许浏览器跨域，只能开酒馆代理。Key 填「appid:token」，音色填 voice_type
     volcengine: {
         auth: (key) => ({ Authorization: `Bearer;${String(key || '').split(':').slice(1).join(':').trim()}` }),
-        create: ({ base, key, model, voice, extra }, text) => {
+        create: ({ base, key, model, voice, emotion, extra }, text) => {
             const [appid, ...rest] = String(key || '').split(':');
             const token = rest.join(':').trim();
             if (!appid.trim() || !token) throw new Error('豆包语音的 Key 要写成「appid:token」（控制台里的 APP ID 和 Access Token，用英文冒号连起来）');
             if (new TextEncoder().encode(text).length > 1024) throw new Error('豆包语音一次最多 1024 字节（约 340 个汉字），请分段');
             const { audio = {}, ...more } = extra;
+            const voiceType = voice || 'zh_female_shuangkuaisisi_moon_bigtts';
+            const mood = emotion ? volcEmotion(emotion, audio.voice_type || voiceType) : '';
             return {
                 url: `${root(base, 'https://openspeech.bytedance.com')}/api/v1/tts`, headers: json,
                 body: {
                     app: { appid: appid.trim(), token: 'access_token', cluster: model || 'volcano_tts' },
                     user: { uid: 'st-ai-image' },
-                    audio: { voice_type: voice || 'zh_female_shuangkuaisisi_moon_bigtts', encoding: 'mp3', speed_ratio: 1, ...audio },
+                    audio: { voice_type: voiceType, encoding: 'mp3', speed_ratio: 1, ...audio, ...(mood ? { emotion: mood, enable_emotion: true } : {}) },
                     request: { reqid: randomId(), text, operation: 'query' },
                     ...more,
                 },
