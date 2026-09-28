@@ -744,7 +744,25 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
             assert tb['x'] >= bar['x'] - 1 and tb['x'] + tb['width'] <= bar['x'] + bar['width'] + 1, (tab.text_content(), tb, bar)
         assert bar['height'] < 50, bar  # 四个标签一行放得下
         close_panel()
-    checks.append('390px / 320px: embedded video and the image/voice/video pages fit without horizontal overflow; the four tabs stay on one row')
+    # 手机：点面板里面不关，在输入框里拖选到外面松手也不关，点面板外面才关
+    dialog_open = lambda: page.locator('#st_ai_dialog').evaluate('(d) => d.open')
+    open_tab('speech')
+    page.locator('#st_ai_speech_base').click()
+    assert dialog_open()
+    ib = page.locator('#st_ai_speech_base').bounding_box()
+    page.mouse.move(ib['x'] + 10, ib['y'] + ib['height'] / 2); page.mouse.down()
+    page.mouse.move(5, 830, steps=5); page.mouse.up()
+    assert dialog_open(), 'drag-select ending outside closed the panel'
+    page.mouse.click(5, 830)  # 面板外（下方遮罩）
+    page.wait_for_function("!document.querySelector('#st_ai_dialog').open", timeout=3000)
+    # 桌面：点外面不关（面板能拖动，误触代价高）
+    page.set_viewport_size({'width': 1280, 'height': 900})
+    open_tab('speech')
+    page.mouse.click(5, 890)
+    page.wait_for_timeout(300)
+    assert dialog_open(), 'desktop backdrop click should not close'
+    close_panel()
+    checks.append('390px / 320px: embedded video and the image/voice/video pages fit without horizontal overflow; the four tabs stay on one row; on mobile tapping outside the panel closes it (not when a drag-select ends outside), desktop unchanged')
 
     page.wait_for_timeout(500)
     # 生成成功后扫描器会在 0.5/2/5 秒各补扫一次；等它们跑完，还剩的才算泄漏

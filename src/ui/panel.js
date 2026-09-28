@@ -4,7 +4,7 @@
  */
 import { EVENTS, on } from '../core/bus.js';
 import { log } from '../core/notify.js';
-import { bindDrag, resetDrag } from './drag.js';
+import { bindDrag, isMobile, resetDrag } from './drag.js';
 import { el, qs } from './dom.js';
 import { getSettings } from '../settings.js';
 import { buildPromptSection } from './prompt-section.js';
@@ -114,6 +114,14 @@ export async function mountPanel({ onPromptSettingChanged } = {}) {
     qs('#st_ai_float_close')?.addEventListener('click', closePanel);
     // ESC 走 dialog 的 cancel：统一收口到 closePanel，别让 dialog 自己关一半
     dialog()?.addEventListener('cancel', (e) => { e.preventDefault(); closePanel(); });
+    // 手机上点面板外面（遮罩）就关。dialog 没有内边距，点到的是 dialog 本身就说明在面板外；
+    // 按下也得在面板外：在输入框里拖选文字、松手落到外面时，click 也会落在 dialog 上，不能关
+    let downOutside = false;
+    dialog()?.addEventListener('pointerdown', (e) => { downOutside = e.target === dialog(); });
+    dialog()?.addEventListener('click', (e) => {
+        if (e.target === dialog() && downOutside && isMobile()) closePanel();
+        downOutside = false;
+    });
     bindDrag(panel(), qs('.st_ai_float_header'));
     qs('#st_ai_fallback_banner_close')?.addEventListener('click', () => {
         qs('#st_ai_fallback_banner')?.classList.add('st_ai_hidden');

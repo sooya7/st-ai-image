@@ -4,7 +4,7 @@
  */
 const MOBILE = '(max-width: 600px)';
 
-const isMobile = () => Boolean(globalThis.matchMedia?.(MOBILE)?.matches);
+export const isMobile = () => Boolean(globalThis.matchMedia?.(MOBILE)?.matches);
 
 /** 清掉拖拽残留，让 dialog 重新原生居中（每次打开面板时调用）。 */
 export function resetDrag(panel) {
