@@ -350,10 +350,12 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     assert page.locator('#st_ai_speech_panel .st_ai_media_warning').inner_text() == ''
     page.locator('#st_ai_speech_voice_preset').scroll_into_view_if_needed()
     page.screenshot(path=str(output / 'settings-voice-presets.png'))
+    old_model = page.locator('#st_ai_speech_model').input_value()
+    page.locator('#st_ai_speech_model').fill('gpt-4o-mini-tts')  # 认 instructions 的模型，看 emotion 有没有送到
     page.wait_for_timeout(600)
     close_panel()
 
-    expect(mes(7).locator('.st_ai_media_gen').first).to_have_attribute('title', '林晚 · 御姐：快进来')
+    expect(mes(7).locator('.st_ai_media_gen').first).to_have_attribute('title', '林晚 · 御姐 · 撒娇：快进来')
     before = len(posts('audio/speech'))
     for i in range(4):
         mes(7).locator('.st_ai_media_gen').first.click()
@@ -361,10 +363,15 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     voices = [json.loads(r['body'])['voice'] for r in posts('audio/speech')[before:]]
     # 表里有 → 用表里的；没写 type、type 不在表里 → 默认音色；改过名的类型照样生效
     assert voices == ['voice-yujie', 'voice-default', 'voice-default', 'voice-jianke'], voices
-    assert re.fullmatch(r'林晚招手：\[voice type="御姐" name="林晚" src="/user/files/st-ai-audio-[^"]+"\]快进来\[/voice\] 店主笑道：\[voice src="/user/files/st-ai-audio-[^"]+"\]欢迎光临\[/voice\] \[voice type="不存在" src="/user/files/st-ai-audio-[^"]+"\]嗯哼\[/voice\] \[voice type="冷酷剑客" src="/user/files/st-ai-audio-[^"]+"\]走\[/voice\]', raw(7)), raw(7)
+    bodies = [json.loads(r['body']) for r in posts('audio/speech')[before:]]
+    moods = [b.get('instructions', '') for b in bodies]
+    assert '撒娇' in moods[0] and moods[1:] == ['', '', ''], moods  # 只有写了 emotion 的那句带情绪指令
+    assert [b['input'] for b in bodies] == ['快进来', '欢迎光临', '嗯哼', '走'], bodies
+    assert re.fullmatch(r'林晚招手：\[voice type="御姐" name="林晚" emotion="撒娇" src="/user/files/st-ai-audio-[^"]+"\]快进来\[/voice\] 店主笑道：\[voice src="/user/files/st-ai-audio-[^"]+"\]欢迎光临\[/voice\] \[voice type="不存在" src="/user/files/st-ai-audio-[^"]+"\]嗯哼\[/voice\] \[voice type="冷酷剑客" src="/user/files/st-ai-audio-[^"]+"\]走\[/voice\]', raw(7)), raw(7)
 
     # Fish 地址：出现「填入 Fish 推荐音色」，只补同名行、保留自己加的类型
     open_tab('speech')
+    page.locator('#st_ai_speech_model').fill(old_model)
     old_base = page.locator('#st_ai_speech_base').input_value()
     page.locator('#st_ai_speech_base').fill('https://api.fish.audio/compat/v1')
     expect(page.locator('#st_ai_speech_fish_fill')).to_be_visible()

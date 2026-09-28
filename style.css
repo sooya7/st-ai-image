@@ -74,10 +74,17 @@
 /* --- 移动端：尺寸已由上面的 min() 夹好，这里只补手机特有的两件事 --- */
 @media (max-width: 600px) {
     #st_ai_float_panel {
+        /* 面板里的字号都是 --mainFontSize 的倍数：手机上在面板内把它缩一号（仍跟着酒馆的字体缩放） */
+        --mainFontSize: calc(var(--fontScale, 1) * 13px);
         /* 底部小白条／手势条要额外让出空间 */
         height: min(520px, 100dvh - 160px - env(safe-area-inset-bottom, 0px));
         border-radius: 14px;
     }
+    /* 输入框、小按钮也收紧一点，一屏能多看几项 */
+    #st_ai_float_panel .st_ai_input,
+    #st_ai_float_panel .st_ai_select { padding: 7px 10px; }
+    #st_ai_float_panel .st_ai_textarea { padding: 8px 10px; }
+    #st_ai_float_panel .st_ai_library_btn { min-height: 32px; }
 }
 
 /* --- Dialog 容器（showModal 渲染到 top layer，浏览器原生居中） --- */
@@ -152,7 +159,7 @@
 
 /* 语音 / 视频设置页 */
 .st_ai_speech_form {
-    padding: 16px;
+    padding: clamp(10px, 3vw, 16px);
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -163,6 +170,13 @@
 .st_ai_speech_form label { color: rgba(255, 255, 255, 0.78); }
 .st_ai_speech_hint { color: rgba(255, 255, 255, 0.65); font-size: calc(var(--mainFontSize, 15px) * 0.9); margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
 .st_ai_media_warning { color: #fca5a5; }
+/* 折叠的说明：平时只露一行浅色小字 */
+.st_ai_help > summary { width: fit-content; cursor: pointer; list-style: none; color: rgba(255, 255, 255, 0.45); font-size: calc(var(--mainFontSize, 15px) * 0.85); }
+.st_ai_help > summary::-webkit-details-marker { display: none; }
+.st_ai_help > summary::before { content: 'ⓘ '; }
+.st_ai_help[open] > summary { margin-bottom: 4px; }
+.st_ai_help > .st_ai_speech_hint { white-space: pre-line; }
+.st_ai_help:has(> .st_ai_speech_hint:empty) { display: none; }
 
 /* 工作流库 / 画师串的库控件 */
 .st_ai_library { display: flex; flex-direction: column; gap: 6px; }
@@ -992,13 +1006,8 @@
         max-height: 300px;
     }
 
-    /* iOS 聚焦 <16px 的输入框会自动放大整页，看起来就是"界面超出屏幕" */
-    .st_ai_input,
-    .st_ai_textarea,
-    .st_ai_select,
-    #st_gpt_image_prompt {
-        font-size: max(16px, var(--mainFontSize, 15px));
-    }
+    /* 输入框不再强制 16px：酒馆和 TauriTavern 的 viewport 都是 maximum-scale=1，iOS 聚焦不会放大页面；
+       强制 16px 只会让输入框、下拉框比旁边的说明文字大一圈 */
 }
 
 /* --- 系统提示词文本框 --- */

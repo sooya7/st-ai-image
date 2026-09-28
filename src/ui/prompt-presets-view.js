@@ -6,7 +6,7 @@ import {
     DEFAULT_NAME, blankPromptPreset, cleanName, deleteItem, importItems, normalizePromptPreset, readPromptPresets, renameItem, uniqueName,
 } from '../core/library.js';
 import { getSettings, peekSettings, saveSettings } from '../settings.js';
-import { el } from './dom.js';
+import { el, helpBox } from './dom.js';
 import { createLibraryControl } from './library-control.js';
 
 const FIELDS = [
@@ -88,7 +88,7 @@ export function mountPromptPresets(root) {
         control.node,
         ...FIELDS.map(([key, label]) => el('div', { class: 'st_ai_field st_ai_prompt_textarea_field' }, [el('label', { for: areas[key].id, text: label }), areas[key]])),
         el('label', { class: 'st_ai_checkbox' }, [random, el('span', { text: '每张图随机用一个画师串（只从有内容的里面挑）' })]),
-        el('p', { class: 'st_ai_speech_hint', text: '所有图片服务都会用：正面拼成「前置, 描述, 后置」，负面单独传（OpenAI 类接口附在描述后面）。可以导入 st-chatu8 导出的固定提示词预设。' }),
+        helpBox('所有图片服务都会用：正面拼成「前置, 描述, 后置」，负面单独传（OpenAI 类接口附在描述后面）。可以导入 st-chatu8 导出的固定提示词预设。'),
     ]));
     show();
 }

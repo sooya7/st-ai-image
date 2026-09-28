@@ -3,6 +3,7 @@
  *
  *   [voice]台词[/voice]            → 待生成
  *   [voice type="御姐"]台词[/voice] → 用预设音色（见 voice-presets.js），没写或不认识就用默认音色
+ *   [voice type="御姐" emotion="哽咽，小声"]台词[/voice] → 按这个情绪合成（见 emotion.js），各家接口能力不同
  *   [voice type="御姐" src="/user/files/…"]台词[/voice] → 已生成，文件存在酒馆服务器
  *
  * 生成后只往标签里补 src，台词/描述原样保留：AI 上下文不变，刷新后也能重新渲染。
@@ -16,6 +17,7 @@ export const MEDIA_TAG_SOURCE = String.raw`\[\s*(?<mediaTag>voice|语音|配音|
 const ATTR_ITEM = /([A-Za-z一-鿿]+)\s*=\s*(?:"([^"\]]*)"|“([^”\]]*)”|([^\s"“\]]+))/g;
 const SPEAKER_KEYS = new Set(['name', 'speaker', 'character', '角色', '说话人']);
 const TYPE_KEYS = new Set(['type', 'voice', 'tone', '音色', '声音', '声线']);
+const EMOTION_KEYS = new Set(['emotion', 'mood', 'emo', '情绪', '情感', '语气']);
 const QUICK = /\[\s*\/\s*(?:voice|语音|配音|video|视频)\s*\]/i;
 
 /** 只渲染本扩展自己写进去的文件，AI 编造的地址或外链一律不当媒体加载。 */
@@ -44,7 +46,7 @@ const pick = (attrs, keys) => cleanAttr(attrs[Object.keys(attrs).find((key) => k
 
 /**
  * 解析一段完整标签文本；不是媒体标签返回 null。
- * name 是标签名（voice/语音…），voiceType 是预设音色类型，speaker 是说话人（只用来显示）。
+ * name 是标签名（voice/语音…），voiceType 是预设音色类型，speaker 是说话人（只用来显示），emotion 是这句的情绪语气。
  */
 export function parseMediaTag(tagText) {
     const match = new RegExp(`^${MEDIA_TAG_SOURCE}$`, 'i').exec(String(tagText ?? '').trim());
@@ -58,16 +60,18 @@ export function parseMediaTag(tagText) {
         src: sanitizeMediaSrc(attrs.src),
         voiceType: pick(attrs, TYPE_KEYS),
         speaker: pick(attrs, SPEAKER_KEYS),
+        emotion: pick(attrs, EMOTION_KEYS),
         text: match[3].trim(),
     };
 }
 
-/** 写回时保留 type 和 name，只补 src。 */
-export function buildMediaTag(name, text, src = '', { voiceType = '', speaker = '' } = {}) {
+/** 写回时保留 type、name 和 emotion，只补 src。 */
+export function buildMediaTag(name, text, src = '', { voiceType = '', speaker = '', emotion = '' } = {}) {
     const safe = sanitizeMediaSrc(src);
     const type = cleanAttr(voiceType);
     const who = cleanAttr(speaker);
-    return `[${name}${type ? ` type="${type}"` : ''}${who ? ` name="${who}"` : ''}${safe ? ` src="${safe}"` : ''}]${text}[/${name}]`;
+    const mood = cleanAttr(emotion);
+    return `[${name}${type ? ` type="${type}"` : ''}${who ? ` name="${who}"` : ''}${mood ? ` emotion="${mood}"` : ''}${safe ? ` src="${safe}"` : ''}]${text}[/${name}]`;
 }
 
 /** 渲染后的文字会丢掉 markdown 符号，比较时只看字母和数字。 */

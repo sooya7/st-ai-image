@@ -67,12 +67,14 @@ test('Fish 推荐音色：类型和 ID 都不重复，ID 是 32 位十六进制'
 });
 
 test('以前每一版的默认配音提示词读档时都换成当前默认', () => {
-    for (const ref of ['b624b98', 'd5b76cf', '0027222']) {
+    for (const ref of ['f10ff21', 'b624b98', 'd5b76cf', '0027222']) {
         const src = execSync(`git show ${ref}:src/media/media-settings.js`, { cwd: new URL('..', import.meta.url) }).toString();
         const literal = /export const DEFAULT_VOICE_PROMPT = `([\s\S]*?)`;/.exec(src)[1]
             // 0027222 的列表是模板插值生成的，按当时的值展开
             .replace('${typesOf(\'女声\')}', '日常女声、萝莉、青涩少女、活泼少女、温柔女声、御姐、成熟女声、老年女声')
-            .replace('${typesOf(\'男声\')}', '少年、青年男声、成熟男声、大叔、老年男声');
+            .replace('${typesOf(\'男声\')}', '少年、青年男声、成熟男声、大叔、老年男声')
+            // 473d5d2 起类型列表是占位符，存档里是 {{音色类型}} 原文
+            .replace('${VOICE_TYPES_TOKEN}', VOICE_TYPES_TOKEN);
         assert.equal(readMediaSettings({ speech: { prompt: literal } }, 'speech').prompt, DEFAULT_VOICE_PROMPT, ref);
     }
 });

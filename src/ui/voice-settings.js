@@ -4,7 +4,7 @@
  */
 import { errMsg } from '../core/notify.js';
 import { FISH_VOICES, MAX_PRESETS, fishPresets } from '../media/voice-presets.js';
-import { el } from './dom.js';
+import { el, helpBox } from './dom.js';
 
 const CUSTOM = '__custom__';
 const PREVIEW_TEXT = '你好，很高兴认识你。今天过得怎么样？';
@@ -133,7 +133,7 @@ export function createVoiceControls({ id, profile, config, isFish, onChange, onC
         },
         presetsField: el('div', { class: 'st_ai_field st_ai_voice_presets', dataset: { field: 'presets' } }, [
             el('label', { text: '音色预设（AI 在标签里写类型名来选用）' }),
-            el('p', { class: 'st_ai_speech_hint', text: '类型名和音色都可以改，也能增删。音色没填的类型不会出现在提示词里，AI 写了也按默认音色读。每个服务各存一张表。' }),
+            helpBox('类型名和音色都可以改，也能增删。音色没填的类型不会出现在提示词里，AI 写了也按默认音色读。每个服务各存一张表。'),
             rows,
             el('div', { class: 'st_ai_inline_row' }, [add, fishFill]),
             datalist,

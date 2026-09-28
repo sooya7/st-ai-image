@@ -36,6 +36,33 @@
 - 「默认音色」是下拉框，选项是表里填了音色的类型，也可以选「自定义音色 ID」。
 - 写回时 `type` 保留：`[voice type="御姐" src="/user/files/…"]快进来[/voice]`，重新生成还是同一个类型。
 
+## 情绪（emotion）
+
+以前标签里只有台词，TTS 只能对着一句孤立的话猜语气，念出来很平。现在标签可以带 `emotion`（也认 `情绪=`、`语气=`），默认配音提示词要求 AI 每个标签都写：
+
+```text
+[voice type="青涩少女" emotion="哽咽，小声"]别走，好不好？[/voice]
+```
+
+各家接口能听懂的方式不同（`src/media/emotion.js`），没写 emotion 时请求和以前完全一样：
+
+| 服务 | 怎么送 |
+| --- | --- |
+| Fish（原生，或「OpenAI 兼容」地址指向 fish.audio） | S2 系列：句首方括号放原话，能归类的再补一个官方英文标签，如 `[哽咽，小声][sad] 别走…`；S1 用圆括号英文标签 |
+| OpenAI 兼容：`gpt-4o-mini-tts` 等认 instructions 的模型 | `instructions`（额外参数里自己写的 instructions 保留在前面）；`tts-1` / `tts-1-hd` 不送 |
+| 硅基流动 CosyVoice | 官方写法：`指令<\|endofprompt\|>台词` |
+| 百炼 | 只有 `qwen3-tts-instruct-flash` 系列送 `instructions` + `optimize_instructions` |
+| Gemini TTS | 提示语「用「…」的语气说：台词」 |
+| MiniMax | 归类后换成 `voice_setting.emotion` 枚举；whisper 只给 speech-2.6 |
+| Azure | `mstts:express-as style`，音色不支持的风格 Azure 按默认读 |
+| 豆包（火山 v1） | 只有多情感音色（voice_type 里带 `_emo_`）送 `emotion` + `enable_emotion` |
+| ElevenLabs | 只有 `eleven_v3` 加英文音频标签，如 `[whispers]` |
+| GPT-SoVITS | 不支持（语气取决于参考音频） |
+
+归不了类（比如「若有所思」）时，只收枚举的服务不送情绪，照常合成，不会因为情绪报错。
+
+2026-09-28 用 Fish `fish-audio/s2.1-pro-free`（兼容接口，青涩少女音色）实测：加 `[哽咽，小声][sad]` 后时长 3.7 → 5.4 秒，Whisper 转写开头多出抽泣声、提示本身没有被读出来；`[气急败坏地大喊][angry]` 平均响度 -16.5 → -13.9 dB。
+
 ## 按接口显示设置
 
 图片页先选「生图接口」，下面只显示这个接口用得上的东西：

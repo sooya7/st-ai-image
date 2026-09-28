@@ -1,6 +1,8 @@
 /** Protocol adapters. No SDK, timers, DOM or network at module load. */
 import { needsKey } from './keys.js';
 import { vendorFor, vendorPlan } from './vendors.js';
+import { azureStyle, elevenTag, emotionInstruction, fishCue, isSiliconCosy, takesInstructions } from './emotion.js';
+import { isFishEndpoint } from './voice-presets.js';
 
 export { isLocalBase, needsKey } from './keys.js';
 export const PROVIDERS = {
@@ -91,20 +93,27 @@ export function buildRequest(kind, config, prompt) {
         }
     } else if (kind === 'audio') {
         binary = true;
+        // 标签里的 emotion（见 emotion.js）：各家听得懂哪种就用哪种，不认的照原样合成
+        const emotion = String(config.emotion || '').trim();
         if (provider === 'openai') {
             url = `${root}/audio/speech`;
-            body = { ...extra, model, input: prompt, voice: voice || 'alloy', response_format: 'mp3' };
+            let input = prompt;
+            const more = {};
+            if (emotion && isFishEndpoint(provider, root)) input = fishCue(emotion, model) + prompt;
+            else if (emotion && isSiliconCosy(root, model)) input = `${emotionInstruction(emotion)}<|endofprompt|>${prompt}`;
+            else if (emotion && takesInstructions(model)) more.instructions = [extra.instructions, emotionInstruction(emotion)].filter(Boolean).join('\n');
+            body = { ...extra, ...more, model, input, voice: voice || 'alloy', response_format: 'mp3' };
         } else if (provider === 'fish') {
             // Fish 的模型必须放在 `model` 请求头：写进请求体会按付费模型计费（免费档 s2.1-pro-free 会 402）。
             url = `${root}/tts`;
             headers.model = model;
-            body = { format: 'mp3', ...extra, text: prompt, ...(voice ? { reference_id: voice } : {}) };
+            body = { format: 'mp3', ...extra, text: (emotion ? fishCue(emotion, model) : '') + prompt, ...(voice ? { reference_id: voice } : {}) };
         } else if (provider === 'elevenlabs') {
             if (!voice) throw new Error('ElevenLabs 需要 Voice ID');
             delete headers.Authorization;
             headers['xi-api-key'] = key;
             url = `${root}/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_128`;
-            body = { ...extra, text: prompt, model_id: model };
+            body = { ...extra, text: (emotion ? elevenTag(emotion, model) : '') + prompt, model_id: model };
         } else {
             if (!voice) throw new Error('Azure 需要音色名称，例如 zh-CN-XiaoxiaoNeural');
             delete headers.Authorization;
@@ -112,7 +121,9 @@ export function buildRequest(kind, config, prompt) {
             headers['Content-Type'] = 'application/ssml+xml';
             headers['X-Microsoft-OutputFormat'] = 'audio-24khz-48kbitrate-mono-mp3';
             url = `${root}/cognitiveservices/v1`;
-            body = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${xml(config.language || extra.language || 'zh-CN')}"><voice name="${xml(voice)}">${xml(prompt)}</voice></speak>`;
+            const style = emotion ? azureStyle(emotion) : '';
+            const said = style ? `<mstts:express-as style="${style}">${xml(prompt)}</mstts:express-as>` : xml(prompt);
+            body = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="${xml(config.language || extra.language || 'zh-CN')}"><voice name="${xml(voice)}">${said}</voice></speak>`;
         }
     } else if (kind === 'video') {
         queue = true;

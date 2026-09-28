@@ -26,6 +26,12 @@ export function el(tag, props = {}, children = []) {
 
 export const icon = (name) => el('i', { class: `fa-solid ${name}` });
 
+/** 折叠的说明：默认只露一行小字，点开才看长说明。hint 是文字，或会被代码改文字的 <p>（没字时整块隐藏）。 */
+export function helpBox(hint, summary = '说明') {
+    const body = hint instanceof Node ? hint : el('p', { class: 'st_ai_speech_hint', text: hint });
+    return el('details', { class: 'st_ai_help' }, [el('summary', { text: summary }), body]);
+}
+
 export function iconButton({ iconName, title, className = 'st_gpt_image_btn', dataset = {}, disabled = false }) {
     return el('button', {
         type: 'button',
