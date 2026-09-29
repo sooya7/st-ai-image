@@ -503,6 +503,27 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     assert raw(3).count('src=') == 1
     checks.append('Regenerate swaps in a new file for that tag only')
 
+    # ---------- switch shapes: capsules, even when a theme forces checkbox styles with !important ----------
+    open_tab('speech')
+    theme = page.add_style_tag(content="input[type='checkbox'] { border-radius: 4px !important; width: 18px !important; height: 18px !important; background: #fff !important; }"
+                                        " input[type='checkbox']::before { border-radius: 2px !important; }")
+    shapes = page.evaluate("""() => {
+        const shape = (n, pseudo) => { const s = getComputedStyle(n, pseudo); return { w: parseFloat(s.width), h: parseFloat(s.height), r: parseFloat(s.borderTopLeftRadius), raw: s.borderTopLeftRadius }; };
+        return {
+            switches: [...document.querySelectorAll('#st_ai_speech_panel .st_ai_checkbox input')].map((n) => ({ id: n.id, track: shape(n), knob: shape(n, '::before') })),
+            bar: shape(document.querySelector('.st_ai_float_tabs')),
+            slider: shape(document.querySelector('.st_ai_tab_indicator')),
+        };
+    }""")
+    theme.evaluate('(s) => s.remove()')
+    assert len(shapes['switches']) >= 3, shapes
+    for s in shapes['switches']:
+        assert s['track']['w'] > s['track']['h'] * 1.5 and s['track']['r'] >= s['track']['h'] / 2, s
+        assert s['knob']['raw'] == '50%' and s['knob']['w'] == s['knob']['h'], s
+    for part in ('bar', 'slider'):
+        assert shapes[part]['r'] >= shapes[part]['h'] / 2, (part, shapes[part])
+    checks.append('Switches stay capsules with a round knob even when a theme forces checkbox radius/size with !important; the tab bar and its slider are capsules')
+
     # ---------- toggles: each feature page holds its own AI-tag prompt ----------
     assert [t.strip() for t in page.locator('.st_ai_tab').all_inner_texts()] == ['图片', '配音', '视频', '媒体库']
     open_tab('speech')
