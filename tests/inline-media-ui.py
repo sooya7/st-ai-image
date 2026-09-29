@@ -281,6 +281,47 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     assert page.evaluate('mediaStats.timers.size') == 0
     checks.append('Load: [voice]/[video] tags become inline buttons (voice text stays visible), [image] still works; protocol/client modules not loaded; no API calls or media timers')
 
+    # 宿主保留 .mes_text 和 dataset，只重绘同一段原文；必须在下一轮扫描前连续复现。
+    FILES['redraw.png'] = png_1x1()
+    FILES['st-ai-audio-123-redraw.wav'] = AUDIO
+    FILES['st-ai-video-123-redraw.webm'] = VIDEO
+    redraw = page.evaluate('''async () => {
+        const { processMessageElement } = await import('../src/inline/scanner.js');
+        const mes = document.createElement('div');
+        mes.className = 'mes';
+        mes.setAttribute('mesid', '9999');
+        const node = document.createElement('div');
+        node.className = 'mes_text';
+        mes.append(node);
+        document.getElementById('chat').append(mes);
+        const source = '[st-ai-image id="redraw-test" src="%2Fuser%2Fimages%2Ffixture%2Fredraw.png"]'
+            + '[voice type="青涩少女" src="/user/files/st-ai-audio-123-redraw.wav"]晚上好[/voice]'
+            + '[video src="/user/files/st-ai-video-123-redraw.webm"]窗外的雨[/video]'
+            + '[image]redraw prompt[/image]';
+        const results = [];
+        try {
+            for (let i = 0; i < 5; i++) {
+                node.textContent = source;
+                const processed = processMessageElement(node);
+                results.push({ processed,
+                    images: node.querySelectorAll('.st_gpt_inline_img_wrap').length,
+                    voices: node.querySelectorAll('.st_ai_media_audio').length,
+                    videos: node.querySelectorAll('.st_ai_media_video').length,
+                    requests: node.querySelectorAll('.st_gpt_inline_gen').length,
+                });
+            }
+            const image = node.querySelector('.st_gpt_inline_img_wrap');
+            const unchangedSkipped = !processMessageElement(node);
+            return { results, unchangedSkipped,
+                imageRetained: node.querySelector('.st_gpt_inline_img_wrap') === image };
+        } finally { mes.remove(); }
+    }''')
+    assert len(redraw['results']) == 5 and all(r == {
+        'processed': True, 'images': 1, 'voices': 1, 'videos': 1, 'requests': 1,
+    } for r in redraw['results']), redraw
+    assert redraw['unchangedSkipped'] and redraw['imageRetained'], redraw
+    checks.append('Same message redrawn five times before observer scans: image, voice, video and image request recover each time; unchanged scans preserve rendered elements')
+
     audio_btn.click()
     page.wait_for_function("fixture.toasts.some(t => t.message.includes('API Key'))")
     assert not posts('audio/speech')
@@ -844,3 +885,4 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
 
 if __name__ == '__main__':
     main()
+
