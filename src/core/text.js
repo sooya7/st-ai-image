@@ -125,8 +125,9 @@ export function createInlineImageMarker(source) {
     const safeId = (value) => String(value ?? '').replace(/[^a-zA-Z0-9_.:-]/g, '');
     if (source && typeof source === 'object') {
         const id = safeId(source.id);
-        if (id) return `[st-ai-image id="${id}"]`;
         const url = sanitizeImageUrl(source.imageUrl);
+        // ID 用来读媒体库，地址作为跨设备/旧索引丢失时的恢复路径。
+        if (id) return `[st-ai-image id="${id}"${url && !/^(?:data:|blob:)/i.test(url) ? ` src="${encodeURIComponent(url)}"` : ''}]`;
         return url ? createMarkdownImageMarkup(url, source.prompt) : '';
     }
     const id = safeId(source);
@@ -156,7 +157,7 @@ export function replaceInlineImageMarkersWithMarkdown(text) {
     const re = new RegExp(RE.inlineMarker.source, 'g');
     return String(text ?? '').replace(re, (marker) => {
         const info = parseInlineImageMarker(marker);
-        return info.imageUrl ? createMarkdownImageMarkup(info.imageUrl) : marker;
+        return !info.id && info.imageUrl ? createMarkdownImageMarkup(info.imageUrl) : marker;
     });
 }
 

@@ -1,17 +1,16 @@
 /**
- * 图库与聊天记录的双向同步：
- * - 生成的图先上传到酒馆自己的图库（拿到 /user/images/... 稳定地址），再入库；
- * - 聊天里已存在的图片（markdown 或已渲染的 img）补登记到图库，避免"图在楼里但图库没有"。
+ * 生成内容自动归入当前聊天媒体库；重新打开聊天时从正文引用补齐索引。
  */
-import { EVENTS, emit } from '../core/bus.js';
 import { fetchImageAsDataUrl, fetchWithTimeout } from '../core/net.js';
 import { log } from '../core/notify.js';
 import {
-    extractMarkdownImages, isUserImagesUrl, normalizeGalleryImageUrl,
+    extractMarkdownImages, isUserImagesUrl, normalizeGalleryImageUrl, parseInlineImageMarker,
     parseDataImageUrl, sanitizeImageUrl, summarizeApiError,
 } from '../core/text.js';
-import { getChat, getGalleryFolder, getRequestHeadersWithCsrf, invalidateCsrfToken } from '../st/context.js';
-import { findHistoryByImageUrl, saveToHistory } from './db.js';
+import { RE } from '../core/constants.js';
+import { getChat, getCurrentChatId, getGalleryFolder, getRequestHeadersWithCsrf, invalidateCsrfToken } from '../st/context.js';
+import { MEDIA_TAG_SOURCE, parseMediaTag, sanitizeMediaSrc } from '../media/tags.js';
+import { findHistoryByImageUrl, findHistoryByMediaUrl, getHistoryItem, importChatEntries, isHistoryDismissed, saveToHistory } from './chat-store.js';
 
 /** 同一地址并发登记时复用同一个任务，避免重复入库。 */
 const ensureTasks = new Map();
@@ -27,7 +26,7 @@ export async function uploadImageToStGallery(imageUrl) {
         image: image.base64,
         format: image.format,
         ch_name: getGalleryFolder(),
-        filename: `st-ai-image-${Date.now()}`,
+        filename: `st-ai-image-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     });
     const post = async () => fetchWithTimeout('/api/images/upload', {
         method: 'POST',
@@ -45,11 +44,11 @@ export async function uploadImageToStGallery(imageUrl) {
 }
 
 /**
- * 保存一张生成的图：先尽力上传到酒馆图库，再写本地图库。
- * 上传失败不阻断保存，只是地址仍是原始的（data: 或第三方直链）。
+ * 保存一张生成的图：上传到酒馆图库，再把短地址记入当前聊天。
  */
-export async function saveGeneratedImage(entry, { force = false } = {}) {
+export async function saveGeneratedImage(entry, { force = false, expectedChatId = getCurrentChatId() } = {}) {
     let imageUrl = sanitizeImageUrl(entry.imageUrl);
+    if (!expectedChatId || getCurrentChatId() !== expectedChatId) return { saved: null, imageUrl, serverImageUrl: '' };
     let serverImageUrl = '';
     try {
         serverImageUrl = await uploadImageToStGallery(imageUrl);
@@ -57,19 +56,23 @@ export async function saveGeneratedImage(entry, { force = false } = {}) {
         log.warn('上传到酒馆图库失败，保留原地址:', e);
     }
     if (serverImageUrl) imageUrl = normalizeGalleryImageUrl(serverImageUrl);
-    const saved = await saveToHistory({ ...entry, imageUrl }, { force });
+    const saved = getCurrentChatId() === expectedChatId ? await saveToHistory({ ...entry, imageUrl }, { force }) : null;
     return { saved, imageUrl, serverImageUrl };
 }
 
-/** 图库里没有这张图就补一条记录，有就直接返回。 */
+/** 媒体库里没有这张图就补一条记录，有就直接返回。 */
 export async function ensureHistoryEntryForImageUrl(imageUrl, defaults = {}) {
     const safeUrl = normalizeGalleryImageUrl(imageUrl);
     if (!safeUrl) return null;
-    if (ensureTasks.has(safeUrl)) return ensureTasks.get(safeUrl);
+    if (isHistoryDismissed({ imageUrl: safeUrl })) return null;
+    const chatId = getCurrentChatId();
+    const key = `${chatId}:${safeUrl}`;
+    if (ensureTasks.has(key)) return ensureTasks.get(key);
 
     const task = (async () => {
         const existing = await findHistoryByImageUrl(safeUrl);
         if (existing) return existing;
+        if (getCurrentChatId() !== chatId) return null;
         return saveToHistory({
             prompt: defaults.prompt || '',
             imageUrl: safeUrl,
@@ -79,35 +82,60 @@ export async function ensureHistoryEntryForImageUrl(imageUrl, defaults = {}) {
         }, { force: true });
     })();
 
-    ensureTasks.set(safeUrl, task);
+    ensureTasks.set(key, task);
     try { return await task; }
-    finally { ensureTasks.delete(safeUrl); }
+    finally { ensureTasks.delete(key); }
 }
 
-async function syncTextImages(text) {
+/** 生成后登记语音/视频地址，不把大文件塞进聊天文件。 */
+export async function saveMediaToHistory(mediaUrl, kind, prompt = '') {
+    const safeUrl = sanitizeMediaSrc(mediaUrl);
+    if (!safeUrl || !['audio', 'video'].includes(kind) || !safeUrl.startsWith(`/user/files/st-ai-${kind}-`)) return null;
+    const chatId = getCurrentChatId();
+    const key = `${chatId}:${kind}:${safeUrl}`;
+    if (ensureTasks.has(key)) return ensureTasks.get(key);
+    const task = (async () => {
+        const existing = await findHistoryByMediaUrl(safeUrl, kind);
+        if (existing) return existing;
+        if (getCurrentChatId() !== chatId) return null;
+        return saveToHistory({ type: kind, mediaUrl: safeUrl, prompt, timestamp: Date.now() }, { force: true });
+    })();
+    ensureTasks.set(key, task);
+    try { return await task; }
+    finally { ensureTasks.delete(key); }
+}
+
+async function collectTextEntries(text, candidates) {
     for (const image of extractMarkdownImages(text)) {
-        if (!isUserImagesUrl(image.imageUrl)) continue;
-        await ensureHistoryEntryForImageUrl(normalizeGalleryImageUrl(image.imageUrl), { prompt: image.prompt });
+        if (!isUserImagesUrl(image.imageUrl) || !/(?:^|\/)st-ai-image-\d+(?:-[a-z0-9]+)?\./i.test(image.imageUrl)) continue;
+        candidates.push({ imageUrl: normalizeGalleryImageUrl(image.imageUrl), prompt: image.prompt });
+    }
+    for (const match of String(text ?? '').matchAll(new RegExp(RE.inlineMarker.source, 'g'))) {
+        const info = parseInlineImageMarker(match[0]);
+        const old = info.id && !info.imageUrl ? await getHistoryItem(info.id) : null;
+        if (info.imageUrl || old?.imageUrl) candidates.push({ ...old, id: info.id || old?.id, imageUrl: info.imageUrl || old.imageUrl });
+    }
+    for (const match of String(text ?? '').matchAll(new RegExp(MEDIA_TAG_SOURCE, 'gi'))) {
+        const info = parseMediaTag(match[0]);
+        if (info?.src) candidates.push({ type: info.kind, mediaUrl: info.src, prompt: info.text });
     }
 }
 
 /** 扫已渲染的 DOM：覆盖那些不是 markdown 写法（比如 HTML img）的图片。 */
-export async function syncRenderedChatImages() {
-    if (typeof document === 'undefined') return false;
-    const images = [...document.querySelectorAll('#chat .mes_text img, #chat .mes img')]
+function renderedChatImages() {
+    if (typeof document === 'undefined') return [];
+    return [...document.querySelectorAll('#chat .mes_text img, #chat .mes img')]
         .map((img) => ({
             prompt: img.getAttribute('alt')
                 || img.closest?.('.mes')?.querySelector?.('.name_text')?.textContent
                 || 'AI Image',
             imageUrl: normalizeGalleryImageUrl(img.getAttribute('src') || img.currentSrc || img.src),
         }))
-        .filter((image) => isUserImagesUrl(image.imageUrl));
+        .filter((image) => isUserImagesUrl(image.imageUrl) && /(?:^|\/)st-ai-image-\d+(?:-[a-z0-9]+)?\./i.test(image.imageUrl));
+}
 
-    for (const image of images) {
-        await ensureHistoryEntryForImageUrl(image.imageUrl, { prompt: image.prompt });
-    }
-    if (images.length) emit(EVENTS.galleryChanged);
-    return images.length > 0;
+export async function syncRenderedChatImages() {
+    return importChatEntries(renderedChatImages());
 }
 
 /**
@@ -117,22 +145,26 @@ export async function syncRenderedChatImages() {
 export async function syncChatImagesToHistory() {
     const chat = getChat();
     if (!chat?.length) return false;
+    const chatId = getCurrentChatId();
 
-    const key = chat.map((message) => `${message?.mes || ''}|${message?.swipe_id || 0}`).join('\n');
+    const key = chatId;
     if (chatSyncTasks.has(key)) return chatSyncTasks.get(key);
 
     const task = (async () => {
+        const candidates = [];
         for (const message of chat) {
+            if (getCurrentChatId() !== chatId) return false;
             if (!message) continue;
-            if (typeof message.mes === 'string') await syncTextImages(message.mes);
+            if (typeof message.mes === 'string') await collectTextEntries(message.mes, candidates);
             if (Array.isArray(message.swipes)) {
                 for (const swipe of message.swipes) {
-                    if (typeof swipe === 'string') await syncTextImages(swipe);
+                    if (typeof swipe === 'string') await collectTextEntries(swipe, candidates);
                 }
             }
         }
-        await syncRenderedChatImages();
-        emit(EVENTS.galleryChanged);
+        if (getCurrentChatId() !== chatId) return false;
+        candidates.push(...renderedChatImages());
+        await importChatEntries(candidates);
         return true;
     })();
 

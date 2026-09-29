@@ -1,6 +1,6 @@
 /**
  * 设置存储：优先走 ST 的 extensionSettings（随账号存在服务器，跨设备同步），
- * 旧版 localStorage 数据会自动迁移一次。图库数据量大，仍留在本地 IndexedDB。
+ * 旧版 localStorage 设置会自动迁移一次。媒体库索引存在当前聊天元数据；旧版 IndexedDB 供旧记录读取。
  */
 import { DEFAULT_SETTINGS, EXT_ID, LEGACY_SETTINGS_KEY, PRESET_KEY } from './core/constants.js';
 import { log } from './core/notify.js';

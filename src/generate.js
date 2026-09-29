@@ -1,9 +1,11 @@
-/** 面板里的生图流程（结果只展示，不自动入库——由用户点"存入图库"决定）。 */
+/** 面板里的生图流程：生成后将文件和索引保存到当前聊天媒体库。 */
 import { callImageAPI, imageKeyMissing } from './api/images.js';
 import { errMsg, log, notify } from './core/notify.js';
 import { ensureSafeImageUrl } from './core/text.js';
+import { saveGeneratedImage } from './gallery/sync.js';
 import { getSettings } from './settings.js';
 import { getCurrentFloorPrompt } from './st/chat-dom.js';
+import { getCurrentChatId } from './st/context.js';
 import { el, qs, replaceContent, spinner } from './ui/dom.js';
 import { actionRow } from './ui/image-actions.js';
 import { showPreview } from './ui/preview.js';
@@ -26,6 +28,7 @@ export async function generateImage(prompt) {
     if (currentRequest) { notify.warn('已有图片任务，请等待完成，避免重复提交'); return null; }
     const controller = new AbortController();
     currentRequest = controller;
+    const chatId = getCurrentChatId();
 
     const button = qs('#st_gpt_image_generate_btn');
     const result = qs('#st_gpt_gen_result');
@@ -42,16 +45,21 @@ export async function generateImage(prompt) {
                 if (loading.isConnected) replaceContent(loading, el('div', { class: 'st_ai_spinner' }), ` ${text}`);
             },
         });
-        const imageUrl = ensureSafeImageUrl(url);
+        const generatedUrl = ensureSafeImageUrl(url);
+        const stored = chatId && getCurrentChatId() === chatId
+            ? await saveGeneratedImage({ prompt: clean, imageUrl: generatedUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true, expectedChatId: chatId })
+            : null;
+        const imageUrl = stored?.saved ? stored.imageUrl : generatedUrl;
 
         if (result) {
             const img = el('img', { src: imageUrl, alt: clean, class: 'st_gpt_gen_img', dataset: { prompt: clean } });
             img.addEventListener('click', () => showPreview(imageUrl, clean));
             replaceContent(result, img, el('div', { class: 'st_gpt_gen_result_info' }, [
-                actionRow('result', { prompt: clean, imageUrl }),
+                actionRow('result', { prompt: clean, imageUrl, historyId: stored?.saved?.id }),
             ]));
         }
-        notify.success('图片生成完成');
+        if (stored?.saved) notify.success('图片已生成并保存到当前聊天的媒体库');
+        else notify.warn('图片已生成，但未能保存到当前聊天；可点结果旁的保存按钮重试');
         return imageUrl;
     } catch (e) {
         if (e?.name === 'AbortError') {

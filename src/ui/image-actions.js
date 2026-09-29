@@ -1,5 +1,5 @@
 /**
- * 图片操作按钮组。三处复用：生图结果、图库条目、正文内联图。
+ * 图片操作按钮组。三处复用：生图结果、媒体库条目、正文内联图。
  * 按钮只写 dataset，真正的处理逻辑挂在 index.js 的全局委托上。
  */
 import { sanitizeImageUrl } from '../core/text.js';
@@ -30,17 +30,17 @@ export function createImageActions(context, { prompt = '', imageUrl = '', histor
         disabled: !url,
     }));
 
-    // 图库里的图已经在库中，不再显示"存入图库"
+    // 媒体库里的图已经在库中，不再显示"存入媒体库"
     if (context !== 'gallery' && allowSave) {
         buttons.push(iconButton({
             iconName: id ? 'fa-bookmark' : 'fa-folder-plus',
-            title: id ? '查看图库' : '存入图库',
+            title: id ? '查看媒体库' : '存入媒体库',
             dataset: { ...dataset, action: id ? ACTION.view : ACTION.save },
             disabled: !url,
         }));
     }
 
-    // 正文内联图可以原位重新生成（结果是临时图，需再次存入图库才持久）
+    // 正文内联图可以原位重新生成，新结果自动存入当前聊天媒体库。
     if (context === 'inline') {
         buttons.push(iconButton({
             iconName: 'fa-rotate',
@@ -60,15 +60,15 @@ export function createImageActions(context, { prompt = '', imageUrl = '', histor
 
 export const actionRow = (context, options) => el('div', { class: 'st_ai_action_row' }, createImageActions(context, options));
 
-/** 存入图库成功后原地把按钮切成"查看图库"，避免重复保存。 */
+/** 存入媒体库成功后原地把按钮切成"查看媒体库"，避免重复保存。 */
 export function markButtonSaved(button, { historyId, imageUrl }) {
     if (!button) return;
     button.disabled = false;
     button.dataset.action = ACTION.view;
     button.dataset.historyId = String(historyId ?? '');
     if (imageUrl) button.dataset.url = imageUrl;
-    button.title = '查看图库';
-    button.setAttribute('aria-label', '查看图库');
+    button.title = '查看媒体库';
+    button.setAttribute('aria-label', '查看媒体库');
     const iconEl = button.querySelector('i');
     if (iconEl) iconEl.className = 'fa-solid fa-bookmark';
     delete button.dataset.restoreIcon;

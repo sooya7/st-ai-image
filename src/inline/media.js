@@ -2,10 +2,13 @@
  * 正文里的语音/视频，与内联图片同一套路：
  *   标签 → 生成按钮 → 请求服务 → 文件存进酒馆 → 把 src 写回标签 → 重渲染成播放器。
  *
- * 结果直接写回聊天记录，所以 ST 重渲染、刷新页面都不会丢，也不会因为按钮重新出现而重复计费。
+ * 结果写回聊天并自动登记到当前聊天的媒体库。
  * 请求客户端按需 import：聊天里没人点生成时，媒体协议代码不会加载。
  */
 import { errMsg, log, notify } from '../core/notify.js';
+import { EVENTS, on } from '../core/bus.js';
+import { findHistoryByMediaUrl, getHistory } from '../gallery/chat-store.js';
+import { saveMediaToHistory } from '../gallery/sync.js';
 import { readMediaSettings, mediaRequestConfig } from '../media/media-settings.js';
 import { resolveVoice } from '../media/voice-presets.js';
 import { needsKey } from '../media/keys.js';
@@ -65,9 +68,29 @@ function generateButton(kind, text, key, resumable, hint = '') {
     }, [icon(task ? 'fa-spinner fa-spin' : kind === 'audio' ? 'fa-volume-high' : 'fa-video'), ` ${label}`]);
 }
 
+function setLibraryButtonState(button, saved) {
+    button.dataset.saved = saved ? '1' : '';
+    button.title = saved ? '查看媒体库' : '存入媒体库';
+    button.setAttribute('aria-label', button.title);
+    button.querySelector('i').className = `fa-solid ${saved ? 'fa-bookmark' : 'fa-folder-plus'}`;
+}
+
+function libraryButton(kind, src) {
+    const button = el('button', {
+        type: 'button', class: 'st_ai_media_icon st_ai_media_library',
+        title: '存入媒体库', 'aria-label': '存入媒体库',
+        dataset: { kind, src },
+    }, [icon('fa-folder-plus')]);
+    findHistoryByMediaUrl(src, kind)
+        .then((entry) => setLibraryButtonState(button, !!entry))
+        .catch((error) => log.warn('读取媒体库状态失败:', error));
+    return button;
+}
+
 function actionButtons(kind, src) {
     return [
         el('button', { type: 'button', class: 'st_ai_media_icon st_ai_media_regen', title: `重新生成${LABEL[kind]}`, 'aria-label': `重新生成${LABEL[kind]}` }, [icon('fa-rotate')]),
+        libraryButton(kind, src),
         el('a', { class: 'st_ai_media_icon', href: src, download: src.split('/').pop(), title: '下载', 'aria-label': '下载' }, [icon('fa-download')]),
     ];
 }
@@ -217,7 +240,9 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
         }
         clearJobRecord(messageId, jobKey);
         await commit(messageId);
-        notify.success(`${LABEL[kind]}已生成并保存到聊天`, TITLE[kind]);
+        const saved = getCurrentChatId() === chatId ? await saveMediaToHistory(src, kind, text) : null;
+        if (saved) notify.success(`${LABEL[kind]}已生成并保存到当前聊天媒体库`, TITLE[kind]);
+        else notify.warn(`${LABEL[kind]}已保存到聊天，但媒体库登记失败；可点旁边的保存按钮重试`, TITLE[kind]);
     } catch (error) {
         if (error?.name === 'AbortError') return;
         log.error(`${LABEL[kind]}生成失败:`, error);
@@ -260,6 +285,40 @@ function togglePlay(button) {
 }
 
 export function bindInlineMedia() {
+    on(EVENTS.galleryChanged, () => {
+        getHistory().then((history) => {
+            const saved = new Set(history.filter((item) => item.type === 'audio' || item.type === 'video').map((item) => `${item.type}:${item.mediaUrl}`));
+            for (const button of document.querySelectorAll('.st_ai_media_library')) {
+                setLibraryButtonState(button, saved.has(`${button.dataset.kind}:${button.dataset.src}`));
+            }
+        }).catch((error) => log.warn('刷新媒体库按钮失败:', error));
+    });
+    delegate('click', '.st_ai_media_library', async (e, button) => {
+        e.stopPropagation();
+        if (button.disabled) return;
+        const wrapper = button.closest('.st_ai_media');
+        const info = parseMediaTag(wrapper?.dataset.tag);
+        if (!info?.src) return notify.error('媒体文件地址无效，无法保存');
+        button.disabled = true;
+        try {
+            const existing = await findHistoryByMediaUrl(info.src, info.kind);
+            if (existing) {
+                setLibraryButtonState(button, true);
+                const { activateTab } = await import('../ui/tabs.js');
+                await activateTab('gallery');
+                return;
+            }
+            const saved = await saveMediaToHistory(info.src, info.kind, info.text);
+            if (!saved) return notify.error('保存到媒体库失败');
+            setLibraryButtonState(button, true);
+            notify.success('已保存到媒体库');
+        } catch (error) {
+            log.error('保存到媒体库失败:', error);
+            notify.error(errMsg(error, '保存到媒体库失败'));
+        } finally {
+            button.disabled = false;
+        }
+    });
     delegate('click', '.st_ai_media_gen', (e, button) => {
         e.stopPropagation();
         const wrapper = button.closest('.st_ai_media');

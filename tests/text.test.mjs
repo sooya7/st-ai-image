@@ -56,7 +56,8 @@ test('内联标记的生成与解析', () => {
     assert.equal(createInlineImageMarker('abc123'), '[st-ai-image id="abc123"]');
     assert.equal(createInlineImageMarker('a b<>'), '[st-ai-image id="ab"]', '非法字符被剥掉');
     assert.equal(createInlineImageMarker(''), '');
-    assert.equal(createInlineImageMarker({ id: 'xyz', imageUrl: 'https://e.com/a.png' }), '[st-ai-image id="xyz"]');
+    assert.equal(createInlineImageMarker({ id: 'xyz', imageUrl: 'https://e.com/a.png' }), '[st-ai-image id="xyz" src="https%3A%2F%2Fe.com%2Fa.png"]');
+    assert.deepEqual(parseInlineImageMarker(createInlineImageMarker({ id: 'xyz', imageUrl: '/user/images/a.png' })), { id: 'xyz', imageUrl: '/user/images/a.png' });
     assert.equal(
         createInlineImageMarker({ id: '', imageUrl: 'https://e.com/a.png', prompt: 'p' }),
         '![p](https://e.com/a.png)',
@@ -74,6 +75,7 @@ test('内联标记的生成与解析', () => {
 test('replaceInlineImageMarkersWithMarkdown 只迁移带 src 的旧标记', () => {
     assert.equal(replaceInlineImageMarkersWithMarkdown('[st-ai-image src="https://e.com/a.png"]'), '![AI Image](https://e.com/a.png)');
     assert.equal(replaceInlineImageMarkersWithMarkdown('[st-ai-image id="a"]'), '[st-ai-image id="a"]');
+    assert.equal(replaceInlineImageMarkersWithMarkdown('[st-ai-image id="a" src="https%3A%2F%2Fe.com%2Fa.png"]'), '[st-ai-image id="a" src="https%3A%2F%2Fe.com%2Fa.png"]');
 });
 
 test('markdown 图片的写入与解析可往返', () => {

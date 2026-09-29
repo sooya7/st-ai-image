@@ -112,6 +112,18 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.reply(400, {'error': 'bad upload'})
             FILES[data['name']] = base64.b64decode(data['data'])
             return self.reply(200, {'path': f"/user/files/{data['name']}"})
+        if self.path == '/api/images/upload':
+            data = json.loads(body)
+            name = data['filename'] + '.' + data['format']
+            FILES[name] = base64.b64decode(data['image'])
+            return self.reply(200, {'path': f'/user/images/fixture/{name}'})
+        if self.path in ('/api/files/delete', '/api/images/delete'):
+            path = json.loads(body)['path']
+            name = path.rsplit('/', 1)[-1]
+            if name not in FILES:
+                return self.reply(404, {'error': 'missing'})
+            del FILES[name]
+            return self.reply(200, {'ok': True})
         self.record('POST', body)
         if self.path in ('/api/sd/comfy/generate', '/api/sd/generate'):
             data = json.loads(body)
@@ -160,11 +172,11 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if self.path == '/csrf-token':
             return self.reply(200, {'token': 'fixture-csrf'})
-        if self.path.startswith('/user/files/'):
+        if self.path.startswith(('/user/files/', '/user/images/')):
             name = self.path.rsplit('/', 1)[1]
             if name not in FILES:
                 return self.reply(404, {'error': 'missing'})
-            return self.reply(200, FILES[name], MIME.get(Path(name).suffix, 'application/octet-stream'))
+            return self.reply(200, FILES[name], MIME.get(Path(name).suffix, 'image/png'))
         if not self.path.startswith('/mock/'):
             return super().do_GET()
         self.record('GET')
@@ -303,6 +315,13 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     expect(mes(1).locator('.st_ai_voice_text')).to_have_text('"轻声晚上好"')
     checks.append('Voice: one click → one request with rendered text; WAV uploaded with CSRF, src written into the original tag (markdown *…* kept), player replaces the button')
 
+    voice_save = mes(1).locator('.st_ai_media_audio .st_ai_media_library')
+    expect(voice_save).to_have_attribute('title', '查看媒体库')
+    open_tab('gallery')
+    expect(page.locator('.st_ai_gallery_media[data-kind="audio"]')).to_have_count(1)
+    close_panel()
+    checks.append('Voice automatically enters the current chat media library and survives reload')
+
     mes(1).locator('.st_ai_media_play').click()
     page.wait_for_function("mediaStats.audios.length === 1 && (mediaStats.audios[0].ended || mediaStats.audios[0].currentTime > 0)")
     assert page.evaluate('mediaStats.audios[0].src').endswith(match.group(1))
@@ -401,12 +420,13 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     page.evaluate("fixtureSwitchChat('chat-B')")
     page.wait_for_function(f'fixture.toasts.some(t => t.message.includes("聊天已切换"))', timeout=8000)
     assert raw(5) == '[配音]WAIT 慢慢说[/配音]' and len(UPLOADS) == uploads_before + 1
-    page.evaluate("fixture.state.chatId = 'chat-A'; fixture.persist()")
+    page.evaluate("fixtureSwitchChat('chat-A')")
     checks.append('Chat switched mid-generation: file is kept but never written into the other chat')
 
     # ---------- reload: results persist ----------
     load()
     expect(mes(1).locator('.st_ai_media_play')).to_be_visible()
+    expect(mes(1).locator('.st_ai_media_audio .st_ai_media_library')).to_have_attribute('title', '查看媒体库')
     expect(mes(3).locator('.st_ai_media_play')).to_have_count(1)
     open_tab('speech')
     expect(page.locator('#st_ai_speech_key')).to_have_value('fixture-voice-key')
@@ -445,6 +465,11 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     assert FILES[vmatch.group(1).rsplit('/', 1)[1]] == VIDEO
     video = mes(1).locator('video.st_ai_inline_video')
     assert video.get_attribute('preload') == 'none' and video.get_attribute('autoplay') is None
+    video_save = mes(1).locator('.st_ai_media_video .st_ai_media_library')
+    expect(video_save).to_have_attribute('title', '查看媒体库')
+    open_tab('gallery')
+    expect(page.locator('.st_ai_gallery_media[data-kind="video"]')).to_have_count(1)
+    close_panel()
     playback = False
     if REAL_WEBM:
         video.evaluate('(v) => v.play()')
@@ -476,7 +501,7 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     checks.append('Regenerate swaps in a new file for that tag only')
 
     # ---------- toggles: each feature page holds its own AI-tag prompt ----------
-    assert [t.strip() for t in page.locator('.st_ai_tab').all_inner_texts()] == ['图片', '配音', '视频', '图库']
+    assert [t.strip() for t in page.locator('.st_ai_tab').all_inner_texts()] == ['图片', '配音', '视频', '媒体库']
     open_tab('speech')
     expect(page.locator('#st_ai_prompt_speech_auto_inject')).to_be_visible()  # 配音的自动标签就在配音页
     expect(page.locator('#st_ai_prompt_speech_text')).to_be_hidden()  # 提示词默认折叠
@@ -516,7 +541,7 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     open_tab('speech')
     page.locator('#st_ai_speech_enabled').check()
     close_panel()
-    checks.append('One page per feature (图片/配音/视频/图库): each page holds its own AI-tag toggle and folded prompt (inject, custom text, reset) without being clobbered by the same page; disabling voice leaves new tags as text while generated players still render')
+    checks.append('One page per feature (图片/配音/视频/媒体库): each page holds its own AI-tag toggle and folded prompt (inject, custom text, reset) without being clobbered by the same page; disabling voice leaves new tags as text while generated players still render')
 
     # ---------- image protocols (settings now live on the image page) ----------
     open_tab('generate')
@@ -529,6 +554,8 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     page.locator('#st_gpt_image_prompt').fill('a red square')
     page.locator('#st_gpt_image_generate_btn').click()
     expect(page.locator('#st_gpt_gen_result img.st_gpt_gen_img')).to_have_count(1, timeout=10000)
+    expect(page.locator('#st_gpt_gen_result [data-action="view-gallery"]')).to_have_count(1)
+    assert page.evaluate("fixture.state.chatMetadata['chat-A'].st_ai_image_media_library.some(e => e.type === 'image' && e.imageUrl.startsWith('/user/images/'))")
     call = posts('/images/generations')[-1]
     assert call['path'] == '/mock/v1/images/generations' and call['auth'] == 'Bearer fixture-image-key'
     assert json.loads(call['body'])['prompt'] == 'a red square'  # 默认画师串是空的，描述原样发出
@@ -763,6 +790,19 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     assert dialog_open(), 'desktop backdrop click should not close'
     close_panel()
     checks.append('390px / 320px: embedded video and the image/voice/video pages fit without horizontal overflow; the four tabs stay on one row; on mobile tapping outside the panel closes it (not when a drag-select ends outside), desktop unchanged')
+
+    # ---------- current chat media deletion ----------
+    open_tab('gallery')
+    page.locator('.st_ai_gallery_filter[data-kind="audio"]').click()
+    audio_item = page.locator('.st_ai_gallery_media[data-kind="audio"]').filter(has=page.locator('.st_ai_gallery_media_title', has_text='"轻声晚上好"'))
+    expect(audio_item).to_have_count(1)
+    audio_item.locator('.st_gpt_del').click()
+    expect(audio_item).to_have_count(0)
+    assert match.group(1).rsplit('/', 1)[1] not in FILES
+    assert '[voice]"*轻声*晚上好"[/voice]' in raw(1)
+    assert page.evaluate("!fixture.state.chatMetadata['chat-A'].st_ai_image_media_library.some(e => e.mediaUrl === '%s')" % match.group(1))
+    close_panel()
+    checks.append('Deleting an audio item removes its current-chat reference, chat metadata index, and extension-owned file')
 
     page.wait_for_timeout(500)
     # 生成成功后扫描器会在 0.5/2/5 秒各补扫一次；等它们跑完，还剩的才算泄漏

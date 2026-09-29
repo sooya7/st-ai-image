@@ -66,7 +66,12 @@ export function refreshMessageBlock(messageId) {
 }
 
 export async function saveChat() {
-    try { await getContext()?.saveChat?.(); return true; }
+    try {
+        const save = getContext()?.saveChat;
+        if (typeof save !== 'function') return false;
+        await save();
+        return true;
+    }
     catch (e) { log.warn('saveChat 失败:', e); return false; }
 }
 

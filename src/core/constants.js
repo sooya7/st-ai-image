@@ -15,7 +15,7 @@ export const LEGACY_HISTORY_KEY = 'st_ai_image_history';
 
 /** 数值参数 */
 export const LIMITS = {
-    maxHistoryItems: 200,       // 图库最多保留条数
+    maxHistoryItems: 200,       // 媒体库最多保留条数
     fetchTimeoutMs: 60_000,     // 普通请求超时
     imageGenTimeoutMs: 120_000, // 生图请求默认超时（Imagen 等较慢）
     scanIntervalMs: 3_000,      // 内联轮询扫描间隔

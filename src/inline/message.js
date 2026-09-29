@@ -3,23 +3,23 @@
  * 所有写入都通过 rewriteMessageText 同时改 mes 和当前 swipe，
  * 否则切走 swipe 再切回来改动就没了。
  */
-import { IMAGE_REQUEST_SOURCE } from '../core/constants.js';
+import { IMAGE_REQUEST_SOURCE, RE } from '../core/constants.js';
 import { errMsg, log, notify } from '../core/notify.js';
 import {
-    createInlineImageMarker, ensureSafeImageUrl, hasInlineImageMarker,
+    createInlineImageMarker, ensureSafeImageUrl, hasInlineImageMarker, parseInlineImageMarker,
     replaceFirstImageRequest, replaceInlineImageMarkersWithMarkdown,
 } from '../core/text.js';
 import { callImageAPI, imageKeyMissing } from '../api/images.js';
-import { saveToHistory, updateHistoryItemPrompt } from '../gallery/db.js';
-import { syncChatImagesToHistory } from '../gallery/sync.js';
+import { updateHistoryItemPrompt } from '../gallery/chat-store.js';
+import { saveGeneratedImage, syncChatImagesToHistory } from '../gallery/sync.js';
 import { getSettings } from '../settings.js';
 import { getMessageIdFromElement } from '../st/chat-dom.js';
-import { getChat, refreshMessageBlock, rewriteMessageText, saveChat } from '../st/context.js';
+import { getChat, getCurrentChatId, refreshMessageBlock, rewriteMessageText, saveChat } from '../st/context.js';
 import { syncPromptDataset } from '../ui/image-actions.js';
 import { renderInlineImageContent } from './render.js';
 import { processMessageById, scanBurst } from './scanner.js';
 
-/** 改完正文后统一收尾：重渲染 → 存盘 → 补登记图库 → 再扫一轮。 */
+/** 改完正文后统一收尾：重渲染 → 存盘 → 补登记媒体库 → 再扫一轮。 */
 async function commit(messageId) {
     refreshMessageBlock(messageId);
     processMessageById(messageId, { allowImageRequests: false });
@@ -46,8 +46,8 @@ export async function persistInlineImageInMessage(messageId, originalTag, marker
 }
 
 /**
- * 只改提示词：更新图库记录与 DOM。
- * 正文里的标记只存 id，不含提示词，所以不需要动正文（动了反而会把标记显示成文本）。
+ * 只改提示词：更新媒体库记录与 DOM。
+ * 正文标记只存 id 和地址，不含提示词，所以不需要动正文。
  */
 export async function saveInlinePrompt(wrapper, newPrompt) {
     if (!wrapper) return false;
@@ -63,6 +63,7 @@ export async function saveInlinePrompt(wrapper, newPrompt) {
  * 中途失败也会把已替换的正文存下来，用户能看到自己改的提示词。
  */
 export async function regenerateInlineImageInMessage(wrapper, newPrompt) {
+    const chatId = getCurrentChatId();
     const s = await getSettings();
     if (imageKeyMissing(s)) { notify.error('请先在面板的「图片」页填写 API Key'); return false; }
     if (!wrapper) return false;
@@ -70,33 +71,47 @@ export async function regenerateInlineImageInMessage(wrapper, newPrompt) {
     const messageId = getMessageIdFromElement(wrapper);
     if (!Number.isInteger(messageId) || !getChat()?.[messageId]) { notify.error('未找到对应消息'); return false; }
 
-    const oldMarker = wrapper.dataset.historyId ? createInlineImageMarker(wrapper.dataset.historyId) : '';
+    const oldId = wrapper.dataset.historyId;
     const newTag = `[image]${newPrompt}[/image]`;
-    const replaced = rewriteMessageText(messageId, (text) => (oldMarker && text.includes(oldMarker)
-        ? text.replace(oldMarker, newTag)
-        : text.replace(new RegExp(IMAGE_REQUEST_SOURCE, 'i'), newTag)));
-    if (!replaced) log.warn('未在正文中找到旧标记，正文可能未更新', { oldMarker });
+    const replaced = rewriteMessageText(messageId, (text) => {
+        let found = false;
+        const updated = oldId ? text.replace(new RegExp(RE.inlineMarker.source, 'g'), (marker) => {
+            if (found || parseInlineImageMarker(marker).id !== oldId) return marker;
+            found = true;
+            return newTag;
+        }) : text;
+        return found ? updated : text.replace(new RegExp(IMAGE_REQUEST_SOURCE, 'i'), newTag);
+    });
+    if (!replaced) log.warn('未在正文中找到旧标记，正文可能未更新', { oldId });
 
     notify.info('正在用新提示词生成图片...');
     let imageUrl;
     try {
         imageUrl = ensureSafeImageUrl(await callImageAPI(newPrompt));
+        if (getCurrentChatId() !== chatId) return false;
     } catch (e) {
         await commit(messageId).catch(() => {}); // 至少把改过的提示词存住
         notify.error(errMsg(e), '生图失败');
         return false;
     }
 
-    const saved = await saveToHistory({
+    const { saved, imageUrl: storedUrl } = await saveGeneratedImage({
         prompt: newPrompt, imageUrl, timestamp: Date.now(), model: s.model, size: s.size,
-    }, { force: true });
+    }, { force: true, expectedChatId: chatId });
 
-    const newMarker = createInlineImageMarker({ id: saved?.id ?? '', imageUrl, prompt: newPrompt });
+    if (getCurrentChatId() !== chatId) return false;
+
+    if (!saved) {
+        await commit(messageId).catch(() => {});
+        notify.error('新图片未能保存到当前聊天媒体库，可点正文按钮重试');
+        return false;
+    }
+    const newMarker = createInlineImageMarker({ id: saved.id, imageUrl: storedUrl, prompt: newPrompt });
     rewriteMessageText(messageId, (text) => (text.includes(newTag)
         ? text.replace(newTag, newMarker)
         : text.replace(new RegExp(IMAGE_REQUEST_SOURCE, 'i'), newMarker)));
 
-    renderInlineImageContent(wrapper, { id: saved?.id, prompt: newPrompt, imageUrl });
+    renderInlineImageContent(wrapper, { id: saved.id, prompt: newPrompt, imageUrl: storedUrl });
     try {
         await commit(messageId);
         notify.success('已替换正文提示词并重新生成图片');

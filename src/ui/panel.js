@@ -126,7 +126,7 @@ export async function mountPanel({ onPromptSettingChanged } = {}) {
     qs('#st_ai_fallback_banner_close')?.addEventListener('click', () => {
         qs('#st_ai_fallback_banner')?.classList.add('st_ai_hidden');
     });
-    // 图库降级到 localStorage 时提示用户：手机端看不到 console
+    // 媒体库降级到 localStorage 时提示用户：手机端看不到 console
     on(EVENTS.storageDegraded, showFallbackBanner);
 
     mountLauncher();

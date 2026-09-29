@@ -1,7 +1,8 @@
 /** 大图预览与提示词编辑，共用同一个覆盖层 #st_gpt_image_preview。 */
 import { errMsg, notify } from '../core/notify.js';
 import { sanitizeImageUrl } from '../core/text.js';
-import { updateHistoryItemPrompt } from '../gallery/db.js';
+import { sanitizeMediaSrc } from '../media/tags.js';
+import { updateHistoryItemPrompt } from '../gallery/chat-store.js';
 import { el, iconButton, qs, replaceContent } from './dom.js';
 
 let closeCurrent = null;
@@ -72,9 +73,24 @@ export function showPreview(imageUrl, prompt = '') {
     closeBtn.addEventListener('click', () => close?.());
 }
 
+export function showMediaPreview(mediaUrl, kind, prompt = '') {
+    const src = sanitizeMediaSrc(mediaUrl);
+    if (!['audio', 'video'].includes(kind) || !src.startsWith(`/user/files/st-ai-${kind}-`)) return notify.error('媒体地址无效，无法预览');
+    const label = kind === 'audio' ? '语音' : '视频';
+    const closeBtn = iconButton({ iconName: 'fa-xmark', title: '关闭预览' });
+    const player = el(kind === 'audio' ? 'audio' : 'video', { src, controls: true, preload: 'metadata', playsinline: true, class: 'st_ai_media_preview_player' });
+    const content = el('div', { class: 'st_gpt_preview_content' }, [
+        header(`${label}预览`, [el('a', { href: src, download: src.split('/').pop(), class: 'st_ai_btn', title: `下载${label}` }, '下载'), closeBtn]),
+        el('div', { class: 'st_ai_media_preview_text', text: prompt }),
+        player,
+    ]);
+    const close = openOverlay(content, { onClose: () => player.pause() });
+    closeBtn.addEventListener('click', () => close?.());
+}
+
 /**
  * 提示词编辑框。onSave 收到新提示词，负责把改动落到调用方自己的场景
- * （图库条目 / 正文内联图）；historyId 存在时这里顺手更新图库记录。
+ * （媒体库条目 / 正文内联图）；historyId 存在时这里顺手更新媒体库记录。
  */
 export function showPromptEditor({ prompt = '', imageUrl = '', historyId = null, onSave } = {}) {
     const safeUrl = sanitizeImageUrl(imageUrl);
@@ -107,7 +123,7 @@ export function showPromptEditor({ prompt = '', imageUrl = '', historyId = null,
         if (!next) return notify.warn('提示词不能为空');
         saveBtn.disabled = true;
         try {
-            // 图库更新失败不阻断：正文/DOM 的更新才是用户看得见的部分
+            // 媒体库更新失败不阻断：正文/DOM 的更新才是用户看得见的部分
             if (historyId) await updateHistoryItemPrompt(historyId, next);
             await onSave?.(next);
             notify.success('提示词已保存');

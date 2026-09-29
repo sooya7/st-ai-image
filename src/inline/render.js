@@ -1,11 +1,11 @@
 /**
  * 内联元素的构造：生成按钮与图片容器。
- * 这里只造 DOM、只读图库，不发请求、不改聊天记录
+ * 这里只造 DOM、只读媒体库，不发请求、不改聊天记录
  * （请求在 index.js 的委托里，改记录在 message.js）。
  */
 import { log } from '../core/notify.js';
 import { sanitizeImageUrl } from '../core/text.js';
-import { getHistoryItem } from '../gallery/db.js';
+import { getHistoryItem } from '../gallery/chat-store.js';
 import { getMessageIdFromElement } from '../st/chat-dom.js';
 import { el } from '../ui/dom.js';
 import { createImageActions } from '../ui/image-actions.js';
@@ -71,7 +71,7 @@ export function renderInlineImageContent(wrapper, { id = '', prompt = '', imageU
 
 /**
  * [st-ai-image id=".."] / [st-ai-image src=".."] → 图片容器。
- * 必须同步返回元素（扫描器要立刻插进 DOM），图库查询在后台补齐。
+ * 必须同步返回元素（扫描器要立刻插进 DOM），媒体库查询在后台补齐。
  * @param {{id?: string, imageUrl?: string}} info parseInlineImageMarker 的结果
  */
 export function createInlineImageWrapper(info = {}) {
@@ -80,7 +80,7 @@ export function createInlineImageWrapper(info = {}) {
         dataset: { messageId: '', marker: info.id ? `id:${info.id}` : 'src' },
     }, [el('span', { class: 'st_gpt_inline_loading', text: '图片加载中...' })]);
 
-    // 标记里直接带地址（旧格式）时先画出来，再看图库有没有更完整的记录
+    // 标记里直接带地址（旧格式）时先画出来，再看媒体库有没有更完整的记录
     if (info.imageUrl) renderInlineImageContent(wrapper, { prompt: '', imageUrl: info.imageUrl });
 
     if (info.id) {
@@ -95,14 +95,14 @@ export function createInlineImageWrapper(info = {}) {
                     });
                 } else if (!info.imageUrl) {
                     wrapper.textContent = '';
-                    wrapper.append(el('div', { class: 'st_gpt_inline_missing', text: '图库中已无这张图片' }));
+                    wrapper.append(el('div', { class: 'st_gpt_inline_missing', text: '媒体库中已无这张图片' }));
                 }
             })
             .catch((e) => {
-                log.warn('读取图库条目失败:', e);
+                log.warn('读取媒体库条目失败:', e);
                 if (info.imageUrl) return;
                 wrapper.textContent = '';
-                wrapper.append(el('div', { class: 'st_gpt_inline_missing', text: '读取图库失败' }));
+                wrapper.append(el('div', { class: 'st_gpt_inline_missing', text: '读取媒体库失败' }));
             });
     }
 

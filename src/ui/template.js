@@ -13,7 +13,7 @@ export const WAND_BUTTON_HTML = `
 export const FALLBACK_BANNER_HTML = `
 <div id="st_ai_fallback_banner" class="st_ai_fallback_banner st_ai_hidden">
     <i class="fa-solid fa-triangle-exclamation"></i>
-    <span>图库存储已降级到 localStorage（容量有限），请检查浏览器设置。</span>
+    <span>媒体库存储已降级到 localStorage（容量有限），请检查浏览器设置。</span>
     <button type="button" id="st_ai_fallback_banner_close" class="st_ai_banner_close" aria-label="关闭">
         <i class="fa-solid fa-xmark"></i>
     </button>
@@ -26,7 +26,7 @@ export const PANEL_HTML = `
             <button type="button" class="st_ai_tab active" data-tab="generate"><i class="fa-solid fa-image"></i> 图片</button>
             <button type="button" class="st_ai_tab" data-tab="speech"><i class="fa-solid fa-volume-high"></i> 配音</button>
             <button type="button" class="st_ai_tab" data-tab="video"><i class="fa-solid fa-video"></i> 视频</button>
-            <button type="button" class="st_ai_tab" data-tab="gallery"><i class="fa-solid fa-images"></i> 图库</button>
+            <button type="button" class="st_ai_tab" data-tab="gallery"><i class="fa-solid fa-images"></i> 媒体库</button>
         </div>
         <button type="button" id="st_ai_float_close" class="st_ai_btn" title="关闭面板" aria-label="关闭面板"><i class="fa-solid fa-xmark"></i></button>
     </div>
@@ -155,8 +155,15 @@ export const PANEL_HTML = `
 
     <div class="st_ai_tab_content" data-tab="gallery">
         <div class="st_ai_gallery_header">
-            <span id="st_gpt_gallery_count" class="st_ai_gallery_count">0 张图片</span>
+            <span id="st_gpt_gallery_count" class="st_ai_gallery_count">当前聊天 · 0 个媒体</span>
             <button type="button" id="st_gpt_image_clear_history" class="st_ai_btn"><i class="fa-solid fa-trash"></i> 清空</button>
+        </div>
+        <div class="st_ai_gallery_filters" role="group" aria-label="媒体库筛选">
+            <button type="button" class="st_ai_gallery_filter active" data-kind="all">全部</button>
+            <button type="button" class="st_ai_gallery_filter" data-kind="image">图片</button>
+            <button type="button" class="st_ai_gallery_filter" data-kind="video">视频</button>
+            <button type="button" class="st_ai_gallery_filter" data-kind="audio">语音</button>
+            <button type="button" class="st_ai_gallery_filter" data-kind="legacy">旧版未归属</button>
         </div>
         <div id="st_gpt_image_history_list" class="st_ai_gallery_grid">
             <div class="st_ai_image_empty">暂无生成记录</div>

@@ -11,7 +11,7 @@ import { generateFromCurrentFloor, generateImage } from './src/generate.js';
 import { saveGeneratedImage } from './src/gallery/sync.js';
 import { getSettings } from './src/settings.js';
 import { trackFloorClicks } from './src/st/chat-dom.js';
-import { onStEvents } from './src/st/context.js';
+import { getCurrentChatId, onStEvents } from './src/st/context.js';
 import { migrateInlineMarkersInChat, persistInlineImageInMessage, regenerateInlineImageInMessage, saveInlinePrompt } from './src/inline/message.js';
 import { bindInlineMedia, stopPlaying } from './src/inline/media.js';
 import { renderInlineImageContent } from './src/inline/render.js';
@@ -26,7 +26,7 @@ import { activateTab, bindTabs } from './src/ui/tabs.js';
 
 const wrapperOf = (node) => node?.closest?.('.st_gpt_inline_img_wrap') || null;
 
-/** 生图页 / 图库 / 正文内联图 共用的按钮委托。 */
+/** 生图页 / 媒体库 / 正文内联图 共用的按钮委托。 */
 function bindImageActions() {
     delegate('click', `[data-action="${ACTION.download}"]`, (e, btn) => {
         e.stopPropagation();
@@ -43,16 +43,17 @@ function bindImageActions() {
         const imageUrl = sanitizeImageUrl(btn.dataset.url);
         const prompt = btn.dataset.prompt || '';
         if (!imageUrl) return notify.error('图片地址无效，无法保存');
+        const chatId = getCurrentChatId();
 
         setBusy(btn, true);
         const s = await getSettings();
         const { saved, imageUrl: savedUrl, serverImageUrl } = await saveGeneratedImage(
             { prompt, imageUrl, timestamp: Date.now(), model: s.model, size: s.size },
-            { force: true },
+            { force: true, expectedChatId: chatId },
         );
         if (!saved?.id) {
             setBusy(btn, false);
-            return notify.error('保存到图库失败');
+            return notify.error('保存到媒体库失败');
         }
         markButtonSaved(btn, { historyId: saved.id, imageUrl: savedUrl });
 
@@ -68,9 +69,9 @@ function bindImageActions() {
             const persisted = await persistInlineImageInMessage(messageId, wrapper.dataset.originalTag || '', {
                 id: saved.id, imageUrl: markerUrl, prompt,
             });
-            if (!persisted) notify.warn('已存入图库，但当前消息未能写回聊天记录');
+            if (!persisted) notify.warn('已存入媒体库，但当前消息未能写回聊天记录');
         }
-        notify.success('已保存到图库');
+        notify.success('已保存到媒体库');
     });
 
     delegate('click', `[data-action="${ACTION.edit}"]`, (e, btn) => {
@@ -88,7 +89,7 @@ function bindImageActions() {
         });
     });
 
-    // 正文内联图原位重新生成：结果是临时图，需要再次"存入图库"才持久
+    // 正文内联图原位重新生成，完成后自动存入当前聊天媒体库。
     delegate('click', `[data-action="${ACTION.regen}"]`, async (e, btn) => {
         e.stopPropagation();
         const wrapper = wrapperOf(btn);
@@ -106,11 +107,24 @@ function bindImageActions() {
         }
 
         const img = wrapper.querySelector('img');
+        const chatId = getCurrentChatId();
         setBusy(btn, true);
         if (img) img.style.opacity = '0.4';
         try {
             const imageUrl = await callImageAPI(prompt);
-            renderInlineImageContent(wrapper, { prompt, imageUrl, timestamp: Date.now() });
+            if (getCurrentChatId() !== chatId) return notify.warn('聊天已切换，图片没有写入另一段聊天');
+            const { saved, imageUrl: storedUrl } = await saveGeneratedImage(
+                { prompt, imageUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true, expectedChatId: chatId },
+            );
+            if (getCurrentChatId() !== chatId) return notify.warn('聊天已切换，图片没有写入另一段聊天');
+            renderInlineImageContent(wrapper, { id: saved?.id, prompt, imageUrl: saved ? storedUrl : imageUrl });
+            if (saved) {
+                const messageId = wrapper.dataset.messageId === '' ? null : Number(wrapper.dataset.messageId);
+                const persisted = await persistInlineImageInMessage(messageId, wrapper.dataset.originalTag || '', {
+                    id: saved.id, imageUrl: storedUrl, prompt,
+                });
+                if (!persisted) notify.warn('图片已入媒体库，但没有写回当前消息');
+            } else notify.warn('图片已生成但未能入库，可点图片旁的保存按钮重试');
         } catch (err) {
             log.error('内联重新生成失败:', err);
             notify.error(errMsg(err), '生图失败');
@@ -124,7 +138,7 @@ function bindImageActions() {
         showPreview(img.src, wrapperOf(img)?.dataset.prompt || '');
     });
 
-    // 图库里的"重新生成"：切到生图页，让用户看到进度
+    // 媒体库里的"重新生成"：切到生图页，让用户看到进度
     delegate('click', '.st_gpt_regen', async (e, btn) => {
         e.stopPropagation();
         const prompt = btn.dataset.prompt;
@@ -146,6 +160,7 @@ function bindInlineGenerate() {
         const originalTag = btn.dataset.originalTag || `[image]${prompt}[/image]`;
         const taskKey = getTaskKey(Number.isInteger(messageId) ? messageId : null, originalTag);
         if (isPending(taskKey)) return;
+        const chatId = getCurrentChatId();
         startTask(taskKey, { prompt, messageId, originalTag });
 
         btn.closest('.mes_text')?.querySelectorAll('.st_gpt_inline_error').forEach((node) => node.remove());
@@ -163,13 +178,24 @@ function bindInlineGenerate() {
                     label(errors > 0 ? `生成中 (${attempt}/${total}) · ${errors}失败` : `生成中 (${attempt}/${total})`);
                 },
             });
-            // 不自动入库：先临时展示，由用户决定是否存图库并写回正文
+            if (getCurrentChatId() !== chatId) return notify.warn('聊天已切换，图片没有写入另一段聊天');
+            label('保存到当前聊天…');
+            const { saved, imageUrl: storedUrl } = await saveGeneratedImage(
+                { prompt, imageUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true, expectedChatId: chatId },
+            );
+            if (getCurrentChatId() !== chatId) return notify.warn('聊天已切换，图片没有写入另一段聊天');
             const wrapper = el('span', {
                 class: 'st_gpt_inline_img_wrap',
                 dataset: { messageId: Number.isInteger(messageId) ? String(messageId) : '', originalTag },
             });
-            renderInlineImageContent(wrapper, { prompt, imageUrl, timestamp: Date.now() });
+            renderInlineImageContent(wrapper, { id: saved?.id, prompt, imageUrl: saved ? storedUrl : imageUrl });
             btn.replaceWith(wrapper);
+            if (saved) {
+                const persisted = await persistInlineImageInMessage(messageId, originalTag, {
+                    id: saved.id, imageUrl: storedUrl, prompt,
+                });
+                if (!persisted) notify.warn('图片已入媒体库，但没有写回当前消息');
+            } else notify.warn('图片已生成但未能入库，可点图片旁的保存按钮重试');
         } catch (err) {
             log.error('内联生图失败:', err);
             btn.textContent = '';
@@ -214,11 +240,11 @@ export async function init() {
         bindImageActions();
         bindInlineGenerate();
         bindInlineMedia();
-        onStEvents(['CHAT_CHANGED'], stopPlaying); // 切聊天时停掉正在播放的配音
+        onStEvents(['CHAT_CHANGED'], () => { stopPlaying(); renderGallery(); });
         trackFloorClicks();
         startStaleCleaner();
 
-        // 存储层变化后刷新图库（多次写入合并成一次渲染）
+        // 存储层变化后刷新媒体库（多次写入合并成一次渲染）
         on(EVENTS.galleryChanged, debounce(() => renderGallery(), 200));
 
         initScanner();
