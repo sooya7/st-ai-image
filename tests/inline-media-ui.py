@@ -274,6 +274,9 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     expect(mes(1).locator('.st_ai_voice_text')).to_have_text('"轻声晚上好"')
     expect(video_btn).to_have_text(re.compile('生成视频'))
     expect(mes(6).locator('.st_gpt_inline_gen')).to_be_visible()
+    # 按钮的空部件不能被当成文字画出来（replaceChildren(null) 会变成 "null"）
+    labels = page.locator('.st_ai_media_gen, .st_gpt_inline_gen').all_inner_texts()
+    assert labels and not any('null' in text or 'undefined' in text for text in labels), labels
     page.wait_for_timeout(800)
     assert page.evaluate('mediaStats.timers.size') == 0
     checks.append('Load: [voice]/[video] tags become inline buttons (voice text stays visible), [image] still works; protocol/client modules not loaded; no API calls or media timers')

@@ -12,7 +12,13 @@ export function el(tag, props = {}, children = []) {
     for (const [key, value] of Object.entries(props)) {
         if (value === undefined || value === null || value === false) continue;
         if (key === 'dataset') Object.assign(node.dataset, value);
-        else if (key === 'style') Object.assign(node.style, value);
+        else if (key === 'style') {
+            // CSS 变量（--x）只能 setProperty，Object.assign 会被静默忽略
+            for (const [name, v] of Object.entries(value)) {
+                if (name.startsWith('--')) node.style.setProperty(name, String(v));
+                else node.style[name] = v;
+            }
+        }
         else if (key.startsWith('on') && typeof value === 'function') node.addEventListener(key.slice(2), value);
         else if (key === 'text') node.textContent = String(value);
         else node.setAttribute(key, value === true ? '' : String(value));
@@ -25,6 +31,28 @@ export function el(tag, props = {}, children = []) {
 }
 
 export const icon = (name) => el('i', { class: `fa-solid ${name}` });
+
+/** 面板里一块设置卡片的标题行：带色调的图标 + 标题 + 一行副标题。 */
+export function cardHead(iconName, title, sub = '') {
+    return el('div', { class: 'st_ai_card_head' }, [
+        el('span', { class: 'st_ai_card_icon', 'aria-hidden': 'true' }, [icon(iconName)]),
+        el('div', { class: 'st_ai_card_titles' }, [
+            el('h4', { class: 'st_ai_card_title', text: title }),
+            sub ? el('p', { class: 'st_ai_card_sub', text: sub }) : null,
+        ]),
+    ]);
+}
+
+/**
+ * 设置卡片。tone 决定图标色调（mint / violet / rose / amber）；
+ * autohide：里面的字段全被隐藏时整张卡片跟着隐藏（CSS :has）。
+ */
+export function card({ iconName, title, sub = '', tone = 'violet', className = '', autohide = false, id } = {}, children = []) {
+    return el('section', { class: `st_ai_card ${className}`.trim(), id, dataset: { tone, ...(autohide ? { autohide: '1' } : {}) } }, [
+        cardHead(iconName, title, sub),
+        ...[].concat(children),
+    ]);
+}
 
 /** 折叠的说明：默认只露一行小字，点开才看长说明。hint 是文字，或会被代码改文字的 <p>（没字时整块隐藏）。 */
 export function helpBox(hint, summary = '说明') {

@@ -6,7 +6,8 @@ import { saveGeneratedImage } from './gallery/sync.js';
 import { getSettings } from './settings.js';
 import { getCurrentFloorPrompt } from './st/chat-dom.js';
 import { getCurrentChatId } from './st/context.js';
-import { el, qs, replaceContent, spinner } from './ui/dom.js';
+import { el, qs, replaceContent } from './ui/dom.js';
+import { developCard, preloadImage, ratioOf, setDevelopState } from './ui/fx.js';
 import { actionRow } from './ui/image-actions.js';
 import { showPreview } from './ui/preview.js';
 import { activateTab } from './ui/tabs.js';
@@ -33,8 +34,9 @@ export async function generateImage(prompt) {
     const button = qs('#st_gpt_image_generate_btn');
     const result = qs('#st_gpt_gen_result');
     if (button) button.disabled = true;
-    const loading = spinner('正在生成...');
-    if (result) replaceContent(result, loading);
+    // 结果区先放一张按尺寸比例占位的显影卡片，出图后原位显影
+    const card = developCard({ kind: 'image', ratio: ratioOf(s.size), label: '正在生成…', hint: clean });
+    if (result) replaceContent(result, card);
 
     try {
         const url = await callImageAPI(clean, {
@@ -42,7 +44,7 @@ export async function generateImage(prompt) {
             onProgress: ({ attempt, total, errors }) => {
                 let text = `正在生成 (${attempt}/${total})`;
                 if (errors > 0) text += ` · ${errors} 个接口失败`;
-                if (loading.isConnected) replaceContent(loading, el('div', { class: 'st_ai_spinner' }), ` ${text}`);
+                setDevelopState(card, text);
             },
         });
         const generatedUrl = ensureSafeImageUrl(url);
@@ -50,10 +52,12 @@ export async function generateImage(prompt) {
             ? await saveGeneratedImage({ prompt: clean, imageUrl: generatedUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true, expectedChatId: chatId })
             : null;
         const imageUrl = stored?.saved ? stored.imageUrl : generatedUrl;
+        setDevelopState(card, '显影中…');
+        await preloadImage(imageUrl);
 
         if (result) {
-            const img = el('img', { src: imageUrl, alt: clean, class: 'st_gpt_gen_img', dataset: { prompt: clean } });
-            img.addEventListener('click', () => showPreview(imageUrl, clean));
+            const img = el('img', { src: imageUrl, alt: clean, class: 'st_gpt_gen_img st_ai_reveal', dataset: { prompt: clean } });
+            img.addEventListener('click', () => showPreview(imageUrl, clean, { from: img }));
             replaceContent(result, img, el('div', { class: 'st_gpt_gen_result_info' }, [
                 actionRow('result', { prompt: clean, imageUrl, historyId: stored?.saved?.id }),
             ]));

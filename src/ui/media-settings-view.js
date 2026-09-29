@@ -10,13 +10,14 @@ import { isTauriTavern, providerOptions } from '../media/availability.js';
 import { SELF_HOSTED, serviceRoot } from '../media/selfhosted.js';
 import { createWorkflowLibrary } from './workflow-library.js';
 import { getSettings, saveSettings } from '../settings.js';
-import { debounce, el, helpBox } from './dom.js';
+import { card, debounce, el, helpBox } from './dom.js';
 import { buildPromptSection } from './prompt-section.js';
 import { createVoiceControls } from './voice-settings.js';
 
 const SPEC = {
     speech: {
         title: '语音',
+        subtitle: '台词旁出现「配音」按钮，点一下就生成',
         kind: 'audio',
         providers: PROVIDERS.audio,
         usage: '在 AI 回复里用 [voice]台词[/voice]（也可写 [语音]、[配音]）标出要朗读的台词；写成 [voice type="御姐"] 会换成下方音色预设表里对应的音色（AI 按角色自己挑类型）。正文里会出现「配音」按钮，生成后台词旁变成播放键，文件存在酒馆的 user/files。',
@@ -40,6 +41,7 @@ const SPEC = {
     },
     video: {
         title: '视频',
+        subtitle: '正文出现「生成视频」按钮，几分钟后原位播放',
         kind: 'video',
         providers: PROVIDERS.video,
         usage: '在 AI 回复里用 [video]画面描述[/video]（也可写 [视频]）标出场景，正文里会出现「生成视频」按钮；生成需要几分钟，完成后原位显示播放器，文件存在酒馆的 user/files。',
@@ -108,6 +110,7 @@ export async function mountMediaSettings(root, section) {
         onCommit: () => save(),
         warning,
     }) : null;
+    const voiceFields = [];
     const profileFields = spec.fields.map(([key, label, type]) => {
         const node = type === 'textarea'
             ? el('textarea', key === 'workflow'
@@ -115,7 +118,7 @@ export async function mountMediaSettings(root, section) {
                 : { id: id(key), class: 'st_ai_textarea', rows: 2, maxlength: 4096, dataset: { key }, placeholder: '例如 {"seed": 1}；不要填写密钥' })
             : el('input', { id: id(key), type: type || 'text', class: 'st_ai_input', autocomplete: 'off', dataset: { key } });
         inputs[key] = node;
-        if (key === 'voice' && voice) return [voice.defaultField(label, node), voice.presetsField];
+        if (key === 'voice' && voice) { voiceFields.push(voice.defaultField(label, node), voice.presetsField); return []; }
         if (key === 'workflow') {
             // 视频工作流库：选中的那份写回 profile.workflow，生成直接用
             const status = el('p', { class: 'st_ai_speech_hint', id: id('workflow_status'), role: 'status', 'aria-live': 'polite' });
@@ -155,17 +158,22 @@ export async function mountMediaSettings(root, section) {
         ? el('input', { id: id('timeout'), type: 'number', min: 60, max: 1800, step: 30, class: 'st_ai_input' }) : null;
 
     const form = el('form', { class: 'st_ai_speech_form', onsubmit: (e) => e.preventDefault() }, [
-        helpBox(`${spec.usage}\n\n密钥与图片 API Key 一样保存在酒馆设置里。停止等待不会取消服务端任务，生成失败不会自动重试。`, '用法'),
-        enabled.node,
-        field('服务', provider),
-        quick,
-        helpBox(hint, '这个服务怎么填'),
-        ...profileFields,
-        proxy.node,
-        direct?.node,
-        timeout ? field('最长等待（秒）', timeout) : null,
-        buildPromptSection(section, settings),
+        card({ iconName: 'fa-plug', title: `${spec.title}服务`, sub: spec.subtitle, tone: 'mint' }, [
+            helpBox(`${spec.usage}\n\n密钥与图片 API Key 一样保存在酒馆设置里。停止等待不会取消服务端任务，生成失败不会自动重试。`, '用法'),
+            enabled.node,
+            field('服务', provider),
+            quick,
+            helpBox(hint, '这个服务怎么填'),
+        ]),
+        card({ iconName: 'fa-key', title: '连接与参数', sub: '地址、密钥、模型，每个服务各记一份', tone: 'sky' }, profileFields),
+        voiceFields.length ? card({ iconName: 'fa-microphone-lines', title: '音色', sub: '默认音色，以及 AI 按角色挑选的音色类型', tone: 'rose' }, voiceFields) : null,
+        card({ iconName: 'fa-globe', title: '网络', sub: '跨域代理与等待时间', tone: 'amber', autohide: true }, [
+            proxy.node,
+            direct?.node,
+            timeout ? field('最长等待（秒）', timeout) : null,
+        ]),
         warning,
+        buildPromptSection(section, settings),
     ]);
 
     const fill = () => {

@@ -9,7 +9,7 @@ import { el, qs } from './dom.js';
 import { getSettings } from '../settings.js';
 import { buildPromptSection } from './prompt-section.js';
 import { bindSettingsForm } from './settings-view.js';
-import { activateTab } from './tabs.js';
+import { activateTab, syncTabIndicator } from './tabs.js';
 import { DIALOG_HTML, FALLBACK_BANNER_HTML, PANEL_HTML, PREVIEW_HTML, WAND_BUTTON_HTML, fromHtml } from './template.js';
 
 /** 这些设置一改，注入给 AI 的系统提示词就要重算。 */
@@ -32,6 +32,7 @@ export function openPanel(tab) {
     }
     mountImageLibraries();
     if (tab) activateTab(tab);
+    else requestAnimationFrame(() => syncTabIndicator());
 }
 
 let librariesMounted = null;
@@ -73,6 +74,19 @@ export function togglePanel() {
 
 export function showFallbackBanner() {
     qs('#st_ai_fallback_banner')?.classList.remove('st_ai_hidden');
+}
+
+/** 卡片上跟着指针走的柔光：只给指针所在的那张卡片写两个 CSS 变量，触屏不绑。 */
+function bindSpotlight(root) {
+    if (!root || root.dataset.spotlight || !globalThis.matchMedia?.('(hover: hover)')?.matches) return;
+    root.dataset.spotlight = '1';
+    root.addEventListener('pointermove', (e) => {
+        const card = e.target?.closest?.('.st_ai_card');
+        if (!card) return;
+        const rect = card.getBoundingClientRect();
+        card.style.setProperty('--mx', `${Math.round(e.clientX - rect.left)}px`);
+        card.style.setProperty('--my', `${Math.round(e.clientY - rect.top)}px`);
+    }, { passive: true });
 }
 
 /** 优先进扩展菜单；菜单不存在（旧版/精简界面）就放一个浮动按钮兜底。 */
@@ -123,6 +137,7 @@ export async function mountPanel({ onPromptSettingChanged } = {}) {
         downOutside = false;
     });
     bindDrag(panel(), qs('.st_ai_float_header'));
+    bindSpotlight(panel());
     qs('#st_ai_fallback_banner_close')?.addEventListener('click', () => {
         qs('#st_ai_fallback_banner')?.classList.add('st_ai_hidden');
     });

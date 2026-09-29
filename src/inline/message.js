@@ -16,6 +16,7 @@ import { getSettings } from '../settings.js';
 import { getMessageIdFromElement } from '../st/chat-dom.js';
 import { getChat, getCurrentChatId, refreshMessageBlock, rewriteMessageText, saveChat } from '../st/context.js';
 import { syncPromptDataset } from '../ui/image-actions.js';
+import { preloadImage } from '../ui/fx.js';
 import { renderInlineImageContent } from './render.js';
 import { processMessageById, scanBurst } from './scanner.js';
 
@@ -111,7 +112,8 @@ export async function regenerateInlineImageInMessage(wrapper, newPrompt) {
         ? text.replace(newTag, newMarker)
         : text.replace(new RegExp(IMAGE_REQUEST_SOURCE, 'i'), newMarker)));
 
-    renderInlineImageContent(wrapper, { id: saved.id, prompt: newPrompt, imageUrl: storedUrl });
+    await preloadImage(storedUrl);
+    renderInlineImageContent(wrapper, { id: saved.id, prompt: newPrompt, imageUrl: storedUrl, reveal: true });
     try {
         await commit(messageId);
         notify.success('已替换正文提示词并重新生成图片');

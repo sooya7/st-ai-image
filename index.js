@@ -14,10 +14,11 @@ import { trackFloorClicks } from './src/st/chat-dom.js';
 import { getCurrentChatId, onStEvents } from './src/st/context.js';
 import { migrateInlineMarkersInChat, persistInlineImageInMessage, regenerateInlineImageInMessage, saveInlinePrompt } from './src/inline/message.js';
 import { bindInlineMedia, stopPlaying } from './src/inline/media.js';
-import { renderInlineImageContent } from './src/inline/render.js';
+import { renderInlineImageContent, setInlineGenerateState } from './src/inline/render.js';
 import { initScanner, registerSystemPrompt, scanBurst } from './src/inline/scanner.js';
-import { endTask, getTaskKey, isPending, startTask, startStaleCleaner } from './src/inline/tasks.js';
+import { endTask, getTask, getTaskKey, isPending, startTask, startStaleCleaner, updateTask } from './src/inline/tasks.js';
 import { debounce, delegate, el, qs, setBusy } from './src/ui/dom.js';
+import { preloadImage } from './src/ui/fx.js';
 import { bindGalleryEvents, renderGallery } from './src/ui/gallery-view.js';
 import { ACTION, markButtonSaved } from './src/ui/image-actions.js';
 import { mountPanel } from './src/ui/panel.js';
@@ -99,17 +100,18 @@ function bindImageActions() {
         if (imageKeyMissing(s)) return notify.error('请先在面板的「图片」页填写 API Key');
 
         // 已入库的正文图：重新生成并把新标记写回聊天记录，刷新后仍然在
+        const frame = wrapper.querySelector('.st_ai_img_frame');
         if (wrapper.dataset.historyId) {
             setBusy(btn, true);
+            frame?.classList.add('st_ai_busy');
             try { await regenerateInlineImageInMessage(wrapper, prompt); }
-            finally { setBusy(btn, false); }
+            finally { setBusy(btn, false); frame?.classList.remove('st_ai_busy'); }
             return;
         }
 
-        const img = wrapper.querySelector('img');
         const chatId = getCurrentChatId();
         setBusy(btn, true);
-        if (img) img.style.opacity = '0.4';
+        frame?.classList.add('st_ai_busy');
         try {
             const imageUrl = await callImageAPI(prompt);
             if (getCurrentChatId() !== chatId) return notify.warn('聊天已切换，图片没有写入另一段聊天');
@@ -117,7 +119,8 @@ function bindImageActions() {
                 { prompt, imageUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true, expectedChatId: chatId },
             );
             if (getCurrentChatId() !== chatId) return notify.warn('聊天已切换，图片没有写入另一段聊天');
-            renderInlineImageContent(wrapper, { id: saved?.id, prompt, imageUrl: saved ? storedUrl : imageUrl });
+            await preloadImage(saved ? storedUrl : imageUrl);
+            renderInlineImageContent(wrapper, { id: saved?.id, prompt, imageUrl: saved ? storedUrl : imageUrl, reveal: true });
             if (saved) {
                 const messageId = wrapper.dataset.messageId === '' ? null : Number(wrapper.dataset.messageId);
                 const persisted = await persistInlineImageInMessage(messageId, wrapper.dataset.originalTag || '', {
@@ -129,13 +132,13 @@ function bindImageActions() {
             log.error('内联重新生成失败:', err);
             notify.error(errMsg(err), '生图失败');
             setBusy(btn, false);
-            if (img) img.style.opacity = '';
+            frame?.classList.remove('st_ai_busy');
         }
     });
 
     delegate('click', '.st_gpt_inline_img', (e, img) => {
         e.stopPropagation();
-        showPreview(img.src, wrapperOf(img)?.dataset.prompt || '');
+        showPreview(img.src, wrapperOf(img)?.dataset.prompt || '', { from: img });
     });
 
     // 媒体库里的"重新生成"：切到生图页，让用户看到进度
@@ -150,13 +153,18 @@ function bindImageActions() {
 
 /** 正文里未生成的 [image] 标签按钮。 */
 function bindInlineGenerate() {
+    const messageIdOf = (button) => (button.dataset.messageId === '' ? null : Number(button.dataset.messageId));
+    // ST 生成中途可能重渲染这条消息：进度要同步给所有对应这个任务的按钮（新旧都有）
+    const buttonsOf = (taskKey) => [...document.querySelectorAll('.st_gpt_inline_gen')]
+        .filter((button) => getTaskKey(Number.isInteger(messageIdOf(button)) ? messageIdOf(button) : null, button.dataset.originalTag || '') === taskKey);
+
     delegate('click', '.st_gpt_inline_gen', async (e, btn) => {
         const prompt = btn.dataset.prompt;
         if (!prompt) return;
         const s = await getSettings();
         if (imageKeyMissing(s)) return notify.error('请先在面板的「图片」页填写 API Key');
 
-        const messageId = btn.dataset.messageId === '' ? null : Number(btn.dataset.messageId);
+        const messageId = messageIdOf(btn);
         const originalTag = btn.dataset.originalTag || `[image]${prompt}[/image]`;
         const taskKey = getTaskKey(Number.isInteger(messageId) ? messageId : null, originalTag);
         if (isPending(taskKey)) return;
@@ -164,13 +172,13 @@ function bindInlineGenerate() {
         startTask(taskKey, { prompt, messageId, originalTag });
 
         btn.closest('.mes_text')?.querySelectorAll('.st_gpt_inline_error').forEach((node) => node.remove());
-        btn.classList.remove('st_gpt_inline_gen_error');
-        btn.disabled = true;
         const label = (text) => {
-            btn.textContent = '';
-            btn.append(el('i', { class: 'fa-solid fa-spinner fa-spin' }), ` ${text}`);
+            updateTask(taskKey, { label: text });
+            const startedAt = getTask(taskKey)?.startedAt;
+            const targets = buttonsOf(taskKey);
+            for (const button of targets.includes(btn) ? targets : [btn, ...targets]) setInlineGenerateState(button, { pending: true, label: text, startedAt });
         };
-        label('生成中...');
+        label('生成中…');
 
         try {
             const imageUrl = await callImageAPI(prompt, {
@@ -184,12 +192,16 @@ function bindInlineGenerate() {
                 { prompt, imageUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true, expectedChatId: chatId },
             );
             if (getCurrentChatId() !== chatId) return notify.warn('聊天已切换，图片没有写入另一段聊天');
+            const finalUrl = saved ? storedUrl : imageUrl;
+            label('显影中…');
+            await preloadImage(finalUrl);
             const wrapper = el('span', {
                 class: 'st_gpt_inline_img_wrap',
                 dataset: { messageId: Number.isInteger(messageId) ? String(messageId) : '', originalTag },
             });
-            renderInlineImageContent(wrapper, { id: saved?.id, prompt, imageUrl: saved ? storedUrl : imageUrl });
-            btn.replaceWith(wrapper);
+            renderInlineImageContent(wrapper, { id: saved?.id, prompt, imageUrl: finalUrl, reveal: true });
+            const target = btn.isConnected ? btn : buttonsOf(taskKey).find((button) => button.isConnected);
+            target?.replaceWith(wrapper);
             if (saved) {
                 const persisted = await persistInlineImageInMessage(messageId, originalTag, {
                     id: saved.id, imageUrl: storedUrl, prompt,
@@ -198,11 +210,10 @@ function bindInlineGenerate() {
             } else notify.warn('图片已生成但未能入库，可点图片旁的保存按钮重试');
         } catch (err) {
             log.error('内联生图失败:', err);
-            btn.textContent = '';
-            btn.append(el('i', { class: 'fa-solid fa-rotate-right' }), ' 重试');
-            btn.classList.add('st_gpt_inline_gen_error');
-            btn.disabled = false;
-            btn.after(el('div', { class: 'st_gpt_inline_error', text: errMsg(err, '生成失败') }));
+            for (const button of new Set([btn, ...buttonsOf(taskKey)])) {
+                setInlineGenerateState(button, { error: true });
+                if (button.isConnected) button.after(el('div', { class: 'st_gpt_inline_error', text: errMsg(err, '生成失败') }));
+            }
             notify.error(errMsg(err), '生图失败');
         } finally {
             endTask(taskKey);
