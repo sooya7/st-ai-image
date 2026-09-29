@@ -8,7 +8,7 @@ import {
     parseDataImageUrl, sanitizeImageUrl, summarizeApiError,
 } from '../core/text.js';
 import { RE } from '../core/constants.js';
-import { getChat, getCurrentChatId, getGalleryFolder, getRequestHeadersWithCsrf, invalidateCsrfToken } from '../st/context.js';
+import { getChat, getCurrentChatId, getChatIdentity, getGalleryFolder, getRequestHeadersWithCsrf, invalidateCsrfToken } from '../st/context.js';
 import { MEDIA_TAG_SOURCE, parseMediaTag, sanitizeMediaSrc } from '../media/tags.js';
 import { findHistoryByMediaUrl, getHistoryItem, importChatEntries, saveToHistory } from './chat-store.js';
 
@@ -46,9 +46,9 @@ export async function uploadImageToStGallery(imageUrl) {
 /**
  * 保存一张生成的图：上传到酒馆图库，再把短地址记入当前聊天。
  */
-export async function saveGeneratedImage(entry, { force = false, expectedChatId = getCurrentChatId() } = {}) {
+export async function saveGeneratedImage(entry, { force = false, expectedChatId = getCurrentChatId(), expectedIdentity = getChatIdentity() } = {}) {
     let imageUrl = sanitizeImageUrl(entry.imageUrl);
-    if (!expectedChatId || getCurrentChatId() !== expectedChatId) return { saved: null, imageUrl, serverImageUrl: '' };
+    if (!expectedChatId || (getCurrentChatId() !== expectedChatId || getChatIdentity() !== expectedIdentity)) return { saved: null, imageUrl, serverImageUrl: '' };
     let serverImageUrl = '';
     try {
         serverImageUrl = await uploadImageToStGallery(imageUrl);
@@ -56,7 +56,7 @@ export async function saveGeneratedImage(entry, { force = false, expectedChatId 
         log.warn('上传到酒馆图库失败，保留原地址:', e);
     }
     if (serverImageUrl) imageUrl = normalizeGalleryImageUrl(serverImageUrl);
-    const saved = getCurrentChatId() === expectedChatId ? await saveToHistory({ ...entry, imageUrl }, { force }) : null;
+    const saved = getCurrentChatId() === expectedChatId && getChatIdentity() === expectedIdentity ? await saveToHistory({ ...entry, imageUrl }, { force }) : null;
     return { saved, imageUrl, serverImageUrl };
 }
 
@@ -64,13 +64,13 @@ export async function saveGeneratedImage(entry, { force = false, expectedChatId 
 export async function saveMediaToHistory(mediaUrl, kind, prompt = '') {
     const safeUrl = sanitizeMediaSrc(mediaUrl);
     if (!safeUrl || !['audio', 'video'].includes(kind) || !safeUrl.startsWith(`/user/files/st-ai-${kind}-`)) return null;
-    const chatId = getCurrentChatId();
+    const chatId = getChatIdentity();
     const key = `${chatId}:${kind}:${safeUrl}`;
     if (ensureTasks.has(key)) return ensureTasks.get(key);
     const task = (async () => {
         const existing = await findHistoryByMediaUrl(safeUrl, kind);
         if (existing) return existing;
-        if (getCurrentChatId() !== chatId) return null;
+        if (getChatIdentity() !== chatId) return null;
         return saveToHistory({ type: kind, mediaUrl: safeUrl, prompt, timestamp: Date.now() }, { force: true });
     })();
     ensureTasks.set(key, task);
@@ -114,7 +114,7 @@ function renderedChatImages() {
 export async function syncChatImagesToHistory() {
     const chat = getChat();
     if (!chat?.length) return false;
-    const chatId = getCurrentChatId();
+    const chatId = getChatIdentity();
 
     const key = chatId;
     if (chatSyncTasks.has(key)) return chatSyncTasks.get(key);
@@ -122,7 +122,7 @@ export async function syncChatImagesToHistory() {
     const task = (async () => {
         const candidates = [];
         for (const message of chat) {
-            if (getCurrentChatId() !== chatId) return false;
+            if (getChatIdentity() !== chatId) return false;
             if (!message) continue;
             if (typeof message.mes === 'string') await collectTextEntries(message.mes, candidates);
             if (Array.isArray(message.swipes)) {
@@ -131,7 +131,7 @@ export async function syncChatImagesToHistory() {
                 }
             }
         }
-        if (getCurrentChatId() !== chatId) return false;
+        if (getChatIdentity() !== chatId) return false;
         candidates.push(...renderedChatImages());
         await importChatEntries(candidates);
         return true;

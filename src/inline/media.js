@@ -17,7 +17,7 @@ import {
 } from '../media/tags.js';
 import { getSettings } from '../settings.js';
 import { getMessageIdFromElement } from '../st/chat-dom.js';
-import { getCurrentChatId, getMessage, refreshMessageBlock, rewriteMessageText, saveChat } from '../st/context.js';
+import { captureMessageTarget, getChatIdentity, getMessage, isMessageTargetCurrent, refreshMessageBlock, rewriteMessageText, saveChat } from '../st/context.js';
 import { delegate, el, icon } from '../ui/dom.js';
 import { decoText, developCard, hueOf, paintWave, setDevelopState, waveBars } from '../ui/fx.js';
 import { endTask, getTask, getTaskKey, isPending, startTask, updateTask } from './tasks.js';
@@ -37,21 +37,30 @@ const taskKeyOf = (messageId, kind, ordinal, text) => getTaskKey(messageId, `${k
 // ---------- 断线续查：视频任务句柄存在消息的 extra 里（不含密钥） ----------
 
 const jobsOf = (messageId) => getMessage(messageId)?.extra?.st_ai_media_jobs || null;
-const jobRecord = (messageId, jobKey) => jobsOf(messageId)?.[jobKey] || null;
-
-function saveJobRecord(messageId, chatId, jobKey, record) {
-    const message = getMessage(messageId);
-    if (!message || getCurrentChatId() !== chatId) return;
-    message.extra ||= {};
-    message.extra.st_ai_media_jobs = { ...(message.extra.st_ai_media_jobs || {}), [jobKey]: record };
-    saveChat();
+function jobEntry(messageId, kind, text, ordinal) {
+    const key = mediaJobKey(kind, text, ordinal, getMessage(messageId)?.swipe_id ?? 0);
+    const jobs = jobsOf(messageId);
+    if (jobs?.[key]) return { key, record: jobs[key] };
+    // 旧版把同描述的所有标签存在一个键下，最多只允许第一个标签认领。
+    const legacy = mediaJobKey(kind, text);
+    return ordinal === 0 && jobs?.[legacy] ? { key: legacy, record: jobs[legacy] } : null;
 }
 
-function clearJobRecord(messageId, jobKey) {
-    const jobs = jobsOf(messageId);
+function saveJobRecord(target, jobKey, record) {
+    if (!isMessageTargetCurrent(target)) return;
+    const message = target.message;
+    message.extra ||= {};
+    message.extra.st_ai_media_jobs = { ...(message.extra.st_ai_media_jobs || {}), [jobKey]: record };
+    saveChat().then((saved) => { if (!saved) notify.warn('视频任务句柄尚未保存，刷新前请重试保存'); })
+        .catch((error) => log.warn('保存视频任务句柄失败:', error));
+}
+
+function clearJobRecord(target, jobKey) {
+    if (!isMessageTargetCurrent(target)) return false;
+    const jobs = target.message.extra?.st_ai_media_jobs;
     if (!jobs?.[jobKey]) return false;
     delete jobs[jobKey];
-    if (!Object.keys(jobs).length) delete getMessage(messageId).extra.st_ai_media_jobs;
+    if (!Object.keys(jobs).length) delete target.message.extra.st_ai_media_jobs;
     return true;
 }
 
@@ -159,7 +168,7 @@ export function renderMediaWrapper(wrapper, { error = '' } = {}) {
     const ordinal = Number(wrapper.dataset.ordinal) || 0;
     const key = taskKeyOf(messageId, info.kind, ordinal, info.text);
     const pending = isPending(key);
-    const resumable = info.kind === 'video' && !info.src && !pending && !!jobRecord(messageId, mediaJobKey('video', info.text));
+    const resumable = info.kind === 'video' && !info.src && !pending && !!jobEntry(messageId, 'video', info.text, ordinal);
     wrapper.textContent = '';
     wrapper.dataset.src = info.src;
 
@@ -212,11 +221,24 @@ function rerenderTask(key, options) {
 
 // ---------- 生成 ----------
 
-async function commit(messageId) {
+async function commit(messageId, target) {
+    if (!isMessageTargetCurrent(target)) return false;
     refreshMessageBlock(messageId);
-    await saveChat();
+    if (!await saveChat()) throw new Error('聊天记录保存失败，媒体已在当前页面显示，请重试保存');
     const { scanBurst } = await import('./scanner.js');
-    scanBurst();
+    if (isMessageTargetCurrent(target)) scanBurst();
+    return true;
+}
+
+/** 续查必须保留查询方法；硅基旧存档缺 statusBody 时按任务 id 补回 POST 请求体。 */
+export function restoreMediaTaskLinks(record, provider, plan, trustedTaskUrl) {
+    const links = {
+        status: trustedTaskUrl(record.links?.status, plan.root),
+        result: record.links?.result ? trustedTaskUrl(record.links.result, plan.root) : null,
+    };
+    if (provider === 'siliconflow') links.statusBody = { requestId: String(record.id) };
+    else if (record.links?.statusBody) links.statusBody = { ...record.links.statusBody };
+    return links;
 }
 
 async function runMediaJob(wrapper, { resume = false } = {}) {
@@ -227,32 +249,37 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
     const ordinal = Number(wrapper.dataset.ordinal) || 0;
     const key = taskKeyOf(messageId, kind, ordinal, text);
     if (isPending(key)) return;
-    if (!Number.isInteger(messageId) || !getMessage(messageId)) return notify.error('没有找到这条消息，无法写回结果', TITLE[kind]);
+    const target = captureMessageTarget(messageId);
+    if (!isMessageTargetCurrent(target)) return notify.error('没有找到这条消息，无法写回结果', TITLE[kind]);
     // 先占任务表再 await：否则连点两下时第二次会在读设置的空档里通过检查，重复提交。
     startTask(key, { label: '准备中…', maxAgeMs: kind === 'video' ? VIDEO_TASK_MAX_AGE : undefined });
-    const chatId = getCurrentChatId();
-
-    const settings = await getSettings();
-    const media = readMediaSettings(settings, SECTION[kind]);
-    const jobKey = mediaJobKey(kind, text);
-    const record = resume ? jobRecord(messageId, jobKey) : null;
-    const provider = record?.provider && media.profiles[record.provider] ? record.provider : media.provider;
-    const config = mediaRequestConfig(media, provider);
-    if (kind === 'audio') {
-        // 标签里的 type 在当前服务的音色预设表里且配了音色就用它，否则用默认音色
-        config.voice = resolveVoice({ type: info.voiceType, fallback: config.voice, presets: config.presets }).voice;
-        config.emotion = info.emotion;
-    }
-    const blocked = !settings.enabled || !media.enabled ? `${LABEL[kind]}功能已在设置中关闭`
-        : !config.key.trim() && needsKey(provider, config.base) ? `请先在面板的「${kind === 'audio' ? '配音' : '视频'}」页填写 API Key` : '';
-    if (blocked) {
-        endTask(key);
-        return notify.warn(blocked, TITLE[kind]);
-    }
-    setProgress(key, resume ? '查询原任务…' : '提交中…');
+    let record = null;
+    const jobKey = mediaJobKey(kind, text, ordinal, target.swipeId);
     let failure = '';
     try {
+        const settings = await getSettings();
+        if (!isMessageTargetCurrent(target)) return;
+        const media = readMediaSettings(settings, SECTION[kind]);
+        const entry = resume ? jobEntry(messageId, kind, text, ordinal) : null;
+        record = entry?.record || null;
+        if (entry && entry.key !== jobKey) {
+            // 认领旧键后立即迁移，另一个同描述标签不会再复用这份句柄。
+            target.message.extra.st_ai_media_jobs[jobKey] = record;
+            clearJobRecord(target, entry.key);
+        }
+        const provider = record?.provider && media.profiles[record.provider] ? record.provider : media.provider;
+        const config = mediaRequestConfig(media, provider);
+        if (kind === 'audio') {
+            // 标签里的 type 在当前服务的表里且配了音色就用它，否则用默认音色
+            config.voice = resolveVoice({ type: info.voiceType, fallback: config.voice, presets: config.presets }).voice;
+            config.emotion = info.emotion;
+        }
+        const blocked = !settings.enabled || !media.enabled ? `${LABEL[kind]}功能已在设置中关闭`
+            : !config.key.trim() && needsKey(provider, config.base) ? `请先在面板的「${kind === 'audio' ? '配音' : '视频'}」页填写 API Key` : '';
+        if (blocked) return notify.warn(blocked, TITLE[kind]);
+        setProgress(key, resume ? '查询原任务…' : '提交中…');
         const { downloadMedia, generateMedia } = await import('../media/client.js');
+        if (!isMessageTargetCurrent(target)) return;
         let resumeHandle = null;
         if (record) {
             // 任务地址来自聊天文件，必须与当前配置的 API 同源才会带上密钥去查。
@@ -260,13 +287,14 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
             const plan = { ...buildRequest(kind, config, text), proxy: !!config.proxy };
             resumeHandle = {
                 plan, id: record.id,
-                links: { status: trustedTaskUrl(record.links?.status, plan.root), result: record.links?.result ? trustedTaskUrl(record.links.result, plan.root) : null },
+                links: restoreMediaTaskLinks(record, provider, plan, trustedTaskUrl),
             };
         }
+        if (!isMessageTargetCurrent(target)) return;
         const result = await generateMedia(kind, config, text, {
             resume: resumeHandle,
             onTask: (handle) => {
-                if (kind === 'video' && !record) saveJobRecord(messageId, chatId, jobKey, { provider, id: handle.id, links: handle.links, startedAt: Date.now() });
+                if (kind === 'video' && !record) saveJobRecord(target, jobKey, { provider, id: handle.id, links: handle.links, startedAt: Date.now() });
             },
             onProgress: (message) => setProgress(key, message),
         });
@@ -277,8 +305,8 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
         const { uploadMediaFile } = await import('../st/files.js');
         const src = await uploadMediaFile(blob, kind);
 
-        if (getCurrentChatId() !== chatId) {
-            notify.warn(`聊天已切换，文件已保存为 ${src}，没有写入原消息`, `${LABEL[kind]}已生成`);
+        if (!isMessageTargetCurrent(target)) {
+            notify.warn(`聊天已切换或消息版本已变化，文件已保存为 ${src}，没有写入原消息`, `${LABEL[kind]}已生成`);
             return;
         }
         // mes 与当前 swipe 各自定位一次再替换，两者内容不同步时也不会改错位置。
@@ -290,22 +318,23 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
             notify.warn(`文件已保存为 ${src}，但消息里找不到原标签（可能已被编辑），没有写入`, `${LABEL[kind]}已生成`);
             return;
         }
-        clearJobRecord(messageId, jobKey);
-        await commit(messageId);
-        const saved = getCurrentChatId() === chatId ? await saveMediaToHistory(src, kind, text) : null;
+        clearJobRecord(target, jobKey);
+        await commit(messageId, target);
+        const saved = isMessageTargetCurrent(target) ? await saveMediaToHistory(src, kind, text) : null;
+        if (!isMessageTargetCurrent(target)) return;
         if (saved) notify.success(`${LABEL[kind]}已生成并保存到当前聊天媒体库`, TITLE[kind]);
         else notify.warn(`${LABEL[kind]}已保存到聊天，但媒体库登记失败；可点旁边的保存按钮重试`, TITLE[kind]);
     } catch (error) {
         if (error?.name === 'AbortError') return;
         log.error(`${LABEL[kind]}生成失败:`, error);
         // 服务端明确失败或任务已不存在时，续查记录就没用了；网络问题则保留，之后还能继续查。
-        if (record && (error.terminal || /^HTTP 4/.test(String(error.message))) && clearJobRecord(messageId, jobKey)) await saveChat();
-        else if (!record && error.terminal && clearJobRecord(messageId, jobKey)) await saveChat();
+        const terminal = record ? error.terminal || /^HTTP 4/.test(String(error.message)) : error.terminal;
+        if (isMessageTargetCurrent(target) && terminal && clearJobRecord(target, jobKey)) await saveChat();
         failure = errMsg(error, '生成失败');
         notify.error(failure, `${LABEL[kind]}生成失败`);
     } finally {
         endTask(key);
-        rerenderTask(key, { error: failure });
+        if (isMessageTargetCurrent(target)) rerenderTask(key, { error: failure });
     }
 }
 
@@ -337,6 +366,7 @@ function togglePlay(button) {
     // 播放进度逐帧写进 --st-ai-p：进度环、声波、台词下划线都跟着走；停了就不再排下一帧
     const tick = () => {
         if (playing?.audio !== audio) return;
+        if (!button.isConnected || !wrapper?.isConnected) return stopPlaying();
         const progress = audio.duration ? Math.min(1, audio.currentTime / audio.duration) : 0;
         wrapper?.style.setProperty('--st-ai-p', progress.toFixed(4));
         paintWave(wave, progress);
@@ -354,7 +384,9 @@ function togglePlay(button) {
 
 export function bindInlineMedia() {
     on(EVENTS.galleryChanged, () => {
+        const identity = getChatIdentity();
         getHistory().then((history) => {
+            if (getChatIdentity() !== identity) return;
             const saved = new Set(history.filter((item) => item.type === 'audio' || item.type === 'video').map((item) => `${item.type}:${item.mediaUrl}`));
             for (const button of document.querySelectorAll('.st_ai_media_library')) {
                 setLibraryButtonState(button, saved.has(`${button.dataset.kind}:${button.dataset.src}`));
@@ -367,9 +399,12 @@ export function bindInlineMedia() {
         const wrapper = button.closest('.st_ai_media');
         const info = parseMediaTag(wrapper?.dataset.tag);
         if (!info?.src) return notify.error('媒体文件地址无效，无法保存');
+        const target = captureMessageTarget(messageIdOf(wrapper));
+        if (!isMessageTargetCurrent(target)) return;
         button.disabled = true;
         try {
             const existing = await findHistoryByMediaUrl(info.src, info.kind);
+            if (!isMessageTargetCurrent(target)) return;
             if (existing) {
                 setLibraryButtonState(button, true);
                 const { activateTab } = await import('../ui/tabs.js');
@@ -377,6 +412,7 @@ export function bindInlineMedia() {
                 return;
             }
             const saved = await saveMediaToHistory(info.src, info.kind, info.text);
+            if (!isMessageTargetCurrent(target)) return;
             if (!saved) return notify.error('保存到媒体库失败');
             setLibraryButtonState(button, true);
             notify.success('已保存到媒体库');

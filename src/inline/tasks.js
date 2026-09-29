@@ -6,15 +6,21 @@
  */
 import { LIMITS } from '../core/constants.js';
 import { log } from '../core/notify.js';
+import { getChatIdentity, getMessage } from '../st/context.js';
 
 /** key -> { startedAt, prompt, messageId, originalTag } */
 const pending = new Map();
+const messageTokens = new WeakMap();
+let nextMessageToken = 0;
 let cleaner = null;
 
 /** 楼层 id 可能为 null（找不到 mesid），用 '?' 占位，同一标签仍能去重。 */
 export function getTaskKey(messageId, originalTag) {
     const id = Number.isInteger(messageId) ? messageId : '?';
-    return `${id}::${String(originalTag ?? '').slice(0, 300)}`;
+    const message = getMessage(messageId);
+    if (message && !messageTokens.has(message)) messageTokens.set(message, ++nextMessageToken);
+    const swipeId = Number(message?.swipe_id ?? 0);
+    return JSON.stringify([getChatIdentity(), id, message ? messageTokens.get(message) : null, swipeId, String(originalTag ?? '')]);
 }
 
 export const isPending = (key) => pending.has(key);

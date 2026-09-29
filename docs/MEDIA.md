@@ -209,6 +209,7 @@ enableCorsProxy: true
 - 停止等待不会取消服务端任务；服务商那边可能继续运行和计费。
 - 视频下载上限 128 MiB，其它响应 32 MiB。
 - 同时最多两个媒体任务。
+- 携带自定义鉴权头的下载禁止自动跳转；带任何鉴权头的下载不能经酒馆代理。需跳转的服务请提供无密钥下载地址，公共CDN下载仍可走代理。
 - 重新生成会留下旧文件（不自动删除，避免误删其它楼层或 swipe 引用的文件）。
 
 ## 性能
@@ -222,11 +223,11 @@ enableCorsProxy: true
 
 本机 Node.js 24.14.1、Chromium 147.0.7727.15、SillyTavern 1.18.0。
 
-**单元测试** `npm test`：131/131 通过（2026-09-30）（标签解析/定位/改写、合并正则、协议请求、代理改写、文件头识别、视频任务轮询等）。
+**单元测试** `npm test`：162/162 通过（2026-09-30）（标签解析/定位/改写、合并正则、协议请求、代理改写、文件头识别、视频任务轮询等）。
 
-**模拟宿主浏览器测试** `python tests/inline-media-ui.py --output <目录>`：21 组通过（2026-09-30）。模拟 ST 的 markdown 拆分、`updateMessageBlock`、`saveChat`、`saveSettingsDebounced`、`/api/files/upload`+CSRF，以及与真实 ST 一样不带 Content-Type 的 `/proxy/`。结果见 `docs/verification/inline-media-result.json`。
+**模拟宿主浏览器测试** `python tests/inline-media-ui.py --output <目录>`：22 组通过（2026-09-30）。模拟 ST 的 markdown 拆分、`updateMessageBlock`、`saveChat`、`saveSettingsDebounced`、`/api/files/upload`+CSRF，以及与真实 ST 一样不带 Content-Type 的 `/proxy/`。本轮汇总见 `docs/verification/audit-fix-result.json`；`inline-media-result.json` 和截图保留先前界面基线。另有 `tests/chat-race-ui.py` 的 3 项预加载切换回归通过。
 
-**真实 SillyTavern 1.18.0**（独立数据目录，媒体服务为本地模拟）：8 项通过，扩展报错 0（2026-09-30 重跑）：
+**真实 SillyTavern 1.18.0**（独立数据目录，媒体服务为本地模拟）：10 项通过，非预期扩展报错 0（2026-09-30 重跑）：
 
 - ST 的 markdown 把标签拆进 `<q>`/`<em>` 后，仍正确识别成按钮；
 - 设置经 `saveSettingsDebounced` 写入磁盘上的 `settings.json`；
@@ -235,6 +236,6 @@ enableCorsProxy: true
 - 刷新后重新进入聊天，两个播放器从聊天记录恢复，设置从服务器恢复；
 - 确认旧代码的 CSRF 头重复问题（重复 → 403，单个 → 200）；正文里生成的图片自动入库（按钮显示「查看媒体库」），并上传到 `user/images/<角色名>/`。
 
-结果见 `docs/verification/real-st-result.json` 和截图。
+本轮另验证 HTTP 500 保存失败时文件和磁盘引用保留，正常删除后正文、索引和文件一致。注入失败时的宿主保存错误单独作为预期证据记录。本轮汇总见 `docs/verification/audit-fix-result.json`；`real-st-result.json` 和截图保留先前基线。
 
 **真实厂商接口**：2026-09-27 用 SOOYA 的三个真实渠道各跑通过一次完整生成（mikoto 生图直连、Fish 配音经酒馆代理、Agnes 视频直连并做了断线续查），证据在 `docs/verification/real-vendor-*.json` 和截图。其他厂商只用假密钥验证过能连通（见「服务一览」）；Safari / iOS 没测过。

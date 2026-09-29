@@ -103,6 +103,8 @@ st-ai-image/
 npm test
 # 需要 Python Playwright 与 Chromium；ffmpeg 可选（用于生成真实 WebM 验证视频播放）
 python tests/inline-media-ui.py --output ./test-output
+# 图片预加载期间切聊天、切同名角色与切 swipe 的回归
+python tests/chat-race-ui.py --output ./test-output
 # 真实酒馆验收：先用独立数据目录启动一个酒馆实例（见脚本开头说明），绝不要指向日常使用的数据目录
 python tests/real-st-check.py --st http://127.0.0.1:8123 --data <临时数据目录> --output ./test-output
 ```

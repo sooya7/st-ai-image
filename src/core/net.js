@@ -5,7 +5,7 @@
  */
 import { LIMITS, RE } from './constants.js';
 
-export function fetchWithTimeout(url, options = {}) {
+export async function fetchWithTimeout(url, options = {}) {
     const { timeout = LIMITS.fetchTimeoutMs, signal, ...rest } = options;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('请求超时')), timeout);
@@ -14,7 +14,25 @@ export function fetchWithTimeout(url, options = {}) {
         if (signal.aborted) controller.abort(signal.reason);
         else signal.addEventListener('abort', abort, { once: true });
     }
-    return fetch(url, { ...rest, signal: controller.signal }).finally(() => { clearTimeout(timer); signal?.removeEventListener('abort', abort); });
+    try {
+        const response = await fetch(url, { ...rest, signal: controller.signal });
+        // 调用方会读取整个 JSON/Blob。先读完副本，既保留原 Response 的
+        // URL/头/正文接口，也让截止时间和取消覆盖响应体，而不只覆盖响应头。
+        if (response.body) {
+            const reader = response.clone().body.getReader();
+            try {
+                while (!(await reader.read()).done) controller.signal.throwIfAborted();
+            } finally { reader.releaseLock(); }
+        }
+        controller.signal.throwIfAborted();
+        return response;
+    } catch (error) {
+        if (controller.signal.aborted) throw controller.signal.reason;
+        throw error;
+    } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
+    }
 }
 
 const parseHeaders = (raw) => {
@@ -32,8 +50,10 @@ const parseHeaders = (raw) => {
 export function xhrRequest(url, options = {}) {
     const { method = 'GET', headers = {}, body, timeout = LIMITS.fetchTimeoutMs, signal } = options;
     return new Promise((resolve, reject) => {
+        if (signal?.aborted) { reject(signal.reason); return; }
         const xhr = new XMLHttpRequest();
         xhr.open(method, url, true);
+        xhr.responseType = 'arraybuffer';
         xhr.timeout = timeout;
         for (const [k, v] of Object.entries(headers)) {
             try { xhr.setRequestHeader(k, v); } catch { /* 忽略受限头 */ }
@@ -44,7 +64,7 @@ export function xhrRequest(url, options = {}) {
 
         xhr.onload = () => {
             done();
-            resolve(new Response(xhr.responseText, {
+            resolve(new Response([204, 205, 304].includes(xhr.status) ? null : xhr.response, {
                 status: xhr.status || 500,
                 statusText: xhr.statusText || '',
                 headers: parseHeaders(xhr.getAllResponseHeaders()),

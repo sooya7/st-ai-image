@@ -117,9 +117,10 @@ export function mediaFileName(kind, mimeType, now = Date.now(), random = Math.ra
     return `st-ai-${kind === 'video' ? 'video' : 'audio'}-${now}-${suffix}.${extension}`;
 }
 
-/** 断线续查用的任务键：同一条消息里同类型同文字的标签视为同一个任务。 */
-export function mediaJobKey(kind, text) {
+/** 无 ordinal 的调用返回旧键，供迁移历史句柄；新句柄按 swipe 和标签序号隔离。 */
+export function mediaJobKey(kind, text, ordinal, swipeId = 0) {
     let hash = 5381;
     for (const ch of normalizeMediaText(text)) hash = ((hash * 33) ^ ch.codePointAt(0)) >>> 0;
-    return `${kind}-${hash.toString(36)}`;
+    const legacy = `${kind}-${hash.toString(36)}`;
+    return ordinal === undefined ? legacy : `${legacy}-${Number(swipeId) || 0}-${Number(ordinal) || 0}`;
 }

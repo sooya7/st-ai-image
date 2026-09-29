@@ -5,7 +5,7 @@ import { ensureSafeImageUrl } from './core/text.js';
 import { saveGeneratedImage } from './gallery/sync.js';
 import { getSettings } from './settings.js';
 import { getCurrentFloorPrompt } from './st/chat-dom.js';
-import { getCurrentChatId } from './st/context.js';
+import { getChatIdentity } from './st/context.js';
 import { el, qs, replaceContent } from './ui/dom.js';
 import { developCard, preloadImage, ratioOf, setDevelopState } from './ui/fx.js';
 import { actionRow } from './ui/image-actions.js';
@@ -20,16 +20,17 @@ const placeholder = (text, className = '') => el('div', { class: `st_ai_gen_plac
  * 生成一张图并展示在生图页。
  * @returns {Promise<string|null>} 成功时返回图片地址
  */
-export async function generateImage(prompt) {
+export async function generateImage(prompt, { expectedIdentity = getChatIdentity() } = {}) {
+    const chatId = expectedIdentity;
     const clean = String(prompt ?? '').trim();
     if (!clean) { notify.warn('请输入图片描述'); return null; }
     const s = await getSettings();
+    if (getChatIdentity() !== chatId) return null;
     if (imageKeyMissing(s)) { notify.error('请先在面板的「图片」页填写 API Key'); return null; }
 
     if (currentRequest) { notify.warn('已有图片任务，请等待完成，避免重复提交'); return null; }
     const controller = new AbortController();
     currentRequest = controller;
-    const chatId = getCurrentChatId();
 
     const button = qs('#st_gpt_image_generate_btn');
     const result = qs('#st_gpt_gen_result');
@@ -48,8 +49,8 @@ export async function generateImage(prompt) {
             },
         });
         const generatedUrl = ensureSafeImageUrl(url);
-        const stored = chatId && getCurrentChatId() === chatId
-            ? await saveGeneratedImage({ prompt: clean, imageUrl: generatedUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true, expectedChatId: chatId })
+        const stored = chatId && getChatIdentity() === chatId
+            ? await saveGeneratedImage({ prompt: clean, imageUrl: generatedUrl, timestamp: Date.now(), model: s.model, size: s.size }, { force: true, expectedIdentity: chatId })
             : null;
         const imageUrl = stored?.saved ? stored.imageUrl : generatedUrl;
         setDevelopState(card, '显影中…');
@@ -82,12 +83,13 @@ export async function generateImage(prompt) {
 
 /** 读当前楼层内容当提示词，切到生图页并生成。 */
 export async function generateFromCurrentFloor() {
+    const identity = getChatIdentity();
     const { prompt, messageId } = getCurrentFloorPrompt();
     if (!prompt) { notify.warn('没有找到当前楼层内容'); return null; }
     const input = qs('#st_gpt_image_prompt');
     if (input) input.value = prompt;
     await activateTab('generate');
-    const imageUrl = await generateImage(prompt);
+    const imageUrl = await generateImage(prompt, { expectedIdentity: identity });
     if (imageUrl && Number.isInteger(messageId)) notify.success(`已从第 ${messageId + 1} 楼生成图片`);
     return imageUrl;
 }

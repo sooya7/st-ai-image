@@ -100,6 +100,7 @@ export async function mountMediaSettings(root, section) {
     const hint = el('p', { class: 'st_ai_speech_hint' });
     const warning = el('p', { class: 'st_ai_speech_hint st_ai_media_warning', role: 'status', 'aria-live': 'polite' });
     const inputs = {};
+    let workflowLibrary = null;
     const saveSoon = debounce(() => save(), 400);
     const voice = section === 'speech' ? createVoiceControls({
         id,
@@ -129,6 +130,7 @@ export async function mountMediaSettings(root, section) {
                 write: ({ items, active }) => { Object.assign(comfy(), { workflows: items, workflowId: active, workflow: items[active] ?? '' }); return save(); },
                 exportName: 'st-ai-image-ComfyUI视频工作流.json',
             });
+            workflowLibrary = lib;
             return el('div', { class: 'st_ai_field', dataset: { field: key } }, [el('label', { for: node.id, text: label }), lib.node, node, status]);
         }
         return field(label, node);
@@ -148,7 +150,7 @@ export async function mountMediaSettings(root, section) {
         ...QUICK[section].map(([key, text, apply]) => el('button', {
             type: 'button', id: id(`quick_${key}`), class: 'st_ai_btn st_ai_library_btn', text,
             title: '只填地址、模型等默认值，Key 还要自己填',
-            onclick: () => { apply(state.profiles.openai); fill(); save(); },
+            onclick: async () => { await workflowLibrary?.flush(); apply(state.profiles.openai); fill(); save(); },
         })),
     ]) : null;
     const proxy = checkbox('proxy', '通过酒馆代理请求（需在酒馆 config.yaml 设置 enableCorsProxy: true 并重启）');
@@ -225,7 +227,13 @@ export async function mountMediaSettings(root, section) {
     };
 
     enabled.input.addEventListener('change', () => { state.enabled = enabled.input.checked; save({ rescan: true }); });
-    provider.addEventListener('change', () => { state.provider = provider.value; fill(); save(); });
+    provider.addEventListener('change', async () => {
+        const next = provider.value;
+        await workflowLibrary?.flush();
+        state.provider = next;
+        fill();
+        save();
+    });
     for (const [key, node] of Object.entries(inputs)) {
         if (key === 'workflow') continue; // 工作流库自己保存
         node.addEventListener('input', () => {
@@ -234,7 +242,7 @@ export async function mountMediaSettings(root, section) {
             saveSoon();
         });
     }
-    proxy.input.addEventListener('change', () => { state.proxy = proxy.input.checked; fill(); save(); });
+    proxy.input.addEventListener('change', async () => { const checked = proxy.input.checked; await workflowLibrary?.flush(); state.proxy = checked; fill(); save(); });
     direct?.input.addEventListener('change', () => { state.profiles[state.provider].direct = direct.input.checked ? '1' : ''; save(); });
     timeout?.addEventListener('change', () => {
         const seconds = Math.min(1800, Math.max(60, Number(timeout.value) || 600));

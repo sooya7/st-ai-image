@@ -46,7 +46,11 @@ export function processMessageElement(node, { allowImageRequests = true } = {}) 
 
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null, false);
     const nodes = [];
-    while (walker.nextNode()) nodes.push(walker.currentNode);
+    while (walker.nextNode()) {
+        // 已替换的播放器/按钮不再作为原始标签扫描，避免把台词内的标签再次渲染。
+        if (walker.currentNode.parentElement?.closest('.st_ai_media, .st_gpt_inline_img_wrap, .st_gpt_inline_gen')) continue;
+        nodes.push(walker.currentNode);
+    }
     if (!nodes.length) return false;
 
     const fullText = nodes.map((n) => n.textContent).join('');
@@ -61,14 +65,22 @@ export function processMessageElement(node, { allowImageRequests = true } = {}) 
 
     const matches = [];
     const mediaSeen = new Map(); // 同类型同文字的标签按出现顺序编号，写回时靠它定位原文
+    const renderedMedia = [...node.querySelectorAll('.st_ai_media')].map((wrapper) => ({
+        wrapper, info: parseMediaTag(wrapper.dataset.tag),
+    }));
     const settings = peekSettings();
     let m;
     while ((m = re.exec(fullText)) !== null) {
         const media = parseMediaTag(m[0]);
         if (media) {
             const seenKey = `${media.kind}#${normalizeMediaText(media.text)}`;
-            const ordinal = mediaSeen.get(seenKey) || 0;
-            mediaSeen.set(seenKey, ordinal + 1);
+            const seen = mediaSeen.get(seenKey) || 0;
+            const startNode = ranges.find(({ start, end }) => m.index >= start && m.index < end)?.node;
+            const renderedBefore = renderedMedia.filter(({ wrapper, info }) => info
+                && `${info.kind}#${normalizeMediaText(info.text)}` === seenKey
+                && startNode && (wrapper.compareDocumentPosition(startNode) & 4)).length;
+            const ordinal = seen + renderedBefore;
+            mediaSeen.set(seenKey, seen + 1);
             const allowed = media.src || (allowImageRequests && readMediaSettings(settings, MEDIA_SECTION[media.kind]).enabled);
             const replacement = allowed ? createMediaElement(m[0], messageId, ordinal) : document.createTextNode(m[0]);
             matches.push({ start: m.index, end: re.lastIndex, replacement });

@@ -42,16 +42,20 @@ export function createWorkflowLibrary({ id, textarea, status, read, write, expor
     const show = () => { const lib = read(); textarea.value = lib.items[lib.active] ?? ''; check(); };
     // 输入先攒着，400ms 后写进当前条目；切换/新建/删除前必须先 flush，否则会写进新选中的那个
     let timer = null;
+    let pending = null;
     const flush = async () => {
-        if (!timer) return;
+        if (!pending) return;
         clearTimeout(timer);
         timer = null;
+        const edit = pending;
+        pending = null;
         const lib = read();
-        await write({ items: { ...lib.items, [lib.active]: textarea.value }, active: lib.active });
+        await write({ items: { ...lib.items, [edit.active]: edit.text }, active: lib.active });
     };
     textarea.addEventListener('input', () => {
         check();
         clearTimeout(timer);
+        pending = { active: read().active, text: textarea.value };
         timer = setTimeout(flush, 400);
     });
 
@@ -62,6 +66,7 @@ export function createWorkflowLibrary({ id, textarea, status, read, write, expor
             try {
                 clearTimeout(timer);
                 timer = null;
+                pending = null;
                 const { workflow, changes } = autoMarkWorkflow(parseWorkflow(textarea.value));
                 if (!changes.length) return control.say('没有找到可以标记的值（可能已经标记过了）');
                 textarea.value = JSON.stringify(workflow, null, 2);
@@ -112,6 +117,7 @@ export function createWorkflowLibrary({ id, textarea, status, read, write, expor
         onDelete: async (name) => {
             clearTimeout(timer);
             timer = null; // 要删的就是正在编辑的那个，没保存的改动一起丢掉
+            pending = null;
             const items = deleteItem(read().items, name);
             await write({ items, active: Object.keys(items)[0] });
             show();
@@ -132,5 +138,5 @@ export function createWorkflowLibrary({ id, textarea, status, read, write, expor
         extra: templateSelect ? [autoMark, templateSelect] : [autoMark],
     });
     show();
-    return { node: control.node, refresh: () => { control.render(); show(); } };
+    return { node: control.node, flush, refresh: () => { control.render(); show(); } };
 }

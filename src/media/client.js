@@ -195,17 +195,21 @@ export async function generateMedia(kind, config, prompt, options = {}) {
  * 图片设置传 viaTavern；视频配置里是 direct: '1'（和 CORS 代理 proxy 不是一回事）。
  */
 async function runSelfHostedJob(kind, config, prompt, { signal, onProgress, fetch: fetchImpl } = {}) {
-    const { buildSelfHostedPlan, runSelfHosted } = await import('./selfhosted.js');
-    const plan = buildSelfHostedPlan(kind, config, prompt);
     const viaTavern = config.viaTavern !== undefined ? !!config.viaTavern : String(config.direct || '') !== '1';
+    // 必须在第一次 await 前占槽，否则并发调用会一起通过外层的 active 检查。
     active++;
     const controller = new AbortController();
     const abort = () => controller.abort(signal.reason);
     signal?.addEventListener('abort', abort, { once: true });
     const timeout = Math.min(30 * 60000, Math.max(30000, Number(config.timeout) || (kind === 'video' ? 900000 : 300000)));
     const timer = setTimeout(() => controller.abort(new Error('等待超时；任务可能仍在自建服务里运行')), timeout);
+    let plan;
     try {
+        const { buildSelfHostedPlan, runSelfHosted } = await import('./selfhosted.js');
+        controller.signal.throwIfAborted();
+        plan = buildSelfHostedPlan(kind, config, prompt);
         const { getRequestHeadersWithCsrf } = await import('../st/context.js');
+        controller.signal.throwIfAborted();
         return await runSelfHosted(plan, { viaTavern, tavernHeaders: getRequestHeadersWithCsrf, signal: controller.signal, onProgress, timeout, fetch: fetchImpl });
     } catch (error) {
         if (controller.signal.aborted && controller.signal.reason instanceof Error && !signal?.aborted) throw controller.signal.reason;
@@ -290,11 +294,24 @@ async function runVendorJob(kind, config, prompt, { signal, onProgress, onTask, 
     }
 }
 
+function downloadRedirect(headers, proxy) {
+    // 浏览器跨源跳转会清除 Authorization，但会继续发送 x-goog-api-key 等
+    // 自定义头。代理的 node-fetch 还会向同域不同端口/子域保留 Authorization，
+    // 因此任何带鉴权头的内容下载都不能交给不可控的代理跳转。
+    const ordinary = new Set(['authorization', 'accept', 'content-type', 'range']);
+    const normalized = new Headers(headers);
+    const customHeaders = [...normalized.keys()].some((name) => !ordinary.has(name));
+    if (proxy && (customHeaders || normalized.has('authorization'))) throw new Error('带鉴权头的媒体下载不能经酒馆代理，请使用直连或无密钥下载地址');
+    return customHeaders ? 'error' : 'follow';
+}
+
 /** 视频之外，新服务的配音也可能给回一个音频地址（百炼），一样要下载下来存进酒馆。 */
 export async function downloadMedia(result, kind, { signal, request = requestData, proxy = false } = {}) {
     if (kind === 'video') return downloadVideo(result, { signal, request, proxy });
     const target = safeUrl(result.contentRequest?.url || result.url);
-    const blob = await request(proxy ? proxyUrl(target) : target, { signal, headers: result.contentRequest?.headers || {}, timeout: 120_000, redirect: 'follow' }, true);
+    const headers = result.contentRequest?.headers || {};
+    const redirect = downloadRedirect(headers, proxy);
+    const blob = await request(proxy ? proxyUrl(target) : target, { signal, headers, timeout: 120_000, redirect }, true);
     if (!blob?.size || !/^(audio\/|application\/octet-stream)/i.test(blob.type)) throw new Error('服务未返回有效音频');
     return blob.type.startsWith('audio/') ? blob : new Blob([blob], { type: 'audio/mpeg' });
 }
@@ -304,8 +321,9 @@ export async function downloadVideo(result, { signal, request = requestData, pro
     const descriptor = result.contentRequest;
     const target = safeUrl(descriptor?.url || result.url);
     const url = proxy ? proxyUrl(target) : target;
-    // /videos/{id}/content 通常 302 到对象存储；浏览器跨域跳转时会自动去掉 Authorization。
-    const blob = await request(url, { signal, headers: descriptor?.headers || {}, timeout: 300_000, redirect: 'follow' }, true, 128 * 1024 * 1024);
+    const headers = descriptor?.headers || {};
+    const redirect = downloadRedirect(headers, proxy);
+    const blob = await request(url, { signal, headers, timeout: 300_000, redirect }, true, 128 * 1024 * 1024);
     signal?.throwIfAborted();
     if (!blob?.size || !/^(video\/|application\/octet-stream)/i.test(blob.type)) throw new Error('服务未返回有效视频');
     return blob.type.startsWith('video/') ? blob : new Blob([blob], { type: 'video/mp4' });

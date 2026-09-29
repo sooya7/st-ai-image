@@ -30,7 +30,8 @@ export function uniqueName(items, wanted) {
     const base = cleanName(wanted) || '未命名';
     if (!Object.hasOwn(items, base)) return base;
     for (let i = 2; ; i++) {
-        const name = cleanName(`${base} ${i}`);
+        const suffix = ` ${i}`;
+        const name = `${base.slice(0, MAX_NAME - suffix.length).trimEnd()}${suffix}`;
         if (!Object.hasOwn(items, name)) return name;
     }
 }

@@ -2,7 +2,7 @@
 import { EVENTS, emit } from '../core/bus.js';
 import { log, notify } from '../core/notify.js';
 import { sanitizeMediaSrc } from '../media/tags.js';
-import { getContext, getCurrentChatId } from '../st/context.js';
+import { getContext, getCurrentChatId, getChatIdentity, saveChatVerified } from '../st/context.js';
 import {
     getHistory as getLegacyHistory, getHistoryItem as getLegacyHistoryItem,
     deleteHistoryItem as deleteLegacyHistoryItem, historyUrl, mergeHistoryItems, normalizeHistoryEntry,
@@ -55,9 +55,9 @@ export async function saveToHistory(entry, { force = false } = {}) {
     const normalized = normalizeHistoryEntry(entry);
     const url = historyUrl(normalized);
     if (!url || /^(?:data:|blob:)/i.test(url)) return null;
-    const chatId = getCurrentChatId();
+    const chatId = getChatIdentity();
     const existing = (await getHistory()).find((item) => keyOf(item) === keyOf(normalized));
-    if (getCurrentChatId() !== chatId || metadata() !== context.chatMetadata) return null;
+    if (getChatIdentity() !== chatId || metadata() !== context.chatMetadata) return null;
     if (existing) return existing;
     const item = normalizeHistoryEntry(normalized, entry?.id || newId());
     const prior = context.chatMetadata[KEY];
@@ -66,10 +66,10 @@ export async function saveToHistory(entry, { force = false } = {}) {
     context.chatMetadata[DELETED_KEY] = deleted().filter((key) => key !== deletedKey(item) && key !== keyOf(item));
     try {
         await context.saveMetadata();
-        if (getCurrentChatId() === chatId) emit(EVENTS.galleryChanged);
+        if (getChatIdentity() === chatId) emit(EVENTS.galleryChanged);
         return item;
     } catch (error) {
-        if (getCurrentChatId() === chatId && metadata() === context.chatMetadata) {
+        if (getChatIdentity() === chatId && metadata() === context.chatMetadata) {
             context.chatMetadata[KEY] = prior;
             context.chatMetadata[DELETED_KEY] = oldDeleted;
         }
@@ -83,9 +83,9 @@ export async function saveToHistory(entry, { force = false } = {}) {
 export async function importChatEntries(candidates) {
     const context = writableContext();
     if (!context) return false;
-    const chatId = getCurrentChatId();
+    const chatId = getChatIdentity();
     const current = await getHistory();
-    if (getCurrentChatId() !== chatId || metadata() !== context.chatMetadata) return false;
+    if (getChatIdentity() !== chatId || metadata() !== context.chatMetadata) return false;
     const seen = new Set(current.map(keyOf));
     const next = [];
     const dismissed = new Set(deleted());
@@ -100,22 +100,38 @@ export async function importChatEntries(candidates) {
     if (!next.length) return false;
     context.chatMetadata[KEY] = mergeHistoryItems([...next, ...current]);
     await context.saveMetadata();
-    if (getCurrentChatId() === chatId) emit(EVENTS.galleryChanged);
+    if (getChatIdentity() === chatId) emit(EVENTS.galleryChanged);
     return true;
 }
 
 /** 删除索引；物理文件与正文引用由调用方先处理。 */
-export async function deleteHistoryItem(id) {
+export async function deleteHistoryItem(id, { verify = false } = {}) {
     const context = writableContext();
     if (!context) return false;
-    const chatId = getCurrentChatId();
+    const chatId = getChatIdentity();
     const item = (await getHistory()).find((entry) => String(entry.id) === String(id));
-    if (getCurrentChatId() !== chatId || metadata() !== context.chatMetadata) return false;
+    if (getChatIdentity() !== chatId || metadata() !== context.chatMetadata) return false;
     if (!item) return deleteLegacyHistoryItem(id);
+    const prior = context.chatMetadata[KEY];
+    const priorDeleted = context.chatMetadata[DELETED_KEY];
     context.chatMetadata[KEY] = entries().filter((entry) => String(entry.id) !== String(id));
     context.chatMetadata[DELETED_KEY] = [...new Set([...deleted(), deletedKey(item)])];
-    await context.saveMetadata();
-    if (getCurrentChatId() === chatId) emit(EVENTS.galleryChanged);
+    const removedEntries = context.chatMetadata[KEY];
+    const removedKeys = context.chatMetadata[DELETED_KEY];
+    try {
+        await context.saveMetadata();
+        if (verify && (getChatIdentity() !== chatId || metadata() !== context.chatMetadata)) throw new Error('聊天已切换，原媒体库记录保留以便重试');
+        if (verify && !(await saveChatVerified({ metadataKeys: [KEY, DELETED_KEY] }))) throw new Error('媒体库删除记录未能确认保存，请重试');
+    } catch (error) {
+        const current = context.chatMetadata[KEY];
+        context.chatMetadata[KEY] = current === removedEntries ? prior
+            : mergeHistoryItems([...(Array.isArray(current) ? current : []), item]);
+        const currentDeleted = context.chatMetadata[DELETED_KEY];
+        context.chatMetadata[DELETED_KEY] = currentDeleted === removedKeys ? priorDeleted
+            : (Array.isArray(currentDeleted) ? currentDeleted : []).filter((key) => key !== deletedKey(item) || priorDeleted?.includes(key));
+        throw error;
+    }
+    if (getChatIdentity() === chatId) emit(EVENTS.galleryChanged);
     return true;
 }
 

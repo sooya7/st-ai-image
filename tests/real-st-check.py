@@ -108,6 +108,7 @@ def main():
     threading.Thread(target=mock.serve_forever, daemon=True).start()
     mock_base = f'http://127.0.0.1:{mock.server_port}/v1'
     checks, console_errors = [], []
+    expected_error_indexes = set()
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -276,10 +277,44 @@ def main():
         mine = max((i for i in images if i.parent.name == char_name), key=lambda i: i.stat().st_mtime)
         checks.append(f'Image generated inline is auto-saved (button shows "view gallery") and uploaded to ST user/images under the character folder ({mine.parent.name}/{mine.name})')
 
-        bad = [e for e in console_errors if 'st-ai-image' in e or 'st_ai' in e]
-        result = {'status': 'passed', 'checks': checks, 'mock_requests': len(LOG), 'extension_errors': bad}
+        # Host saveChat swallows HTTP failures: physical deletion must independently read back.
+        target = ctx("""
+            const store = await import('/scripts/extensions/third-party/st-ai-image/src/gallery/chat-store.js');
+            const image = (await store.getHistory()).find(i => i.type === 'image');
+            return { id: image.id, url: image.imageUrl };
+        """)
+        before_delete = chat_file_text()
+        injection_error_start = len(console_errors)
+        page.route('**/api/chats/save', lambda route: route.fulfill(status=500, content_type='application/json', body='{"error":"injected save failure"}'))
+        try:
+            failed = ctx("""
+                const { removeMediaEntry } = await import('/scripts/extensions/third-party/st-ai-image/src/gallery/delete.js');
+                try { await removeMediaEntry(%s); return { rejected: false }; }
+                catch (e) { return { rejected: true, message: e.message }; }
+            """ % json.dumps(target['id']))
+            assert failed['rejected'] and '聊天保存失败' in failed['message'], failed
+            assert mine.exists() and chat_file_text() == before_delete
+            checks.append('Real ST HTTP 500 save failure: deletion rejected, image file and on-disk chat reference preserved')
+        finally:
+            page.unroute('**/api/chats/save')
+            for index in range(injection_error_start, len(console_errors)):
+                if 'Internal Server Error' in console_errors[index] and 'at saveChat (' in console_errors[index]:
+                    expected_error_indexes.add(index)
+        deleted = ctx("""
+            const { removeMediaEntry } = await import('/scripts/extensions/third-party/st-ai-image/src/gallery/delete.js');
+            return await removeMediaEntry(%s);
+        """ % json.dumps(target['id']))
+        assert deleted == {'removed': True, 'fileDeleted': True}, deleted
+        assert not mine.exists()
+        assert target['id'] not in chat_file_text() and target['url'] not in chat_file_text()
+        checks.append('Real ST successful deletion: readback confirmed chat and index persisted, physical file removed')
+
+        bad = [e for index, e in enumerate(console_errors) if index not in expected_error_indexes and ('st-ai-image' in e or 'st_ai' in e)]
+        result = {'status': 'passed' if not bad else 'failed', 'checks': checks, 'mock_requests': len(LOG), 'extension_errors': bad,
+                  'expected_host_errors': [console_errors[index] for index in sorted(expected_error_indexes)]}
         (output / 'real-st-result.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        assert not bad, bad
         browser.close()
     mock.shutdown()
 

@@ -4,7 +4,7 @@ import { fetchWithTimeout } from '../core/net.js';
 import { log } from '../core/notify.js';
 import { normalizeGalleryImageUrl, parseInlineImageMarker, summarizeApiError } from '../core/text.js';
 import { buildMediaTag, MEDIA_TAG_SOURCE, parseMediaTag, sanitizeMediaSrc } from '../media/tags.js';
-import { getChat, getCurrentChatId, getRequestHeadersWithCsrf, invalidateCsrfToken, refreshMessageBlock, saveChat } from '../st/context.js';
+import { getChat, getChatIdentity, getRequestHeadersWithCsrf, invalidateCsrfToken, refreshMessageBlock, saveChatVerified } from '../st/context.js';
 import { deleteHistoryItem, getHistory, getHistoryItem } from './chat-store.js';
 
 function ownedFile(entry) {
@@ -18,13 +18,14 @@ function ownedFile(entry) {
     return { path: src, endpoint: '/api/images/delete' };
 }
 
-async function deleteServerFile(entry) {
+async function deleteServerFile(entry, beforeDelete) {
     const file = ownedFile(entry);
     if (!file) return false;
-    const post = async () => fetchWithTimeout(file.endpoint, {
-        method: 'POST', headers: await getRequestHeadersWithCsrf(),
-        body: JSON.stringify({ path: file.path }),
-    });
+    const post = async () => {
+        const headers = await getRequestHeadersWithCsrf();
+        beforeDelete();
+        return fetchWithTimeout(file.endpoint, { method: 'POST', headers, body: JSON.stringify({ path: file.path }) });
+    };
     let response = await post();
     if (response.status === 403) { invalidateCsrfToken(); response = await post(); }
     if (response.status === 404) return true;
@@ -68,7 +69,7 @@ function removeReferences(entry) {
         if (typeof message.mes === 'string') message.mes = withoutMedia(message.mes, entry);
         if (Array.isArray(message.swipes)) message.swipes = message.swipes.map((text) => typeof text === 'string' ? withoutMedia(text, entry) : text);
         if (message.mes !== before.mes || JSON.stringify(message.swipes ?? null) !== JSON.stringify(before.swipes)) {
-            changed.push({ id, message, before });
+            changed.push({ id, message, before, after: { mes: message.mes, swipes: Array.isArray(message.swipes) ? [...message.swipes] : null } });
             refreshMessageBlock(id);
         }
     }
@@ -76,33 +77,45 @@ function removeReferences(entry) {
 }
 
 function rollback(changed, chatId) {
-    for (const { id, message, before } of changed) {
-        message.mes = before.mes;
-        if (before.swipes) message.swipes = before.swipes;
-        if (getCurrentChatId() === chatId) refreshMessageBlock(id);
+    for (const { id, message, before, after } of changed) {
+        // 等待保存时可能发生编辑；只撤回本次删除仍未被编辑的字段。
+        if (message.mes === after.mes) message.mes = before.mes;
+        if (before.swipes && Array.isArray(message.swipes)) {
+            message.swipes = message.swipes.map((text, index) => text === after.swipes[index] ? before.swipes[index] : text);
+        }
+        if (getChatIdentity() === chatId && getChat()?.[id] === message) refreshMessageBlock(id);
     }
 }
 
 /** 返回是否同时删除了物理文件。旧版/外部图片仅能移除索引与当前聊天引用。 */
-export async function removeMediaEntry(id) {
+export async function removeMediaEntry(id, { expectedIdentity = getChatIdentity() } = {}) {
+    const chatId = getChatIdentity();
+    if (chatId !== expectedIdentity) throw new Error('聊天已切换，请回到原聊天再删除');
+    const chat = getChat();
     const item = await getHistoryItem(id);
     if (!item) return { removed: false, fileDeleted: false };
-    if (!(await getHistory()).some((entry) => String(entry.id) === String(id))) {
+    const history = await getHistory();
+    if (getChatIdentity() !== chatId || getChat() !== chat) throw new Error('聊天已切换，请回到原聊天再删除');
+    if (!history.some((entry) => String(entry.id) === String(id))) {
         // 旧版全局记录不知道属于哪个聊天，安全起见只移除旧索引。
         return { removed: await deleteHistoryItem(id), fileDeleted: false };
     }
-    const chatId = getCurrentChatId();
     const changed = removeReferences(item);
-    if (changed.length && !(await saveChat())) {
+    if (!(await saveChatVerified())) {
         rollback(changed, chatId);
         throw new Error('聊天保存失败，未删除媒体文件');
     }
-    if (getCurrentChatId() !== chatId) throw new Error('聊天已切换，请回到原聊天再删除');
+    if (getChatIdentity() !== chatId || getChat() !== chat) throw new Error('聊天已切换，请回到原聊天再删除');
     let fileDeleted = false;
-    try { fileDeleted = await deleteServerFile(item); }
+    try { fileDeleted = await deleteServerFile(item, () => {
+        if (getChatIdentity() !== chatId || getChat() !== chat) throw new Error('聊天已切换，未删除媒体文件');
+        if (chat.some((message) => [message?.mes, ...(message?.swipes || [])].some((text) => typeof text === 'string' && withoutMedia(text, item) !== text))) {
+            throw new Error('等待期间媒体引用已被重新编辑，未删除文件');
+        }
+    }); }
     catch (error) { log.error('删除媒体文件失败，索引保留以便重试:', error); throw error; }
-    if (getCurrentChatId() !== chatId) throw new Error('聊天已切换；文件已删除，回到原聊天可清除记录');
-    const removed = await deleteHistoryItem(id);
+    if (getChatIdentity() !== chatId || getChat() !== chat) throw new Error('聊天已切换；文件已删除，回到原聊天可清除记录');
+    const removed = await deleteHistoryItem(id, { verify: true });
     return { removed, fileDeleted };
 }
 

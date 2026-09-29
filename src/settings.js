@@ -13,9 +13,10 @@ const withDefaults = (partial) => ({ ...DEFAULT_SETTINGS, ...(partial || {}) });
 
 async function load() {
     const ctx = getContext();
-    if (ctx?.extensionSettings) {
-        const merged = withDefaults(ctx.extensionSettings[EXT_ID]);
-        ctx.extensionSettings[EXT_ID] = merged; // 首次写回默认值
+    const saved = ctx?.extensionSettings?.[EXT_ID];
+    if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+        const merged = withDefaults(saved);
+        ctx.extensionSettings[EXT_ID] = merged;
         return merged;
     }
 
@@ -23,9 +24,11 @@ async function load() {
     try {
         const raw = localStorage.getItem(LEGACY_SETTINGS_KEY);
         if (raw) {
-            const merged = withDefaults(JSON.parse(raw));
+            const legacy = JSON.parse(raw);
+            if (!legacy || typeof legacy !== 'object' || Array.isArray(legacy)) throw new Error('旧设置格式无效');
+            const merged = withDefaults(legacy);
             cache = merged;
-            saveSettings(merged).catch((e) => log.warn('设置迁移失败:', e));
+            await saveSettings(merged);
             return merged;
         }
     } catch (e) {
@@ -58,9 +61,13 @@ export async function saveSettings(settings) {
         // 以前只改内存不落盘，要等 ST 因别的操作保存时才顺带写入，刷新前填的密钥可能丢失。
         if (ctx?.extensionSettings) {
             ctx.extensionSettings[EXT_ID] = settings;
-            ctx.saveSettingsDebounced?.();
+            if (typeof ctx.saveSettingsDebounced === 'function') {
+                await ctx.saveSettingsDebounced();
+                // 防抖调用只代表已安排保存，不能确认服务器落盘；保留旧副本供恢复。
+                return true;
+            }
         }
-        try { localStorage.removeItem(LEGACY_SETTINGS_KEY); } catch { /* 忽略 */ }
+        localStorage.setItem(LEGACY_SETTINGS_KEY, JSON.stringify(settings));
         return true;
     } catch (e) {
         log.error('保存设置失败:', e);

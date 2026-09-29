@@ -61,6 +61,7 @@ const context = {
     get chat() { return state.chat; },
     get chatMetadata() { return state.chatMetadata[state.chatId] ||= {}; },
     extensionSettings: state.settings,
+    characterId: 0, characters: [{ avatar: 'Fixture.png', name: 'Fixture' }],
     eventSource, event_types,
     getCurrentChatId: () => state.chatId,
     getRequestHeaders: () => ({ 'Content-Type': 'application/json', 'X-CSRF-Token': 'fixture-csrf' }),
@@ -71,6 +72,16 @@ const context = {
     setExtensionPrompt: (id, text) => { window.fixture.prompts[id] = text; },
 };
 window.SillyTavern = { getContext: () => context };
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async (url, options) => {
+    if (url === '/api/chats/get') {
+        const saved = JSON.parse(sessionStorage.getItem(STORE) || '{}');
+        const request = JSON.parse(options.body);
+        return Response.json(request.file_name === saved.chatId
+            ? [{ chat_metadata: saved.chatMetadata?.[saved.chatId] || {} }, ...saved.chat] : []);
+    }
+    return nativeFetch(url, options);
+};
 window.toastr = Object.fromEntries(['success', 'info', 'warning', 'error'].map((level) => [level, (message, title) => window.fixture.toasts.push({ level, message, title })]));
 window.fixtureEmit = (name) => { for (const fn of handlers.get(name) || []) fn(); };
 window.fixtureSwitchChat = (id) => { state.chatId = id; state.chatMetadata[id] ||= {}; persist(); window.fixtureEmit('CHAT_CHANGED'); };

@@ -31,22 +31,25 @@ export function createVoiceControls({ id, profile, config, isFish, onChange, onC
         const cfg = { ...config(), voice };
         if (!String(cfg.key || '').trim()) { warning.textContent = '先填写 API Key 再试听'; return; }
         const label = button.textContent;
+        let url = null;
+        let audio = null;
         button.disabled = true;
         button.textContent = '合成中…';
         try {
-            const { generateMedia } = await import('../media/client.js');
-            const { blob } = await generateMedia('audio', cfg, PREVIEW_TEXT);
-            const url = URL.createObjectURL(blob);
-            const audio = new Audio(url);
-            const done = new Promise((resolve) => { audio.addEventListener('ended', resolve, { once: true }); audio.addEventListener('error', resolve, { once: true }); });
+            const { generateMedia, downloadMedia } = await import('../media/client.js');
+            const result = await generateMedia('audio', cfg, PREVIEW_TEXT);
+            const blob = result.blob || await downloadMedia(result, 'audio', { proxy: cfg.proxy });
+            url = URL.createObjectURL(blob);
+            audio = new Audio(url);
+            const done = new Promise((resolve, reject) => { audio.addEventListener('ended', resolve, { once: true }); audio.addEventListener('error', () => reject(new Error('音频播放失败')), { once: true }); });
             button.textContent = '播放中…';
-            await audio.play();
-            await done;
-            URL.revokeObjectURL(url);
+            await Promise.all([audio.play(), done]);
             if (warning.textContent.startsWith('试听')) warning.textContent = '';
         } catch (error) {
             warning.textContent = `试听失败：${errMsg(error)}`;
         } finally {
+            audio?.pause();
+            if (url) URL.revokeObjectURL(url);
             button.disabled = false;
             button.textContent = label;
         }

@@ -312,14 +312,25 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
             }
             const image = node.querySelector('.st_gpt_inline_img_wrap');
             const unchangedSkipped = !processMessageElement(node);
-            return { results, unchangedSkipped,
-                imageRetained: node.querySelector('.st_gpt_inline_img_wrap') === image };
+            const imageRetained = node.querySelector('.st_gpt_inline_img_wrap') === image;
+            // 增量流式追加时，第一句已替换成 wrapper，第二句仍须定位原文的第二个标签。
+            node.textContent = '[voice]same[/voice]';
+            processMessageElement(node);
+            node.append(document.createTextNode(' and [voice]same[/voice]'));
+            processMessageElement(node);
+            const ordinals = [...node.querySelectorAll('.st_ai_media_audio')].map(n => n.dataset.ordinal);
+            const { locateMediaTag } = await import('../src/media/tags.js');
+            const located = locateMediaTag('[voice]same[/voice] and [voice]same[/voice]', {
+                kind: 'audio', text: 'same', ordinal: Number(ordinals[1]),
+            });
+            return { results, unchangedSkipped, imageRetained, ordinals, secondRawIndex: located?.index };
         } finally { mes.remove(); }
     }''')
     assert len(redraw['results']) == 5 and all(r == {
         'processed': True, 'images': 1, 'voices': 1, 'videos': 1, 'requests': 1,
     } for r in redraw['results']), redraw
     assert redraw['unchangedSkipped'] and redraw['imageRetained'], redraw
+    assert redraw['ordinals'] == ['0', '1'] and redraw['secondRawIndex'] > 0, redraw
     checks.append('Same message redrawn five times before observer scans: image, voice, video and image request recover each time; unchanged scans preserve rendered elements')
 
     audio_btn.click()

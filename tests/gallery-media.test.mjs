@@ -36,13 +36,16 @@ test('当前聊天的语音和视频自动入库，切聊天隔离；删除时�
         swipes: [`[video src="${video}"]雨夜[/video]`, '[voice src="/user/files/not-ours.mp3"]伪造[/voice]'],
     }];
     let savedChats = 0;
+    let storedChat = [];
     globalThis.SillyTavern = { getContext: () => ({
         chat, chatMetadata: metadataByChat[chatId], getCurrentChatId: () => chatId,
-        saveMetadata: async () => {}, saveChat: async () => { savedChats++; },
+        characterId: 0, characters: [{ avatar: 'Fixture.png' }],
+        saveMetadata: async () => {}, saveChat: async () => { savedChats++; storedChat = structuredClone(chat); },
         getRequestHeaders: () => ({ 'Content-Type': 'application/json', 'X-CSRF-Token': 'fixture' }),
     }) };
     const deleted = [];
     globalThis.fetch = async (url, options) => {
+        if (url === '/api/chats/get') return Response.json([{ chat_metadata: metadataByChat[chatId] }, ...storedChat]);
         deleted.push({ url, path: JSON.parse(options.body).path });
         return new Response('', { status: 200 });
     };
@@ -65,7 +68,7 @@ test('当前聊天的语音和视频自动入库，切聊天隔离；删除时�
         assert.equal((await removeMediaEntry(savedAudio.id)).fileDeleted, true);
         assert.equal(chat[0].mes, '[voice]你好[/voice]');
         assert.deepEqual(deleted, [{ url: '/api/files/delete', path: audio }]);
-        assert.equal(savedChats, 1);
+        assert.equal(savedChats, 2);
         await syncChatImagesToHistory();
         items = await getHistory();
         assert.deepEqual(items.map((item) => item.type), ['video']);

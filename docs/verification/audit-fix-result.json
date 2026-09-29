@@ -1,0 +1,37 @@
+{
+  "unit_tests": 162,
+  "inline_checks": 22,
+  "real_st_checks": 10,
+  "status": "passed",
+  "date": "2026-09-30",
+  "baseline": "bcabea6",
+  "resolved_findings": [
+    "R01",
+    "R02",
+    "R03",
+    "R04",
+    "R05",
+    "R06",
+    "R07",
+    "R08",
+    "R09",
+    "R10",
+    "R11",
+    "R12",
+    "R13"
+  ],
+  "chat_preload_races": 3,
+  "inline_isolated_scenarios": 10,
+  "browser_evidence": {
+    "http_binary_preserved": true,
+    "redirect_key_not_sent": true,
+    "workflow_edit_retained": true,
+    "dashscope_url_preview_downloaded": true
+  },
+  "real_st_expected_save_error_count": 1,
+  "limitations": [
+    "带自定义鉴权头的下载禁止自动跳转；所有带鉴权的下载拒绝酒馆代理，公共CDN代理可用。",
+    "fetchWithTimeout收齐响应体后返回，供完整JSON/Blob消费使用。",
+    "没有测试TauriTavern实机界面或本轮真实付费厂商接口。"
+  ]
+}

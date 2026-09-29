@@ -8,7 +8,7 @@ import { createImageActions } from './image-actions.js';
 import { getHistory, getLegacyHistory } from '../gallery/chat-store.js';
 import { removeMediaEntry } from '../gallery/delete.js';
 import { syncChatImagesToHistory } from '../gallery/sync.js';
-import { getCurrentChatId } from '../st/context.js';
+import { getChatIdentity } from '../st/context.js';
 import { showMediaPreview, showPreview } from './preview.js';
 
 let observer = null;
@@ -94,14 +94,14 @@ export async function renderGallery() {
     if (!container) return;
     if (rendering) { renderPending = true; return; }
     rendering = true;
-    const chatId = getCurrentChatId();
+    const chatId = getChatIdentity();
     const kind = activeKind;
     try {
         stopGalleryAudio();
         replaceContent(container, spinner('加载媒体库中...'));
         container.classList.remove('st_ai_bento');
         const history = await (kind === 'legacy' ? getLegacyHistory() : getHistory()).catch((e) => { log.error('读取媒体库失败:', e); return []; });
-        if (chatId !== getCurrentChatId() || kind !== activeKind) { renderPending = true; return; }
+        if (chatId !== getChatIdentity() || kind !== activeKind) { renderPending = true; return; }
         const count = qs('#st_gpt_gallery_count');
         if (count) count.textContent = `${kind === 'legacy' ? '旧版未归属' : '当前聊天'} · ${history.length} 个媒体`;
         if (kind !== 'legacy') paintCounts(history);
@@ -231,14 +231,16 @@ export function bindGalleryEvents() {
         if (activeKind === 'legacy' || clearing) return;
         if (!confirm('清空当前聊天的媒体库并删除本扩展上传的服务器文件？其他聊天引用这些文件时也可能无法播放。')) return;
         const button = qs('#st_gpt_image_clear_history');
+        const identity = getChatIdentity();
         clearing = true;
         button.disabled = true;
-        const history = await getHistory();
         let removed = 0;
         try {
+            const history = await getHistory();
             for (const item of history) {
+                if (getChatIdentity() !== identity) throw new Error('聊天已切换，后续清理已停止');
                 button.textContent = `清理中 ${removed + 1}/${history.length}`;
-                if ((await removeMediaEntry(item.id)).removed) removed++;
+                if ((await removeMediaEntry(item.id, { expectedIdentity: identity })).removed) removed++;
             }
             notify.success(`已清理 ${removed} 个媒体`);
         } catch (error) { notify.error(`已清理 ${removed} 个，后续清理失败：${error?.message || error}`); }
