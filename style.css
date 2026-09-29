@@ -227,12 +227,12 @@
     padding: 4px;
     overflow-x: auto;
     scrollbar-width: none;
-    border-radius: 14px;
+    border-radius: 999px;
     background: var(--st-ai-surface-3);
     box-shadow: inset 0 1px 2px rgba(22, 32, 64, .06);
 }
 .st_ai_float_tabs::-webkit-scrollbar { display: none; }
-/* 滑动的选中块：位置由 tabs.js 写进 --x / --w */
+/* 滑动的胶囊选中块：位置由 tabs.js 写进 --x / --w */
 .st_ai_tab_indicator {
     position: absolute;
     top: 4px;
@@ -241,7 +241,7 @@
     width: var(--w, 0px);
     transform: translateX(var(--x, 0px));
     overflow: hidden;
-    border-radius: 10px;
+    border-radius: 999px;
     pointer-events: none;
     opacity: 0;
     background: #fff;
@@ -271,7 +271,7 @@
     margin: 0;
     padding: 7px 13px;
     border: none;
-    border-radius: 10px;
+    border-radius: 999px;
     background: none;
     color: var(--st-ai-ink-3);
     font-size: .93em;
@@ -508,7 +508,9 @@
     color: var(--st-ai-ink);
 }
 
-/* 勾选框 → 拨动开关（盖过酒馆全局的 input[type=checkbox]） */
+/* 勾选框 → 胶囊拨动开关。
+   酒馆全局的 input[type=checkbox] 会把它画成小方块；美化主题和别的扩展还常用 !important 改勾选框的圆角、尺寸、底色，
+   一改就成了长方形或者散架。所以决定形状的属性都加 !important（只作用于面板里的 .st_ai_checkbox，不碰酒馆自己的勾选框）。 */
 .st_ai_checkbox {
     display: flex;
     align-items: center;
@@ -520,45 +522,55 @@
     cursor: pointer;
 }
 #st_ai_float_panel .st_ai_checkbox input[type="checkbox"] {
-    -webkit-appearance: none;
-    appearance: none;
-    position: relative;
-    display: inline-block;
-    flex: none;
-    width: 40px;
-    height: 23px;
-    margin: 0;
-    overflow: visible;
-    border-radius: 999px;
-    background: #dfe3ec;
-    border: none;
-    outline: none;
-    box-shadow: inset 0 1px 2px rgba(22, 32, 64, .12);
-    filter: none;
-    transform: none;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    position: relative !important;
+    display: inline-block !important;
+    flex: none !important;
+    box-sizing: border-box !important;
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 23px !important;
+    min-height: 23px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    border-radius: 999px !important;
+    background: #dfe3ec !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: inset 0 1px 2px rgba(22, 32, 64, .12) !important;
+    filter: none !important;
+    transform: none !important;
     cursor: pointer;
     transition: background .3s, box-shadow .3s;
 }
+/* 圆形拨钮 */
 #st_ai_float_panel .st_ai_checkbox input[type="checkbox"]::before {
-    content: '';
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 17px;
-    height: 17px;
-    border-radius: 50%;
-    background: #fff;
-    box-shadow: 0 1px 3px rgba(22, 32, 64, .3);
-    clip-path: none;
-    transform: none;
+    content: '' !important;
+    display: block !important;
+    position: absolute !important;
+    top: 3px !important;
+    left: 3px !important;
+    width: 17px !important;
+    height: 17px !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 50% !important;
+    background: #fff !important;
+    box-shadow: 0 1px 3px rgba(22, 32, 64, .3) !important;
+    clip-path: none !important;
+    transform: none !important;
     transition: transform .45s var(--st-ai-spring);
 }
+/* 有的主题会在 ::after 里画对勾 */
+#st_ai_float_panel .st_ai_checkbox input[type="checkbox"]::after { content: none !important; display: none !important; }
 #st_ai_float_panel .st_ai_checkbox input[type="checkbox"]:checked {
-    background: linear-gradient(90deg, #7ed8b8, #6fbef5);
-    box-shadow: 0 4px 12px -4px rgba(79, 176, 255, .7);
+    background: linear-gradient(90deg, #7ed8b8, #6fbef5) !important;
+    box-shadow: 0 4px 12px -4px rgba(79, 176, 255, .7) !important;
 }
-#st_ai_float_panel .st_ai_checkbox input[type="checkbox"]:checked::before { transform: translateX(17px); }
-#st_ai_float_panel .st_ai_checkbox input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 4px rgba(95, 150, 255, .25); }
+#st_ai_float_panel .st_ai_checkbox input[type="checkbox"]:checked::before { transform: translateX(17px) !important; }
+#st_ai_float_panel .st_ai_checkbox input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 4px rgba(95, 150, 255, .25) !important; }
 
 /* 按钮 */
 .st_ai_btn {
