@@ -10,7 +10,7 @@ import {
 import { RE } from '../core/constants.js';
 import { getChat, getCurrentChatId, getGalleryFolder, getRequestHeadersWithCsrf, invalidateCsrfToken } from '../st/context.js';
 import { MEDIA_TAG_SOURCE, parseMediaTag, sanitizeMediaSrc } from '../media/tags.js';
-import { findHistoryByImageUrl, findHistoryByMediaUrl, getHistoryItem, importChatEntries, isHistoryDismissed, saveToHistory } from './chat-store.js';
+import { findHistoryByMediaUrl, getHistoryItem, importChatEntries, saveToHistory } from './chat-store.js';
 
 /** 同一地址并发登记时复用同一个任务，避免重复入库。 */
 const ensureTasks = new Map();
@@ -60,33 +60,6 @@ export async function saveGeneratedImage(entry, { force = false, expectedChatId 
     return { saved, imageUrl, serverImageUrl };
 }
 
-/** 媒体库里没有这张图就补一条记录，有就直接返回。 */
-export async function ensureHistoryEntryForImageUrl(imageUrl, defaults = {}) {
-    const safeUrl = normalizeGalleryImageUrl(imageUrl);
-    if (!safeUrl) return null;
-    if (isHistoryDismissed({ imageUrl: safeUrl })) return null;
-    const chatId = getCurrentChatId();
-    const key = `${chatId}:${safeUrl}`;
-    if (ensureTasks.has(key)) return ensureTasks.get(key);
-
-    const task = (async () => {
-        const existing = await findHistoryByImageUrl(safeUrl);
-        if (existing) return existing;
-        if (getCurrentChatId() !== chatId) return null;
-        return saveToHistory({
-            prompt: defaults.prompt || '',
-            imageUrl: safeUrl,
-            timestamp: defaults.timestamp || Date.now(),
-            model: defaults.model,
-            size: defaults.size,
-        }, { force: true });
-    })();
-
-    ensureTasks.set(key, task);
-    try { return await task; }
-    finally { ensureTasks.delete(key); }
-}
-
 /** 生成后登记语音/视频地址，不把大文件塞进聊天文件。 */
 export async function saveMediaToHistory(mediaUrl, kind, prompt = '') {
     const safeUrl = sanitizeMediaSrc(mediaUrl);
@@ -132,10 +105,6 @@ function renderedChatImages() {
             imageUrl: normalizeGalleryImageUrl(img.getAttribute('src') || img.currentSrc || img.src),
         }))
         .filter((image) => isUserImagesUrl(image.imageUrl) && /(?:^|\/)st-ai-image-\d+(?:-[a-z0-9]+)?\./i.test(image.imageUrl));
-}
-
-export async function syncRenderedChatImages() {
-    return importChatEntries(renderedChatImages());
 }
 
 /**

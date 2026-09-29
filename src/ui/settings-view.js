@@ -345,7 +345,3 @@ export async function bindSettingsForm(onChange) {
     });
 }
 
-/** 外部改了设置（比如预设、图库超时）后刷新表单显示。 */
-export async function refreshSettingsForm() {
-    fillForm(await getSettings());
-}

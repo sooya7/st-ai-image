@@ -19,8 +19,6 @@ export function getTaskKey(messageId, originalTag) {
 
 export const isPending = (key) => pending.has(key);
 
-export const pendingCount = () => pending.size;
-
 export const getTask = (key) => pending.get(key) || null;
 
 /** 更新进行中任务的附加信息（如进度文字），任务不存在时什么都不做。 */
@@ -57,9 +55,4 @@ export function startStaleCleaner() {
     if (cleaner) return cleaner;
     cleaner = setInterval(() => sweepStaleTasks(), LIMITS.taskMaxAgeMs);
     return cleaner;
-}
-
-export function stopStaleCleaner() {
-    if (cleaner) clearInterval(cleaner);
-    cleaner = null;
 }

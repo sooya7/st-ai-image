@@ -222,25 +222,19 @@ enableCorsProxy: true
 
 本机 Node.js 24.14.1、Chromium 147.0.7727.15、SillyTavern 1.18.0。
 
-**单元测试** `npm test`：114/114 通过（2026-09-28）（标签解析/定位/改写、合并正则、协议请求、代理改写、文件头识别、视频任务轮询等）。
+**单元测试** `npm test`：131/131 通过（2026-09-30）（标签解析/定位/改写、合并正则、协议请求、代理改写、文件头识别、视频任务轮询等）。
 
-**模拟宿主浏览器测试** `python tests/inline-media-ui.py --output <目录>`：18 组通过（2026-09-28）。模拟 ST 的 markdown 拆分、`updateMessageBlock`、`saveChat`、`saveSettingsDebounced`、`/api/files/upload`+CSRF，以及与真实 ST 一样不带 Content-Type 的 `/proxy/`。结果见 `docs/verification/inline-media-result.json`。
+**模拟宿主浏览器测试** `python tests/inline-media-ui.py --output <目录>`：21 组通过（2026-09-30）。模拟 ST 的 markdown 拆分、`updateMessageBlock`、`saveChat`、`saveSettingsDebounced`、`/api/files/upload`+CSRF，以及与真实 ST 一样不带 Content-Type 的 `/proxy/`。结果见 `docs/verification/inline-media-result.json`。
 
-**真实 SillyTavern 1.18.0**（独立数据目录，媒体服务为本地模拟）：8 项通过，扩展报错 0：
+**真实 SillyTavern 1.18.0**（独立数据目录，媒体服务为本地模拟）：8 项通过，扩展报错 0（2026-09-30 重跑）：
 
 - ST 的 markdown 把标签拆进 `<q>`/`<em>` 后，仍正确识别成按钮；
 - 设置经 `saveSettingsDebounced` 写入磁盘上的 `settings.json`；
 - 配音：浏览器直连 → 真实 `/api/files/upload` → `src` 写进 `.jsonl` 聊天文件 → 从 `/user/files` 播放；
 - 视频：全部请求经真实 `/proxy/` 转发（带密钥和版本头），无 Content-Type 的 WebM 按文件头识别，保存并内嵌播放；
 - 刷新后重新进入聊天，两个播放器从聊天记录恢复，设置从服务器恢复；
-- 确认旧代码的 CSRF 头重复问题（重复 → 403，单个 → 200），修复后「存入图库」能上传到 `user/images/<角色名>/`。
+- 确认旧代码的 CSRF 头重复问题（重复 → 403，单个 → 200）；正文里生成的图片自动入库（按钮显示「查看媒体库」），并上传到 `user/images/<角色名>/`。
 
 结果见 `docs/verification/real-st-result.json` 和截图。
 
-**未验证**：真实厂商接口。Fish Audio、Agnes 的协议照 SOOYA 线上实现（kaze1 `packages/server/src/providers/{tts,video}.ts`）写成，CORS 已实测（Fish 不允许浏览器直连，Agnes、mikoto 允许），但还没用真实密钥跑通一次完整生成、真实语音与视频质量、Safari/iOS。
-
-## 这次顺带修复的原有问题
-
-- 设置只写进内存、从不调用 `saveSettingsDebounced`，刷新前填写的密钥可能丢失。
-- 上传到酒馆图库时 CSRF 头重复（`X-CSRF-Token` 与 `x-csrf-token` 被 fetch 合并成 `"t, t"`），「存入图库」一直上传失败，静默退回原始地址。
-- 图库文件夹按角色名分类失效：ST 的 `characterId` 是字符串。
+**真实厂商接口**：2026-09-27 用 SOOYA 的三个真实渠道各跑通过一次完整生成（mikoto 生图直连、Fish 配音经酒馆代理、Agnes 视频直连并做了断线续查），证据在 `docs/verification/real-vendor-*.json` 和截图。其他厂商只用假密钥验证过能连通（见「服务一览」）；Safari / iOS 没测过。

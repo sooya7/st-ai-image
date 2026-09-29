@@ -1,7 +1,6 @@
 /** 当前聊天的媒体索引。文件本体仍存放在 SillyTavern 的 user/images、user/files。 */
 import { EVENTS, emit } from '../core/bus.js';
 import { log, notify } from '../core/notify.js';
-import { normalizeGalleryImageUrl } from '../core/text.js';
 import { sanitizeMediaSrc } from '../media/tags.js';
 import { getContext, getCurrentChatId } from '../st/context.js';
 import {
@@ -42,16 +41,6 @@ export async function getHistoryItem(id) {
 }
 
 export { getLegacyHistory };
-
-export function isHistoryDismissed(entry) {
-    const item = normalizeHistoryEntry(entry);
-    return deleted().includes(deletedKey(item)) || deleted().includes(keyOf(item));
-}
-
-export async function findHistoryByImageUrl(url) {
-    const normalized = normalizeGalleryImageUrl(url);
-    return (await getHistory()).find((item) => item.type === 'image' && normalizeGalleryImageUrl(item.imageUrl) === normalized) || null;
-}
 
 export async function findHistoryByMediaUrl(url, type) {
     const safe = sanitizeMediaSrc(url);

@@ -27,7 +27,6 @@ export const DEFAULT_BASES = {
     fal: 'https://queue.fal.run', replicate: 'https://api.replicate.com/v1',
 };
 
-export const AGNES_BASE = 'https://apihub.agnes-ai.com/v1';
 export const isAgnesBase = (base) => { try { return /(^|\.)agnes-ai\.com$/i.test(new URL(String(base)).hostname); } catch { return false; } };
 
 /** 走 OpenAI /videos 任务协议（查询 /videos/{id}、下载 /videos/{id}/content）的服务。 */

@@ -1,11 +1,11 @@
 /**
- * 媒体库索引。只存文件地址和说明，不存视频/音频本体；写失败时降级到 localStorage。
- * 数据库名/版本/store 名与 v1 一致，老用户升级后媒体库不丢。
+ * 旧版媒体库（IndexedDB，当年写失败时降级到 localStorage）。新生成的内容记在聊天元数据里（chat-store.js），
+ * 这里只剩读取和删除，给升级前的老记录用。数据库名/版本/store 名与 v1 一致，老用户升级后媒体库不丢。
  */
-import { DB_NAME, DB_VERSION, FALLBACK_HISTORY_KEY, LIMITS, STORE_NAME } from '../core/constants.js';
+import { DB_NAME, DB_VERSION, FALLBACK_HISTORY_KEY, STORE_NAME } from '../core/constants.js';
 import { EVENTS, emit } from '../core/bus.js';
 import { log, notify } from '../core/notify.js';
-import { normalizeGalleryImageUrl, sanitizeImageUrl } from '../core/text.js';
+import { sanitizeImageUrl } from '../core/text.js';
 import { sanitizeMediaSrc } from '../media/tags.js';
 
 export const historyUrl = (item) => item?.type === 'audio' || item?.type === 'video' ? item.mediaUrl : item?.imageUrl;
@@ -34,18 +34,8 @@ function writeDismissed(keys) {
     catch { /* 浏览器禁止写入时仍可删除当前记录 */ }
 }
 
-export function isHistoryDismissed(entry) {
-    const key = entryKey(entry);
-    return !!key && dismissedKeys().includes(key);
-}
-
 function dismissHistory(entries) {
     writeDismissed([...dismissedKeys(), ...entries.map(entryKey).filter(Boolean)]);
-}
-
-function restoreHistory(entry) {
-    const key = entryKey(entry);
-    if (key) writeDismissed(dismissedKeys().filter((item) => item !== key));
 }
 
 function openDB() {
@@ -120,21 +110,6 @@ function getFallbackHistory() {
     catch { return []; }
 }
 
-function saveFallbackHistoryEntry(entry) {
-    if (typeof localStorage === 'undefined') return null;
-    const id = entry?.id || `fallback-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const item = normalizeHistoryEntry(entry, id);
-    if (!historyUrl(item)) return null;
-    try {
-        const items = mergeHistoryItems([item, ...getFallbackHistory()]).slice(0, LIMITS.maxHistoryItems);
-        localStorage.setItem(FALLBACK_HISTORY_KEY, JSON.stringify(items));
-        return item;
-    } catch (e) {
-        log.error('降级媒体库写入失败:', e);
-        return null;
-    }
-}
-
 /* ---------- 读 ---------- */
 
 async function getIndexedDbHistory() {
@@ -161,73 +136,7 @@ export async function getHistoryItem(id) {
     catch { return null; }
 }
 
-/**
- * 按图片地址找记录。normalize 可替换，默认按酒馆图库地址归一化，
- * 这样同一张图的绝对/相对地址都能命中。
- */
-export async function findHistoryByImageUrl(normalizedUrl, normalize = normalizeGalleryImageUrl) {
-    const target = normalize(normalizedUrl);
-    if (!target) return null;
-    const history = await getHistory();
-    return history.find((item) => item.type === 'image' && normalize(item.imageUrl) === target) || null;
-}
-
-export async function findHistoryByMediaUrl(mediaUrl, type) {
-    const url = sanitizeMediaSrc(mediaUrl);
-    if (!url || !['audio', 'video'].includes(type)) return null;
-    return (await getHistory()).find((item) => item.type === type && item.mediaUrl === url) || null;
-}
-
-/* ---------- 写 ---------- */
-
-async function addHistoryEntry(entry) {
-    const item = normalizeHistoryEntry(entry, undefined);
-    const id = await withStore('readwrite', (store) => request(store.add(item)));
-    trimHistory();
-    return { ...item, id };
-}
-
-/**
- * 只有 force 才真正落库：临时展示的图片不进媒体库，由用户点"存入媒体库"决定。
- * @returns 落库后的条目（含 id），失败且降级也失败时返回 null
- */
-export async function saveToHistory(entry, { force = false } = {}) {
-    if (!force) return null;
-    if (!historyUrl(normalizeHistoryEntry(entry))) return null;
-    try {
-        const saved = await addHistoryEntry(entry);
-        restoreHistory(entry);
-        emit(EVENTS.galleryChanged);
-        return saved;
-    } catch (e) {
-        log.error('媒体库保存失败，尝试降级:', e);
-        const fallback = saveFallbackHistoryEntry(entry);
-        if (fallback) {
-            restoreHistory(entry);
-            emit(EVENTS.galleryChanged);
-            emit(EVENTS.storageDegraded);
-        } else {
-            // 两条通道都失败：手机端看不到 console，必须弹出真实原因
-            notify.error(`媒体库保存失败: ${e?.message || e}`, 'AI 生图', { timeOut: 8000 });
-        }
-        return fallback;
-    }
-}
-
-export async function trimHistory(retry = 0) {
-    try {
-        const items = await getHistory();
-        if (items.length <= LIMITS.maxHistoryItems) return;
-        const stale = items.slice(LIMITS.maxHistoryItems).filter((item) => Number.isInteger(Number(item.id)));
-        await withStore('readwrite', (store) => {
-            for (const item of stale) store.delete(Number(item.id));
-        });
-    } catch (e) {
-        log.warn('裁剪媒体库失败:', e);
-        if (retry < 1) setTimeout(() => trimHistory(retry + 1), 1000);
-        else log.error('裁剪媒体库重试后仍失败，条数可能超限');
-    }
-}
+/* ---------- 删 ---------- */
 
 export async function deleteHistoryItem(id) {
     try {
@@ -247,40 +156,3 @@ export async function deleteHistoryItem(id) {
     }
 }
 
-/** 编辑提示词。记录不存在不算失败——正文那边的更新仍应继续。 */
-export async function updateHistoryItemPrompt(id, prompt) {
-    const numericId = Number(id);
-    if (!Number.isInteger(numericId)) return false;
-    try {
-        const updated = await withStore('readwrite', async (store) => {
-            const item = await request(store.get(numericId));
-            if (!item) return false;
-            item.prompt = String(prompt ?? '');
-            // store 有 keyPath，put 不能再显式传 key（会抛 DataError）
-            await request(store.put(item));
-            return true;
-        });
-        emit(EVENTS.galleryChanged);
-        return updated;
-    } catch (e) {
-        log.warn('更新媒体库提示词失败:', e);
-        return false;
-    }
-}
-
-export async function clearHistory() {
-    try {
-        const entries = await getHistory();
-        let dbCleared = false;
-        try { await withStore('readwrite', (store) => store.clear()); dbCleared = true; }
-        catch (e) { log.warn('清空 IndexedDB 媒体库失败，尝试清空降级记录:', e); }
-        localStorage.removeItem(FALLBACK_HISTORY_KEY);
-        if (!dbCleared && entries.some((item) => !String(item.id).startsWith('fallback-'))) return false;
-        dismissHistory(entries);
-        emit(EVENTS.galleryChanged);
-        return true;
-    } catch (e) {
-        log.warn('清空媒体库失败:', e);
-        return false;
-    }
-}

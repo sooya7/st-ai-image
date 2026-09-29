@@ -11,8 +11,6 @@ export function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (ch) => ESCAPES[ch]);
 }
 
-export const escapeAttr = escapeHtml;
-
 /**
  * 图片地址白名单：只放过 data:image、blob:、http(s):。
  * 其它（javascript:、data:text/html 等）一律返回空字符串。

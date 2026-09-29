@@ -10,6 +10,7 @@
 - 配音按钮改叫「生成语音」，和「生成图片」「生成视频」统一；按钮上不显示情绪（情绪在悬停提示里，照样送给配音接口）。
 - 描边、大小、投影、播放胶囊都保持原版。用户只点名了图标和情绪注释，顺手改别处被否过两次。
 - 验证：`npm test` 131 项、`inline-media-ui.py` 21 组通过；另用 Playwright `page.route` 挂出仓库，直接 import `createMediaElement`，套用户主题截图核对。
+- 同一天清理了仓库里的历史堆积：删掉根目录 4 个早期生图提示词 / 世界书文件（已被内置默认提示词和自动注入取代）、`docs/superpowers/` 里 6 月的设计和计划文档、一批从没被调用的函数（包括 `gallery/db.js` 里旧版媒体库的写入和查询，现在它只负责读取和删除升级前的老记录）；`docs/verification/` 里模拟宿主和真实酒馆两组证据用当前代码重跑后替换，真实渠道那组（付费接口实测）保留。
 
 ## 0. 2026-09-29 界面重做（分支 `feat/ui-redesign`）
 
@@ -28,22 +29,23 @@
 - 验证：`npm test` 131 项、`inline-media-ui.py` 21 组、`real-st-check.py` 8 项（SillyTavern 1.19，独立数据目录 + `--corsProxy true`）全部通过；聊天静止、面板关闭时 `document.getAnimations()` 里扩展的运行中动画为 0。
 - `real-st-check.py` 最后一步原来点「存入图库」，9f9f7ef 起图片自动入库、按钮已变成「查看媒体库」，改版前在 master 上就会失败；已改成等自动入库后核对文件。
 
-**当前状态：2.2.0，图片 / 配音 / 视频都嵌在聊天正文里生成，面板里的语音、视频页只做设置。2026-09-28：114 项单元测试、18 组模拟宿主浏览器测试通过（8 项真实 SillyTavern 1.18.0 验收是 2.2.0 时做的），SOOYA 三个真实渠道各完成一次端到端生成：mikoto 生图（直连）、Fish 配音（经酒馆代理）、Agnes 视频（直连，含断线续查）。已合入 `master`（未建 PR，直接本地合并推送）。** 使用说明与验证结果见 [docs/MEDIA.md](docs/MEDIA.md)，真实渠道证据在 `docs/verification/real-vendor-*.json`。
+**当前状态：2.2.0，图片 / 配音 / 视频都嵌在聊天正文里生成，面板里的语音、视频页只做设置。2026-09-30：`npm test` 131 项、模拟宿主浏览器测试 21 组、真实 SillyTavern 1.18.0（独立数据目录）8 项通过；SOOYA 三个真实渠道 2026-09-27 各完成过一次端到端生成：mikoto 生图（直连）、Fish 配音（经酒馆代理）、Agnes 视频（直连，含断线续查）。代码都在 `master`，GitHub 上只有这一个分支。** 使用说明与验证结果见 [docs/MEDIA.md](docs/MEDIA.md)，真实渠道证据在 `docs/verification/real-vendor-*.json`。
 
 ## 1. 项目入口与用户要求
 
 - 本机项目目录：`C:\Users\iulze\Documents\Codex\2026-09-26\new-chat-2\outputs\st-ai-image`
 - 仓库：<https://github.com/sooya7/st-ai-image>，主分支 `master`（没有 `main`，用户明确要求沿用 `master`）
-- 当前本地分支：`feat/media-generation`，起点 `cd64311`（PR #1 合并提交），所有改动都未提交
+- 分支：只有 `master`。合并完的功能分支 2026-09-30 已删除，提交都在 master 里。
 - 用户需求演进：
   1. 在原生图扩展上加语音、视频生成，不拖慢酒馆，补充常见生图接口；
   2. 「先做一个」→ 上一轮先做了面板里的手动语音页，随后又做了面板视频页；
-  3. **「跟原版的图片一样都嵌入聊天里，不要单独的界面，界面只用来设置」** → 本轮改成当前形态，面板里的生成界面已删除（旧文件备份在 `work/pre-inline-backup/`）。
+  3. **「跟原版的图片一样都嵌入聊天里，不要单独的界面，界面只用来设置」** → 本轮改成当前形态，面板里的生成界面已删除（旧文件备份在仓库外的 `work/pre-inline-backup/`）。
 - 本机真实酒馆：`D:\SillyTavern\SillyTavern`（1.18.0，数据在 `data/default-user`，端口 8000）。**本扩展没有安装到这里**；验收用的是同一安装以独立数据目录另起的实例，没有动用户的数据和配置。
+- 用户日常用 **TauriTavern**（`%LOCALAPPDATA%\TauriTavern\tauritavern.exe`，数据在 `%APPDATA%\com.tauritavern.client\data`）。扩展是 git 克隆，装在 `data/extensions/third-party/st-ai-image`，跟着 GitHub 的 master；推送后在扩展管理里更新，再刷新页面。TauriTavern 没有 `/proxy/`，外部请求都由 WebView 直接发。
 
 ## 2. 已合并的历史
 
-- PR #1（`refactor/v2-modular` → `master`）已合并，merge commit `cd64311e4b628e8e5bda79a44993da64f05a9b2f`，未删除原分支。
+- PR #1（`refactor/v2-modular` → `master`）已合并，merge commit `cd64311e4b628e8e5bda79a44993da64f05a9b2f`；原分支 2026-09-30 已删除。
 
 ## 3. 现在的实现
 
@@ -96,10 +98,10 @@
 
 ```powershell
 Set-Location 'C:\Users\iulze\Documents\Codex\2026-09-26\new-chat-2\outputs\st-ai-image'
-npm test                                                    # 63 项
-python tests/inline-media-ui.py --output ./test-output      # 模拟宿主 18 组（需要 Playwright；ffmpeg 可选）
+npm test                                                    # 131 项
+python tests/inline-media-ui.py --output ./test-output      # 模拟宿主 21 组（需要 Playwright；ffmpeg 可选）
 python tests/real-st-check.py --st http://127.0.0.1:8123 --data <临时数据目录> --output ./test-output
-# 真实渠道（各调一次付费接口，脚本在工作区 work/ 下，不在仓库）：
+# 真实渠道（各调一次付费接口，脚本在仓库外的 work/ 下）：
 python ..\..\work\real-vendor-check.py  --st http://127.0.0.1:8123 --data <临时数据目录> --output <结果目录>
 python ..\..\work\real-vendor-resume.py --st http://127.0.0.1:8123 --data <临时数据目录> --output <结果目录>  # 复用已完成的任务做续查，不再计费
 ```
@@ -131,5 +133,4 @@ python ..\..\work\real-vendor-resume.py --st http://127.0.0.1:8123 --data <临�
 
 ## 8. 下一步
 
-1. 已合入 `master`（2026-09-27，直接本地合并推送，没有走 PR）。`feat/media-generation` 分支保留。
-2. 按用户需要再考虑：每条消息的朗读按钮、旧文件清理、视频服务端取消接口。
+按用户需要再考虑：每条消息的朗读按钮、视频服务端取消接口。另外 `/videos` 兼容流程（Agnes 等）出错时 `requestData` 不读响应体，报错里只有「HTTP 503：服务请求失败」，看不到服务端给的原因（2026-09-30 遇到过一次）；需要排查时给这条路径打开 `readError`。
