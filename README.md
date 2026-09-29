@@ -2,7 +2,7 @@
 
 在聊天正文里生成图片、配音和视频的 SillyTavern 扩展。AI 回复中的 `[image]`、`[voice]`、`[video]` 标签会变成按钮，点一下就在原位生成，结果写回聊天记录。
 
-当前改动在 `feat/media-gallery` 本地分支，尚未推送；从远端默认分支安装不会包含这些改动。
+当前媒体库改动已合并到默认分支 `master`，可以直接从仓库地址安装。
 
 ## 功能
 
@@ -25,7 +25,7 @@
    ```
    https://github.com/sooya7/st-ai-image
    ```
-3. 当前 2.2.0 尚未推送，请使用本地安装包：把压缩包里的 `st-ai-image` 目录放进 `data/<用户>/extensions/`（仅当前用户）或 `public/scripts/extensions/third-party/`（全局），然后刷新酒馆。不要放进服务端的 `plugins/` 目录；已有旧版时先把旧目录移出扩展目录，避免同时加载两份。
+3. 安装或更新后刷新酒馆。手动安装时，把 `st-ai-image` 目录放进 `data/<用户>/extensions/`（仅当前用户）或 `public/scripts/extensions/third-party/`（全局）；不要放进服务端的 `plugins/` 目录，也不要同时保留两份扩展。
 
 ## 使用
 
