@@ -35,7 +35,7 @@ let eventsBound = false;
 export function processMessageElement(node, { allowImageRequests = true } = {}) {
     const text = node.textContent;
     if (node.dataset.stGptProcessed === '1') {
-        if (node.dataset.stGptText === text) return false; // 内容没变，已处理过
+        if (node.dataset.stGptText === text) return false; // 渲染后的内容没变，已处理过
         delete node.dataset.stGptProcessed; // 流式输出又追加了内容，重新处理
     }
     if (!hasInlineRenderableTag(text)) return false; // 廉价预筛
@@ -104,7 +104,9 @@ export function processMessageElement(node, { allowImageRequests = true } = {}) 
     }
 
     node.dataset.stGptProcessed = '1';
-    node.dataset.stGptText = text;
+    // 缓存替换后的文字。宿主可能保留这个元素、把同一段原文重新写回；
+    // 若缓存原文，就会误认为已处理，让恢复出来的媒体标签一直留在正文里。
+    node.dataset.stGptText = node.textContent;
     return true;
 }
 
