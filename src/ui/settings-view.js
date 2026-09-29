@@ -12,6 +12,7 @@ import {
     getPresets, getSettings, removePreset, saveSettings, updateSetting, upsertPreset,
 } from '../settings.js';
 import { debounce, el, qs, replaceContent, setBusy } from './dom.js';
+import { flushPromptPresetEdits, refreshPromptPresets } from './prompt-presets-view.js';
 
 /** 表单字段 → 设置键。text/textarea 走防抖 input，其余走 change。 */
 const FIELDS = [
@@ -46,6 +47,7 @@ function fillForm(settings) {
     const timeout = qs('#st_gpt_image_timeout');
     if (timeout) timeout.value = String(clampSeconds(Number(settings.imageTimeout || LIMITS.imageGenTimeoutMs) / 1000));
     syncProviderFields(settings.imageProvider, settings);
+    refreshPromptPresets();
 }
 
 const OPENAI_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
@@ -231,6 +233,7 @@ export async function bindSettingsForm(onChange) {
     // 文本框是防抖保存的；换接口、套预设前先把还没保存的立刻存进当前接口
     const pending = [];
     const flushPending = async () => {
+        await flushPromptPresetEdits();
         for (const save of pending) save.cancel();
         for (const field of FIELDS.filter((f) => f.kind === 'text')) {
             const node = qs(`#${field.id}`);
@@ -270,8 +273,9 @@ export async function bindSettingsForm(onChange) {
     }
     // 换接口：地址、Key、模型、额外参数、尺寸换成这个接口上次的（中转类接口共用一组）
     qs('#st_gpt_image_provider')?.addEventListener('change', async (e) => {
+        const next = e.target.value;
         await flushPending();
-        await saveSettings(switchImageProvider(await getSettings(), e.target.value));
+        await saveSettings(switchImageProvider(await getSettings(), next));
         renderModelOptions([]);
         fillForm(await getSettings());
         onChange?.('imageProvider');
@@ -344,4 +348,3 @@ export async function bindSettingsForm(onChange) {
         commit('model', model);
     });
 }
-

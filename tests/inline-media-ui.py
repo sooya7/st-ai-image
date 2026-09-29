@@ -790,6 +790,28 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     assert call['path'] == '/api/sd/comfy/generate' and call['csrf'] and call['url'] == 'http://127.0.0.1:8188', call
     assert call['texts'] == ['masterpiece, artist:wlop, thick paint, comfy cat', 'blurry'] and isinstance(call['seed'], int), call
     page.locator('#st_gpt_image_provider').select_option('sdwebui')
+    expect(page.locator('#st_ai_prompt_preset_select')).to_have_value('默认')
+    expect(page.locator('#st_ai_prompt_preset_prefix')).to_have_value('')
+    page.locator('#st_ai_prompt_preset_prefix').fill('webui style')
+    page.locator('#st_ai_prompt_preset_random').check()
+    # 400ms 内切接口：编辑应保存到 WebUI，ComfyUI 的预设和随机开关保持原样。
+    page.locator('#st_gpt_image_provider').select_option('comfyui')
+    expect(page.locator('#st_ai_prompt_preset_select')).to_have_value('厚涂')
+    expect(page.locator('#st_ai_prompt_preset_prefix')).to_have_value('artist:wlop,\nthick paint')
+    expect(page.locator('#st_ai_prompt_preset_random')).not_to_be_checked()
+    page.locator('#st_gpt_image_provider').select_option('novelai')
+    expect(page.locator('#st_ai_prompt_preset_prefix')).to_have_value('')
+    page.locator('#st_ai_prompt_preset_prefix').fill('nai style')
+    page.locator('#st_gpt_image_provider').select_option('openai')
+    expect(page.locator('#st_ai_prompt_preset_panel')).to_be_hidden()
+    expect(page.locator('.st_ai_card').filter(has=page.locator('#st_ai_prompt_preset_panel'))).to_be_hidden()
+    page.locator('#st_gpt_image_provider').select_option('gemini')
+    expect(page.locator('#st_ai_prompt_preset_panel')).to_be_hidden()
+    page.locator('#st_gpt_image_provider').select_option('novelai')
+    expect(page.locator('#st_ai_prompt_preset_prefix')).to_have_value('nai style')
+    page.locator('#st_gpt_image_provider').select_option('sdwebui')
+    expect(page.locator('#st_ai_prompt_preset_prefix')).to_have_value('webui style')
+    expect(page.locator('#st_ai_prompt_preset_random')).to_be_checked()
     expect(page.locator('#st_gpt_image_sd_auth')).to_be_visible()
     expect(page.locator('#st_gpt_image_comfy_workflow')).to_be_hidden()
     page.locator('#st_gpt_image_sd_auth').fill('user:pass')
@@ -803,10 +825,18 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
             break
         page.wait_for_timeout(100)
     call = SD_CALLS[-1]
-    assert call['path'] == '/api/sd/generate' and call['csrf'] and call['auth'] == 'user:pass' and call['prompt'] == 'artist:wlop, thick paint, webui dog' and call['url'] == 'http://127.0.0.1:7860', call
+    assert call['path'] == '/api/sd/generate' and call['csrf'] and call['auth'] == 'user:pass' and call['prompt'] == 'webui style, webui dog' and call['url'] == 'http://127.0.0.1:7860', call
     expect(page.locator('#st_gpt_gen_result img.st_gpt_gen_img')).to_have_count(1, timeout=10000)
     page.locator('#st_ai_prompt_preset_select').select_option('默认')
     page.wait_for_timeout(600)
+    load()
+    open_tab('generate')
+    expect(page.locator('#st_ai_prompt_preset_prefix')).to_have_value('webui style')
+    page.locator('#st_gpt_image_provider').select_option('comfyui')
+    expect(page.locator('#st_ai_prompt_preset_select')).to_have_value('厚涂')
+    expect(page.locator('#st_ai_prompt_preset_prefix')).to_have_value('artist:wlop,\nthick paint')
+    page.locator('#st_ai_prompt_preset_select').select_option('默认')
+    page.wait_for_timeout(500)
     close_panel()
 
     open_tab('video')

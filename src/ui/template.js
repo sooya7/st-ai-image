@@ -179,10 +179,10 @@ export const PANEL_HTML = `
                 </div>
             </section>
 
-            <section class="st_ai_card" data-tone="violet">
+            <section class="st_ai_card" data-tone="violet" data-show-for="novelai comfyui sdwebui">
                 <div class="st_ai_card_head">
                     <span class="st_ai_card_icon" aria-hidden="true"><i class="fa-solid fa-palette"></i></span>
-                    <div class="st_ai_card_titles"><h4 class="st_ai_card_title">画师串</h4><p class="st_ai_card_sub">前置、后置、负面提示词，可存多份、可随机</p></div>
+                    <div class="st_ai_card_titles"><h4 class="st_ai_card_title">画师串</h4><p class="st_ai_card_sub">每个接口单独保存，可存多份、可随机</p></div>
                 </div>
                 <div class="st_ai_field" id="st_ai_prompt_preset_panel"></div>
             </section>

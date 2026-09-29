@@ -54,10 +54,10 @@ test('画师串：拼成「前置, 描述, 后置」，换行变逗号、去掉�
 });
 
 test('迁移：旧的额外提示词/负面提示词搬进「默认」画师串，旧的单个工作流搬进「默认」工作流', () => {
-    const lib = readPromptPresets({ extraPrompt: 'masterpiece', negativePrompt: 'ugly' });
+    const lib = readPromptPresets({ imageProvider: 'novelai', extraPrompt: 'masterpiece', negativePrompt: 'ugly' });
     assert.deepEqual(lib.items.默认, { prefix: 'masterpiece', suffix: '', negative: 'ugly' });
     assert.equal(lib.random, false);
-    const saved = readPromptPresets({ extraPrompt: '旧的不再用', promptPresets: { 水彩: { prefix: 'watercolor' } }, promptPresetId: '水彩', promptPresetRandom: true });
+    const saved = readPromptPresets({ imageProvider: 'comfyui', extraPrompt: '旧的不再用', promptPresets: { 水彩: { prefix: 'watercolor' } }, promptPresetId: '水彩', promptPresetRandom: true });
     assert.deepEqual(Object.keys(saved.items), ['水彩']);
     assert.equal(saved.random, true);
     assert.deepEqual(readWorkflowLibrary(undefined, '', '{"1":{}}'), { items: { 默认: '{"1":{}}' }, active: '默认' });

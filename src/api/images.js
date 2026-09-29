@@ -8,7 +8,7 @@ import { apiFetch } from '../core/net.js';
 import { log } from '../core/notify.js';
 import { ensureSafeImageUrl, summarizeApiError } from '../core/text.js';
 import { needsKey } from '../media/keys.js';
-import { applyPromptPreset, pickPromptPreset, readPromptPresets, readWorkflowLibrary } from '../core/library.js';
+import { applyImagePromptPreset, readWorkflowLibrary } from '../core/library.js';
 import { getSettings } from '../settings.js';
 
 const pick = (img) => {
@@ -96,9 +96,8 @@ const isNetworkError = (e) => /Failed to fetch|Network|请求超时|请求失败
 export async function callImageAPI(prompt, { signal, onProgress } = {}) {
     const s = await getSettings();
     const base = normalizeApiBase(s.apiBase);
-    // 画师串：前置, 描述, 后置；负面单独给。开了随机就每张图随机挑一个有内容的
-    const presets = readPromptPresets(s);
-    const { prompt: fullPrompt, negative } = applyPromptPreset(prompt, pickPromptPreset(presets.items, presets.active, { random: presets.random }));
+    // 只在 NovelAI / ComfyUI / SD WebUI 使用各自的画师串，其他接口保留原始描述。
+    const { prompt: fullPrompt, negative } = applyImagePromptPreset(prompt, s);
 
     if (s.imageProvider === 'comfyui' || s.imageProvider === 'sdwebui') {
         const { generateMedia } = await import('../media/client.js');

@@ -117,10 +117,38 @@ export const isSingleWorkflow = (data) => !!data && typeof data === 'object' && 
 /* ---------- 从设置里读（带旧字段迁移） ---------- */
 
 /** 图片设置里的画师串。没存过时把旧的「额外提示词 / 负面提示词」搬进「默认」。 */
-export function readPromptPresets(s) {
+export const PROMPT_PRESET_PROVIDERS = ['novelai', 'comfyui', 'sdwebui'];
+export const supportsPromptPresets = (provider) => PROMPT_PRESET_PROVIDERS.includes(provider);
+
+function readLegacyPromptPresets(s) {
     const legacy = { [DEFAULT_NAME]: { prefix: s?.extraPrompt || '', suffix: '', negative: s?.negativePrompt || '' } };
     const lib = normalizeLibrary(s?.promptPresets ?? legacy, s?.promptPresetId, { normalizeItem: normalizePromptPreset, blank: blankPromptPreset });
     return { ...lib, random: s?.promptPresetRandom === true };
+}
+
+/** 每个支持的接口独立读库；旧全局库作为迁移来源，其他接口始终读到空库。 */
+export function readPromptPresets(s, provider = s?.imageProvider) {
+    if (!supportsPromptPresets(provider)) return { ...normalizeLibrary(null, '', { normalizeItem: normalizePromptPreset, blank: blankPromptPreset }), random: false };
+    const saved = s?.promptPresetProfiles?.[provider];
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return readLegacyPromptPresets(s);
+    return { ...normalizeLibrary(saved.items, saved.active, { normalizeItem: normalizePromptPreset, blank: blankPromptPreset }), random: saved.random === true };
+}
+
+/** 首次写入时给三个接口各留一份旧库，之后只改当前接口，避免旧内容丢失或互相覆盖。 */
+export function writePromptPresets(s, provider, library) {
+    if (!supportsPromptPresets(provider)) return s;
+    const profiles = Object.fromEntries(PROMPT_PRESET_PROVIDERS.map((key) => [key, readPromptPresets(s, key)]));
+    profiles[provider] = {
+        ...normalizeLibrary(library.items, library.active, { normalizeItem: normalizePromptPreset, blank: blankPromptPreset }),
+        random: library.random === true,
+    };
+    return { ...s, promptPresetProfiles: profiles };
+}
+
+export function applyImagePromptPreset(prompt, s, { rand = Math.random } = {}) {
+    if (!supportsPromptPresets(s?.imageProvider)) return { prompt, negative: '' };
+    const lib = readPromptPresets(s);
+    return applyPromptPreset(prompt, pickPromptPreset(lib.items, lib.active, { random: lib.random, rand }));
 }
 
 /** 工作流库。没存过时把旧的单个工作流搬进「默认」。 */
