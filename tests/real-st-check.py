@@ -267,13 +267,14 @@ def main():
         last_mes().locator('.st_gpt_inline_gen').click()
         page.wait_for_timeout(1500)
         expect(last_mes().locator('img.st_gpt_inline_img')).to_have_count(1, timeout=15000)  # 1×1 懒加载图，Playwright 视为不可见
-        last_mes().locator('[data-action="save-image"]').click()
+        # 生成后自动存进当前聊天媒体库（9f9f7ef 起），按钮直接是「查看媒体库」，不用再点「存入」
+        expect(last_mes().locator('[data-action="view-gallery"]')).to_have_count(1, timeout=15000)
         page.wait_for_timeout(2500)
         images = list((user / 'user' / 'images').rglob('st-ai-image-*.png'))
         assert images, 'no image uploaded to ST gallery'
         assert any(img.parent.name == char_name for img in images), [str(i) for i in images]  # 按角色名分文件夹
         mine = max((i for i in images if i.parent.name == char_name), key=lambda i: i.stat().st_mtime)
-        checks.append(f'Image "save to gallery" now uploads to ST user/images under the character folder ({mine.parent.name}/{mine.name})')
+        checks.append(f'Image generated inline is auto-saved (button shows "view gallery") and uploaded to ST user/images under the character folder ({mine.parent.name}/{mine.name})')
 
         bad = [e for e in console_errors if 'st-ai-image' in e or 'st_ai' in e]
         result = {'status': 'passed', 'checks': checks, 'mock_requests': len(LOG), 'extension_errors': bad}

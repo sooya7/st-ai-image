@@ -6,7 +6,7 @@ import { DEFAULT_SYSTEM_PROMPT } from '../core/constants.js';
 import { registerSystemPrompt } from '../inline/scanner.js';
 import { MEDIA_DEFAULTS, readMediaSettings } from '../media/media-settings.js';
 import { getSettings, saveSettings } from '../settings.js';
-import { debounce, el } from './dom.js';
+import { cardHead, debounce, el } from './dom.js';
 
 /** 图片设置是扁平字段，语音/视频是分区对象，这里抹平成同一套读写。 */
 const SECTIONS = {
@@ -49,8 +49,8 @@ export function buildPromptSection(id, settings) {
         onclick: () => { text.value = section.fallback; update(section, { prompt: section.fallback }); },
     });
 
-    return el('section', { class: 'st_ai_prompt_section', dataset: { section: id } }, [
-        el('h4', { class: 'st_ai_section_title', text: section.title }),
+    return el('section', { class: 'st_ai_card st_ai_prompt_section', dataset: { section: id, tone: 'lemon' } }, [
+        cardHead('fa-robot', section.title, '注入系统提示词，让 AI 在回复里自己写标签'),
         el('label', { class: 'st_ai_checkbox' }, [toggle, el('span', { text: `让 AI 在回复里自己写 ${section.tag} 标签（注入系统提示词）` })]),
         el('details', { class: 'st_ai_prompt_details', id: eid('details') }, [
             el('summary', { text: '编辑提示词' }),

@@ -81,4 +81,6 @@ export function syncPromptDataset(root, prompt) {
     for (const node of root.querySelectorAll('[data-prompt]')) node.dataset.prompt = prompt;
     const img = root.querySelector('img');
     if (img) img.alt = prompt;
+    const caption = root.querySelector('.st_ai_img_caption');
+    if (caption) caption.dataset.text = prompt;
 }

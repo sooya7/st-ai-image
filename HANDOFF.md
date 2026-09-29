@@ -1,6 +1,22 @@
 # 酒馆多媒体插件：项目交接
 
-更新时间：2026-09-26（Asia/Shanghai）。接手前请重新检查 Git 与远端。
+更新时间：2026-09-29（Asia/Shanghai）。接手前请重新检查 Git 与远端。
+
+## 0. 2026-09-29 界面重做（分支 `feat/ui-redesign`）
+
+用户要求「用全部技术做一个好看到震撼的」。只改外观和动效，功能、设置项、数据格式、所有 id 都没动。设计与规则见 [docs/UI-DESIGN.md](docs/UI-DESIGN.md)。
+
+- 风格：初版深色「极光玻璃」用户觉得「太抽象」，要求「七彩的做得清新一点」，定稿为**浅色马卡龙七彩**：白色磨砂面板，七彩只做点缀（下划线、进度条、声波），图形都用具体的（画布网点、画笔、胶片齿孔、照片白边）。
+- **坑：酒馆 `.mes_text i` 会把正文里的 `<i>` 染成 `--SmartThemeEmColor`**，Font Awesome 图标也是 `<i>`，所以按钮里的图标会发灰；`style.css` 用 `.mes_text :where(...) i { color: inherit }` 修掉。
+
+- 新增 `src/ui/fx.js`：显影卡片、声波、比例换算、图片预加载、共用的等待计时（rAF，不留定时器）。
+- **坑：酒馆「快速 UI 模式」默认开启**，会给 body 加 `no-blur`，并用 `!important` 关掉所有 `backdrop-filter`。依赖毛玻璃的半透明层会透出背后的文字，所以 `style.css` 末尾给 `body.no-blur` 配了近乎不透明的底色。测试实例 `settings.json` 的 `power_user.fast_ui_mode` 为 true。
+- **坑：酒馆的 `.mes_text img:not(.mes_img)` 优先级 (0,2,1)**，会把正文图片的 max-height 撑到整屏；新样式用 `#chat .st_ai_img_frame > img.st_gpt_inline_img` 盖过去。
+- **坑：`replaceChildren(null)` 会把 null 画成文字**（`el()` 会滤掉，`replaceChildren` 不会）；`inline-media-ui.py` 加了断言。
+- 装饰性文字（提示词摘要、图片说明、视频描述）走 CSS `attr(data-text)`，不进 DOM 文本：扫描器靠比对 `.mes_text` 的文字判断要不要重扫。
+- 视频仍是 `preload=none`（测试断言，媒体文件只在播放时加载），封面是按描述取色的极光，不预读首帧。
+- 验证：`npm test` 131 项、`inline-media-ui.py` 20 组、`real-st-check.py` 8 项（SillyTavern 1.19，独立数据目录 + `--corsProxy true`）全部通过；聊天静止、面板关闭时 `document.getAnimations()` 里扩展的运行中动画为 0。
+- `real-st-check.py` 最后一步原来点「存入图库」，9f9f7ef 起图片自动入库、按钮已变成「查看媒体库」，改版前在 master 上就会失败；已改成等自动入库后核对文件。
 
 **当前状态：2.2.0，图片 / 配音 / 视频都嵌在聊天正文里生成，面板里的语音、视频页只做设置。2026-09-28：114 项单元测试、18 组模拟宿主浏览器测试通过（8 项真实 SillyTavern 1.18.0 验收是 2.2.0 时做的），SOOYA 三个真实渠道各完成一次端到端生成：mikoto 生图（直连）、Fish 配音（经酒馆代理）、Agnes 视频（直连，含断线续查）。已合入 `master`（未建 PR，直接本地合并推送）。** 使用说明与验证结果见 [docs/MEDIA.md](docs/MEDIA.md)，真实渠道证据在 `docs/verification/real-vendor-*.json`。
 

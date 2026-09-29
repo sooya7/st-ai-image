@@ -84,7 +84,6 @@ export function mountPromptPresets(root) {
     });
 
     root.replaceChildren(el('div', { class: 'st_ai_prompt_presets' }, [
-        el('label', { for: 'st_ai_prompt_preset_select', text: '画师串（提示词预设）' }),
         control.node,
         ...FIELDS.map(([key, label]) => el('div', { class: 'st_ai_field st_ai_prompt_textarea_field' }, [el('label', { for: areas[key].id, text: label }), areas[key]])),
         el('label', { class: 'st_ai_checkbox' }, [random, el('span', { text: '每张图随机用一个画师串（只从有内容的里面挑）' })]),

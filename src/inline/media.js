@@ -19,6 +19,7 @@ import { getSettings } from '../settings.js';
 import { getMessageIdFromElement } from '../st/chat-dom.js';
 import { getCurrentChatId, getMessage, refreshMessageBlock, rewriteMessageText, saveChat } from '../st/context.js';
 import { delegate, el, icon } from '../ui/dom.js';
+import { decoText, developCard, hueOf, paintWave, setDevelopState, waveBars } from '../ui/fx.js';
 import { endTask, getTask, getTaskKey, isPending, startTask, updateTask } from './tasks.js';
 
 const LABEL = { audio: '配音', video: '视频' };
@@ -56,16 +57,45 @@ function clearJobRecord(messageId, jobKey) {
 
 // ---------- 渲染 ----------
 
-function generateButton(kind, text, key, resumable, hint = '') {
+/** 按钮里的迷你声波（配音）或场记板（视频）。 */
+const genIcon = (kind) => el('span', { class: 'st_ai_gen_icon' }, [kind === 'audio'
+    ? el('span', { class: 'st_ai_bars' }, [0.55, 1, 0.7, 0.9].map((h, i) => el('i', { style: { '--h': h, '--i': i } })))
+    : icon('fa-clapperboard')]);
+
+/**
+ * 把生成按钮画成对应状态：待生成 / 生成中 / 可续查。
+ * 视频生成中是一张 16:9 的显影卡片（带百分比和已等待时间），配音生成中是跳动的声波胶囊。
+ */
+function paintGenerateButton(button, { pending = false, label = '', startedAt, resumable = false, meta = '' } = {}) {
+    const kind = button.dataset.kind;
+    const text = button.dataset.text || '';
+    button.classList.toggle('st_ai_media_gen_pending', pending);
+    button.disabled = pending;
+    if (pending && kind === 'video') {
+        const card = button.querySelector('.st_ai_develop');
+        if (card) setDevelopState(card, label);
+        else button.replaceChildren(developCard({ kind: 'video', label: label || '生成中…', hint: text, startedAt }));
+        return button;
+    }
+    const idle = resumable ? '继续查询视频任务' : kind === 'audio' ? '配音' : '生成视频';
+    // replaceChildren 会把 null 当成文字 "null"，空的部件先滤掉
+    button.replaceChildren(...[
+        genIcon(kind),
+        el('span', { class: 'st_ai_gen_label', text: pending ? label || '生成中…' : idle }),
+        pending ? null : decoText('st_ai_media_meta', meta),
+    ].filter(Boolean));
+    return button;
+}
+
+function generateButton(kind, text, key, resumable, hint = '', meta = '') {
     const task = getTask(key);
-    const label = task ? task.label || '生成中…' : resumable ? '继续查询视频任务' : kind === 'audio' ? '配音' : '生成视频';
-    return el('button', {
+    const button = el('button', {
         type: 'button',
-        class: `st_ai_media_gen${task ? ' st_ai_media_gen_pending' : ''}`,
+        class: 'st_ai_media_gen',
         title: hint ? `${hint}：${text}` : text,
-        disabled: task ? true : undefined,
-        dataset: { taskKey: key, resume: resumable ? '1' : '' },
-    }, [icon(task ? 'fa-spinner fa-spin' : kind === 'audio' ? 'fa-volume-high' : 'fa-video'), ` ${label}`]);
+        dataset: { taskKey: key, resume: resumable ? '1' : '', kind, text },
+    });
+    return paintGenerateButton(button, { pending: !!task, label: task?.label, startedAt: task?.startedAt, resumable, meta });
 }
 
 function setLibraryButtonState(button, saved) {
@@ -100,6 +130,32 @@ function missing(wrapper, text) {
     wrapper.append(el('span', { class: 'st_ai_media_missing', text }));
 }
 
+/**
+ * 影院式视频卡片。不预读（preload=none，媒体文件只在播放时加载）：
+ * 播放前是按描述取色的极光封面 + 大号玻璃播放键；开播后交给原生控件。
+ */
+function videoFrame(wrapper, info) {
+    const video = el('video', { class: 'st_ai_inline_video', playsinline: true, preload: 'none', src: info.src, title: info.text });
+    const play = el('button', { type: 'button', class: 'st_ai_video_play', title: '播放视频', 'aria-label': '播放视频' },
+        [el('span', { class: 'st_ai_video_play_btn' }, [icon('fa-play')])]);
+    const frame = el('span', { class: 'st_ai_video_frame', style: { '--st-ai-hue': hueOf(info.text) } }, [
+        video,
+        el('span', { class: 'st_ai_video_badge', 'aria-hidden': 'true', dataset: { text: 'AI 视频' } }, [icon('fa-clapperboard')]),
+        decoText('st_ai_video_caption', info.text),
+        play,
+    ]);
+    play.addEventListener('click', (e) => {
+        e.stopPropagation();
+        video.controls = true;
+        video.play().catch((error) => { if (error?.name !== 'AbortError') log.warn('视频播放失败:', error); });
+    });
+    // 不管是点封面、原生控件还是脚本调用 play()，开播后都收起封面、露出原生控件
+    video.addEventListener('play', () => { video.controls = true; frame.classList.add('is-started'); });
+    video.addEventListener('ended', () => frame.classList.remove('is-started'));
+    video.addEventListener('error', () => missing(wrapper, '视频文件不存在或无法播放，可重新生成'), { once: true });
+    return frame;
+}
+
 /** 按 dataset 里的标签把容器画成「按钮」或「播放器」。 */
 export function renderMediaWrapper(wrapper, { error = '' } = {}) {
     const info = parseMediaTag(wrapper.dataset.tag);
@@ -114,13 +170,16 @@ export function renderMediaWrapper(wrapper, { error = '' } = {}) {
 
     if (info.kind === 'audio') {
         const controls = info.src && !pending
-            ? [el('button', { type: 'button', class: 'st_ai_media_icon st_ai_media_play', title: '播放', 'aria-label': '播放配音', dataset: { src: info.src } }, [icon('fa-play')]), ...actionButtons('audio', info.src)]
-            : [generateButton('audio', info.text, key, false, [info.speaker, info.voiceType, info.emotion].filter(Boolean).join(' · '))];
-        wrapper.append(el('span', { class: 'st_ai_media_controls' }, controls), el('span', { class: 'st_ai_voice_text', text: info.text }));
+            ? [
+                el('button', { type: 'button', class: 'st_ai_media_icon st_ai_media_play', title: '播放', 'aria-label': '播放配音', dataset: { src: info.src } }, [icon('fa-play')]),
+                waveBars(info.text, 14),
+                ...actionButtons('audio', info.src),
+            ]
+            : [generateButton('audio', info.text, key, false, [info.speaker, info.voiceType, info.emotion].filter(Boolean).join(' · '), info.emotion)];
+        const chip = info.src && !pending ? ' st_ai_voice_chip' : '';
+        wrapper.append(el('span', { class: `st_ai_media_controls${chip}` }, controls), el('span', { class: 'st_ai_voice_text', text: info.text }));
     } else if (info.src && !pending) {
-        const video = el('video', { class: 'st_ai_inline_video', controls: true, playsinline: true, preload: 'none', src: info.src, title: info.text });
-        video.addEventListener('error', () => missing(wrapper, '视频文件不存在或无法播放，可重新生成'), { once: true });
-        wrapper.append(video, el('span', { class: 'st_ai_media_controls' }, actionButtons('video', info.src)));
+        wrapper.append(videoFrame(wrapper, info), el('span', { class: 'st_ai_media_controls' }, actionButtons('video', info.src)));
     } else {
         wrapper.append(generateButton('video', info.text, key, resumable));
     }
@@ -142,12 +201,10 @@ export function createMediaElement(tagText, messageId, ordinal = 0) {
 
 /** 进度写进任务表，再同步到所有对应按钮（ST 重渲染后按钮可能已换成新的）。 */
 function setProgress(key, label) {
-    updateTask(key, { label });
+    const task = updateTask(key, { label });
     for (const button of document.querySelectorAll('.st_ai_media_gen')) {
         if (button.dataset.taskKey !== key) continue;
-        button.disabled = true;
-        button.classList.add('st_ai_media_gen_pending');
-        button.replaceChildren(icon('fa-spinner fa-spin'), ` ${label}`);
+        paintGenerateButton(button, { pending: true, label, startedAt: task?.startedAt });
     }
 }
 
@@ -259,26 +316,42 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
 
 // ---------- 播放 ----------
 
-let playing = null; // { audio, button }：同一时间只放一条配音
+let playing = null; // { audio, button, wrapper, frame }：同一时间只放一条配音
 
 function stopPlaying() {
     if (!playing) return;
-    playing.audio.pause();
-    playing.button.replaceChildren(icon('fa-play'));
+    const { audio, button, wrapper, frame } = playing;
     playing = null;
+    cancelAnimationFrame(frame);
+    audio.pause();
+    button.replaceChildren(icon('fa-play'));
+    wrapper?.classList.remove('is-playing');
+    wrapper?.style.removeProperty('--st-ai-p');
+    paintWave(wrapper?.querySelector('.st_ai_wave'), 0);
 }
 
 function togglePlay(button) {
     if (playing?.button === button) return stopPlaying();
     stopPlaying();
     const audio = new Audio(button.dataset.src);
-    playing = { audio, button };
+    const wrapper = button.closest('.st_ai_media');
+    const wave = wrapper?.querySelector('.st_ai_wave');
+    playing = { audio, button, wrapper, frame: 0 };
     button.replaceChildren(icon('fa-pause'));
+    wrapper?.classList.add('is-playing');
+    // 播放进度逐帧写进 --st-ai-p：进度环、声波、台词下划线都跟着走；停了就不再排下一帧
+    const tick = () => {
+        if (playing?.audio !== audio) return;
+        const progress = audio.duration ? Math.min(1, audio.currentTime / audio.duration) : 0;
+        wrapper?.style.setProperty('--st-ai-p', progress.toFixed(4));
+        paintWave(wave, progress);
+        playing.frame = requestAnimationFrame(tick);
+    };
+    playing.frame = requestAnimationFrame(tick);
     const reset = () => { if (playing?.audio === audio) stopPlaying(); };
     audio.addEventListener('ended', reset, { once: true });
     audio.addEventListener('error', () => {
         reset();
-        const wrapper = button.closest('.st_ai_media');
         if (wrapper) missing(wrapper, '配音文件不存在或无法播放，可重新生成');
     }, { once: true });
     audio.play().catch((error) => { if (error?.name !== 'AbortError') reset(); });
