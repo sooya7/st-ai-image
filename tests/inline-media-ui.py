@@ -270,7 +270,7 @@ def run_checks(page, origin, output, checks, errors, raw, mes, load, open_tab, c
     assert not LOG
     audio_btn = mes(1).locator('.st_ai_media_audio .st_ai_media_gen')
     video_btn = mes(1).locator('.st_ai_media_video .st_ai_media_gen')
-    expect(audio_btn).to_have_text(re.compile('配音'))
+    expect(audio_btn).to_have_text(re.compile('生成语音'))
     expect(mes(1).locator('.st_ai_voice_text')).to_have_text('"轻声晚上好"')
     expect(video_btn).to_have_text(re.compile('生成视频'))
     expect(mes(6).locator('.st_gpt_inline_gen')).to_be_visible()

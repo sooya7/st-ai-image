@@ -17,10 +17,10 @@ import { createVoiceControls } from './voice-settings.js';
 const SPEC = {
     speech: {
         title: '语音',
-        subtitle: '台词旁出现「配音」按钮，点一下就生成',
+        subtitle: '台词旁出现「生成语音」按钮，点一下就生成',
         kind: 'audio',
         providers: PROVIDERS.audio,
-        usage: '在 AI 回复里用 [voice]台词[/voice]（也可写 [语音]、[配音]）标出要朗读的台词；写成 [voice type="御姐"] 会换成下方音色预设表里对应的音色（AI 按角色自己挑类型）。正文里会出现「配音」按钮，生成后台词旁变成播放键，文件存在酒馆的 user/files。',
+        usage: '在 AI 回复里用 [voice]台词[/voice]（也可写 [语音]、[配音]）标出要朗读的台词；写成 [voice type="御姐"] 会换成下方音色预设表里对应的音色（AI 按角色自己挑类型）。正文里会出现「生成语音」按钮，生成后台词旁变成播放键，文件存在酒馆的 user/files。',
         fields: [
             ['base', 'API 根地址'], ['key', 'API Key', 'password'], ['model', '模型'],
             ['voice', '默认音色（标签没写类型、或类型没配音色时用）'],

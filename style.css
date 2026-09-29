@@ -1727,15 +1727,23 @@ audio.st_ai_media_preview_player {
     height: 1.75em;
     border-radius: 50%;
     font-size: .82em;
-    color: #fff;
+    color: #8b8dff;
+    /* 淡淡的七彩圆底，图形本身是彩色的（2026-09-30 用户选的「浅色圆底」） */
+    background: linear-gradient(135deg, rgba(79, 176, 255, .2), rgba(139, 141, 255, .2) 50%, rgba(245, 139, 191, .24));
+    box-shadow: inset 0 0 0 1px rgba(139, 141, 255, .22);
+}
+/* 图形用主渐变上色（text-fill 盖过酒馆给正文 <i> 的颜色）；播放键同款 */
+.st_ai_gen_icon > i,
+.st_ai_media_play > i {
     background: var(--st-ai-cta);
-    box-shadow: 0 4px 10px -4px rgba(123, 99, 240, .8), inset 0 1px 0 rgba(255, 255, 255, .4);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 .st_gpt_inline_gen:not(:disabled):hover .st_ai_gen_icon i,
 .st_ai_media_gen:not(:disabled):hover .st_ai_gen_icon i { animation: st_ai_twinkle .8s var(--st-ai-spring); }
 .st_ai_gen_label { white-space: nowrap; }
-.st_ai_gen_hint,
-.st_ai_media_meta {
+.st_ai_gen_hint {
     min-width: 0;
     max-width: 16em;
     overflow: hidden;
@@ -1744,7 +1752,6 @@ audio.st_ai_media_preview_player {
     font-weight: 450;
     opacity: .55;
 }
-.st_ai_media_meta { max-width: 7em; font-size: .92em; }
 /* 按钮里的迷你声波：悬停和合成中跳动 */
 .st_ai_bars { display: inline-flex; align-items: center; gap: 1.5px; height: .95em; }
 .st_ai_bars i {
@@ -1752,9 +1759,13 @@ audio.st_ai_media_preview_player {
     width: 2px;
     height: 100%;
     border-radius: 2px;
-    background: #fff;
+    background: #8b8dff;
     transform: scaleY(var(--h, .6));
 }
+.st_ai_bars i:nth-child(1) { background: #4fb0ff; }
+.st_ai_bars i:nth-child(2) { background: #7d9dff; }
+.st_ai_bars i:nth-child(3) { background: #b08cf5; }
+.st_ai_bars i:nth-child(4) { background: #f58bbf; }
 .st_ai_media_gen:not(:disabled):hover .st_ai_bars i,
 .st_ai_media_gen_pending .st_ai_bars i {
     animation: st_ai_bar .7s ease-in-out infinite alternate;
@@ -1766,10 +1777,15 @@ audio.st_ai_media_preview_player {
 .st_gpt_inline_gen_error::before,
 .st_ai_media_gen_error::before { background: linear-gradient(115deg, #ff8fb1, #ffb38a); }
 .st_gpt_inline_gen_error .st_ai_gen_icon,
-.st_ai_media_gen_error .st_ai_gen_icon { background: linear-gradient(135deg, #ff7aa5, #ff9f7a); }
+.st_ai_media_gen_error .st_ai_gen_icon { background: rgba(255, 122, 165, .16); box-shadow: inset 0 0 0 1px rgba(255, 122, 165, .32); }
+.st_gpt_inline_gen_error .st_ai_gen_icon > i {
+    background: linear-gradient(135deg, #ff5f8f, #ff8a5c);
+    -webkit-background-clip: text;
+    background-clip: text;
+}
+.st_ai_media_gen_error .st_ai_bars i { background: #f0648f; }
 /* 装饰性文字：内容在 data-text 里，由 CSS 画出来（不进消息的 DOM 文本） */
 .st_ai_gen_hint::before,
-.st_ai_media_meta::before,
 .st_ai_develop_hint::before,
 .st_ai_img_caption::before,
 .st_ai_video_caption::before { content: attr(data-text); }
@@ -2186,12 +2202,15 @@ a.st_ai_media_icon:hover { color: var(--SmartThemeBodyColor, #ddd); filter: none
     width: 28px;
     height: 28px;
     font-size: .74em;
-    color: #fff;
+    color: #8b8dff;
     opacity: 1;
-    background: var(--st-ai-cta);
-    box-shadow: 0 5px 14px -6px rgba(123, 99, 240, .9), inset 0 1px 0 rgba(255, 255, 255, .4);
+    background: linear-gradient(135deg, rgba(79, 176, 255, .2), rgba(139, 141, 255, .2) 50%, rgba(245, 139, 191, .24));
+    box-shadow: inset 0 0 0 1px rgba(139, 141, 255, .22);
 }
-.st_ai_media_icon.st_ai_media_play:hover { background: var(--st-ai-cta); transform: scale(1.08); }
+.st_ai_media_icon.st_ai_media_play:hover {
+    background: linear-gradient(135deg, rgba(79, 176, 255, .3), rgba(139, 141, 255, .3) 50%, rgba(245, 139, 191, .34));
+    transform: scale(1.08);
+}
 .st_ai_media_play i.fa-play { margin-left: 1.5px; }
 /* 播放进度环：--st-ai-p 由 media.js 在播放时逐帧写到外层 */
 .st_ai_media_play::before {

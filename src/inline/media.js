@@ -66,7 +66,7 @@ const genIcon = (kind) => el('span', { class: 'st_ai_gen_icon' }, [kind === 'aud
  * 把生成按钮画成对应状态：待生成 / 生成中 / 可续查。
  * 视频生成中是一张 16:9 的显影卡片（带百分比和已等待时间），配音生成中是跳动的声波胶囊。
  */
-function paintGenerateButton(button, { pending = false, label = '', startedAt, resumable = false, meta = '' } = {}) {
+function paintGenerateButton(button, { pending = false, label = '', startedAt, resumable = false } = {}) {
     const kind = button.dataset.kind;
     const text = button.dataset.text || '';
     button.classList.toggle('st_ai_media_gen_pending', pending);
@@ -77,17 +77,12 @@ function paintGenerateButton(button, { pending = false, label = '', startedAt, r
         else button.replaceChildren(developCard({ kind: 'video', label: label || '生成中…', hint: text, startedAt }));
         return button;
     }
-    const idle = resumable ? '继续查询视频任务' : kind === 'audio' ? '配音' : '生成视频';
-    // replaceChildren 会把 null 当成文字 "null"，空的部件先滤掉
-    button.replaceChildren(...[
-        genIcon(kind),
-        el('span', { class: 'st_ai_gen_label', text: pending ? label || '生成中…' : idle }),
-        pending ? null : decoText('st_ai_media_meta', meta),
-    ].filter(Boolean));
+    const idle = resumable ? '继续查询视频任务' : kind === 'audio' ? '生成语音' : '生成视频';
+    button.replaceChildren(genIcon(kind), el('span', { class: 'st_ai_gen_label', text: pending ? label || '生成中…' : idle }));
     return button;
 }
 
-function generateButton(kind, text, key, resumable, hint = '', meta = '') {
+function generateButton(kind, text, key, resumable, hint = '') {
     const task = getTask(key);
     const button = el('button', {
         type: 'button',
@@ -95,7 +90,7 @@ function generateButton(kind, text, key, resumable, hint = '', meta = '') {
         title: hint ? `${hint}：${text}` : text,
         dataset: { taskKey: key, resume: resumable ? '1' : '', kind, text },
     });
-    return paintGenerateButton(button, { pending: !!task, label: task?.label, startedAt: task?.startedAt, resumable, meta });
+    return paintGenerateButton(button, { pending: !!task, label: task?.label, startedAt: task?.startedAt, resumable });
 }
 
 function setLibraryButtonState(button, saved) {
@@ -175,7 +170,7 @@ export function renderMediaWrapper(wrapper, { error = '' } = {}) {
                 waveBars(info.text, 14),
                 ...actionButtons('audio', info.src),
             ]
-            : [generateButton('audio', info.text, key, false, [info.speaker, info.voiceType, info.emotion].filter(Boolean).join(' · '), info.emotion)];
+            : [generateButton('audio', info.text, key, false, [info.speaker, info.voiceType, info.emotion].filter(Boolean).join(' · '))];
         const chip = info.src && !pending ? ' st_ai_voice_chip' : '';
         wrapper.append(el('span', { class: `st_ai_media_controls${chip}` }, controls), el('span', { class: 'st_ai_voice_text', text: info.text }));
     } else if (info.src && !pending) {
