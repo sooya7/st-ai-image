@@ -38,3 +38,29 @@ test('清除时照样传空字符串', () => {
         assert.equal(calls[0][1], '');
     });
 });
+
+test('重画消息后发 MESSAGE_UPDATED，让其他扩展重建自己的渲染', async () => {
+    const { refreshMessageBlock } = await import('../src/st/context.js');
+    const order = [];
+    const message = { mes: 'x' };
+    globalThis.SillyTavern = { getContext: () => ({
+        chat: [message],
+        updateMessageBlock: (id) => order.push(['update', id]),
+        event_types: { MESSAGE_UPDATED: 'message_updated' },
+        eventSource: { emit: async (name, id) => { order.push([name, id]); } },
+    }) };
+    try {
+        assert.equal(refreshMessageBlock(0), true);
+        assert.deepEqual(order, [['update', 0], ['message_updated', 0]]);
+    } finally { delete globalThis.SillyTavern; }
+});
+
+test('没有事件系统时照样重画，不报错', async () => {
+    const { refreshMessageBlock } = await import('../src/st/context.js');
+    let updated = 0;
+    globalThis.SillyTavern = { getContext: () => ({ chat: [{ mes: 'x' }], updateMessageBlock: () => { updated += 1; } }) };
+    try {
+        assert.equal(refreshMessageBlock(0), true);
+        assert.equal(updated, 1);
+    } finally { delete globalThis.SillyTavern; }
+});

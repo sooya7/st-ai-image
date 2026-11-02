@@ -79,12 +79,29 @@ export function rewriteMessageText(messageId, transform) {
     return changed;
 }
 
+/**
+ * 按正文重画这条消息，再像 ST 编辑消息后那样发 MESSAGE_UPDATED。
+ * updateMessageBlock 会整段替换 .mes_text 的 HTML，酒馆助手（JS-Slash-Runner）的前端界面、
+ * 小白X 的渲染等都挂在这个事件上重建；不发的话，出图后这些渲染就没了，要刷新页面才回来。
+ */
 export function refreshMessageBlock(messageId) {
     const ctx = getContext();
     const message = getMessage(messageId);
     if (!ctx || !message) return false;
-    try { ctx.updateMessageBlock?.(messageId, message); return true; }
+    try { ctx.updateMessageBlock?.(messageId, message); }
     catch (e) { log.warn('updateMessageBlock 失败:', e); return false; }
+    emitMessageUpdated(messageId);
+    return true;
+}
+
+function emitMessageUpdated(messageId) {
+    const ctx = getContext();
+    const eventSource = ctx?.eventSource || globalThis.eventSource;
+    const name = (ctx?.event_types || globalThis.event_types || {}).MESSAGE_UPDATED;
+    if (!name || typeof eventSource?.emit !== 'function') return;
+    try {
+        Promise.resolve(eventSource.emit(name, messageId)).catch((e) => log.warn('MESSAGE_UPDATED 监听出错:', e));
+    } catch (e) { log.warn('发送 MESSAGE_UPDATED 失败:', e); }
 }
 
 export async function saveChat() {

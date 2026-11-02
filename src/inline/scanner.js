@@ -215,7 +215,7 @@ export function initScanner() {
         window.addEventListener('focus', scanBurst);
         document.addEventListener('visibilitychange', () => { if (!document.hidden) scanBurst(); });
         onStEvents([
-            'CHAT_CHANGED', 'MESSAGE_RECEIVED', 'MESSAGE_SENT', 'MESSAGE_EDITED',
+            'CHAT_CHANGED', 'MESSAGE_RECEIVED', 'MESSAGE_SENT', 'MESSAGE_EDITED', 'MESSAGE_UPDATED',
             'MESSAGE_SWIPED', 'GENERATION_ENDED', 'CHARACTER_MESSAGE_RENDERED', 'USER_MESSAGE_RENDERED',
         ], scanBurst);
         // ST 内部可能清空扩展提示词，每次生成前重新注入
