@@ -167,14 +167,25 @@ export function getGalleryFolder() {
     return character?.name || 'AI Image Generator';
 }
 
+/** 注入深度的合法范围；0 表示放在最后一条消息之后。 */
+export const PROMPT_DEPTH_MAX = 50;
+
+/** 把设置里的注入位置换成 ST 的参数：chat → IN_CHAT(1) 按深度插进聊天记录，top → IN_PROMPT(0) 放在系统提示词末尾。 */
+export function extensionPromptPlacement({ position, depth } = {}) {
+    if (position === 'top') return { position: 0, depth: 0 };
+    const n = Math.round(Number(depth));
+    return { position: 1, depth: Number.isFinite(n) ? Math.min(PROMPT_DEPTH_MAX, Math.max(0, n)) : 1 };
+}
+
 /**
- * 注入/清除系统提示词。position 0=IN_PROMPT，depth 100 表示高优先级，role 0=SYSTEM。
- * 传空字符串即为清除。
+ * 注入/清除系统提示词（role 0=SYSTEM）。传空字符串即为清除。
+ * 默认插在聊天记录里离末尾 1 条消息的位置：放在开头的话，长对话和格式要求很重的角色卡会把它淹没，模型就不写标签了。
  */
-export function setExtensionPrompt(id, text) {
+export function setExtensionPrompt(id, text, placement = {}) {
     const ctx = getContext();
     if (typeof ctx?.setExtensionPrompt !== 'function') return false;
-    ctx.setExtensionPrompt(id || EXT_ID, String(text ?? ''), 0, 100, false, 0);
+    const { position, depth } = extensionPromptPlacement(placement);
+    ctx.setExtensionPrompt(id || EXT_ID, String(text ?? ''), position, depth, false, 0);
     return true;
 }
 

@@ -6,6 +6,7 @@ import { DEFAULT_SYSTEM_PROMPT } from '../core/constants.js';
 import { registerSystemPrompt } from '../inline/scanner.js';
 import { MEDIA_DEFAULTS, readMediaSettings } from '../media/media-settings.js';
 import { getSettings, saveSettings } from '../settings.js';
+import { extensionPromptPlacement, PROMPT_DEPTH_MAX } from '../st/context.js';
 import { cardHead, debounce, el } from './dom.js';
 
 /** 图片设置是扁平字段，语音/视频是分区对象，这里抹平成同一套读写。 */
@@ -49,11 +50,35 @@ export function buildPromptSection(id, settings) {
         onclick: () => { text.value = section.fallback; update(section, { prompt: section.fallback }); },
     });
 
+    // 注入位置三个功能共用一份设置，每页都放一份控件，改哪页都一样
+    const where = el('select', { id: eid('position'), class: 'st_ai_select', 'aria-label': '提示词注入位置' }, [
+        el('option', { value: 'chat', text: '聊天记录里（推荐）' }),
+        el('option', { value: 'top', text: '系统提示词末尾' }),
+    ]);
+    where.value = settings.promptPosition === 'top' ? 'top' : 'chat';
+    const depth = el('input', { type: 'number', id: eid('depth'), class: 'st_ai_input', min: 0, max: PROMPT_DEPTH_MAX, step: 1, 'aria-label': '注入深度' });
+    depth.value = String(extensionPromptPlacement({ position: 'chat', depth: settings.promptDepth ?? 1 }).depth);
+    const syncDepth = () => { depth.disabled = where.value === 'top'; };
+    syncDepth();
+    const savePlacement = async () => {
+        syncDepth();
+        const current = await getSettings();
+        await saveSettings({ ...current, promptPosition: where.value, promptDepth: extensionPromptPlacement({ position: 'chat', depth: depth.value }).depth });
+        registerSystemPrompt();
+    };
+    where.addEventListener('change', savePlacement);
+    depth.addEventListener('change', savePlacement);
+
     return el('section', { class: 'st_ai_card st_ai_prompt_section', dataset: { section: id, tone: 'lemon' } }, [
         cardHead('fa-robot', section.title, '注入系统提示词，让 AI 在回复里自己写标签'),
         el('label', { class: 'st_ai_checkbox' }, [toggle, el('span', { text: `让 AI 在回复里自己写 ${section.tag} 标签（注入系统提示词）` })]),
         el('details', { class: 'st_ai_prompt_details', id: eid('details') }, [
             el('summary', { text: '编辑提示词' }),
+            el('div', { class: 'st_ai_inline_row st_ai_prompt_placement' }, [
+                el('span', { text: '注入位置' }), where,
+                el('span', { text: '深度' }), depth,
+            ]),
+            el('p', { class: 'st_ai_speech_hint', text: '深度是离最后一条消息几条；AI 不写标签时把深度调小（0 = 最后）。图片、配音、视频共用这个设置。' }),
             el('div', { class: 'st_ai_field st_ai_prompt_textarea_field' }, [text]),
             el('div', { class: 'st_ai_inline_row st_ai_prompt_actions' }, [
                 section.hint ? el('p', { class: 'st_ai_speech_hint st_ai_flex_fill', text: section.hint }) : el('span', { class: 'st_ai_flex_fill' }),

@@ -179,12 +179,13 @@ export function registerSystemPrompt() {
     const s = peekSettings();
     const instruction = String(s.systemPrompt || '').trim();
     const active = s.enabled && s.autoInjectPrompt && instruction;
+    const placement = { position: s.promptPosition, depth: s.promptDepth };
     for (const [section, suffix] of [['speech', 'voice'], ['video', 'video']]) {
         const media = readMediaSettings(s, section);
         const text = section === 'speech' ? renderVoicePrompt(media.prompt, media.profiles[media.provider].presets) : media.prompt;
-        setExtensionPrompt(`${EXT_ID}-${suffix}`, s.enabled && media.enabled && media.autoInject ? text.trim() : '');
+        setExtensionPrompt(`${EXT_ID}-${suffix}`, s.enabled && media.enabled && media.autoInject ? text.trim() : '', placement);
     }
-    return setExtensionPrompt(EXT_ID, active ? instruction : '');
+    return setExtensionPrompt(EXT_ID, active ? instruction : '', placement);
 }
 
 export function stopScanner() {

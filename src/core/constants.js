@@ -60,6 +60,8 @@ export const DEFAULT_SETTINGS = {
     extraPrompt: '',
     negativePrompt: '',
     autoInjectPrompt: true,
+    promptPosition: 'chat', // chat：插进聊天记录（按 promptDepth）；top：放在系统提示词末尾（旧版行为）
+    promptDepth: 1,
     imageTimeout: LIMITS.imageGenTimeoutMs,
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
 };
