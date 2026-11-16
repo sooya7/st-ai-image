@@ -145,19 +145,19 @@ function renderSizeOptions(sizes, current) {
     select.value = current && list.includes(current) ? current : list[0];
 }
 
-/** TauriTavern 里藏起只能走酒馆代理的接口；当前选中的留着并注明。 */
+/** 下拉框只列自动识别和要填特殊东西的；TauriTavern 里去掉只能走代理的。当前选中的留着并注明。
+ * iOS Safari 不认 <option hidden>，所以直接把不列的选项从下拉框里拿掉，原始列表另存一份。 */
+let ALL_IMAGE_OPTIONS = null;
 function syncProviderOptions(current) {
+    const select = document.querySelector('#st_gpt_image_provider');
+    if (!select) return;
     const tauri = isTauriTavern();
-    for (const option of document.querySelectorAll('#st_gpt_image_provider option')) {
-        option.dataset.label ??= option.textContent;
-        const blocked = tauri && NEEDS_PROXY.image.includes(option.value);
-        // 只列自动识别和要填特殊东西的；别家并进自动识别，正在用的老选项留着
-        option.hidden = (blocked || !listed('image', option.value, current)) && option.value !== current;
-        option.textContent = option.dataset.label + (blocked ? UNAVAILABLE_NOTE : '');
-    }
-    for (const group of document.querySelectorAll('#st_gpt_image_provider optgroup')) {
-        group.hidden = [...group.querySelectorAll('option')].every((o) => o.hidden);
-    }
+    ALL_IMAGE_OPTIONS ??= [...select.querySelectorAll('option')].map((o) => ({ value: o.value, label: o.textContent }));
+    const options = ALL_IMAGE_OPTIONS
+        .filter((o) => o.value === current || (listed('image', o.value, current) && !(tauri && NEEDS_PROXY.image.includes(o.value))))
+        .map((o) => el('option', { value: o.value, text: o.label + (tauri && NEEDS_PROXY.image.includes(o.value) ? UNAVAILABLE_NOTE : '') }));
+    select.replaceChildren(...options);
+    select.value = current;
 }
 
 /** 按接口显示字段：data-show-for 只在这些接口下显示，data-hide-for 在这些接口下隐藏；再换上这个接口的叫法和提示。 */
