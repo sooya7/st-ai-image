@@ -126,19 +126,53 @@ function readLegacyPromptPresets(s) {
     return { ...lib, random: s?.promptPresetRandom === true };
 }
 
-/** 每个支持的接口独立读库；旧全局库作为迁移来源，其他接口始终读到空库。 */
-export function readPromptPresets(s, provider = s?.imageProvider) {
-    if (!supportsPromptPresets(provider)) return { ...normalizeLibrary(null, '', { normalizeItem: normalizePromptPreset, blank: blankPromptPreset }), random: false };
-    const saved = s?.promptPresetProfiles?.[provider];
-    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return readLegacyPromptPresets(s);
-    return { ...normalizeLibrary(saved.items, saved.active, { normalizeItem: normalizePromptPreset, blank: blankPromptPreset }), random: saved.random === true };
+/**
+ * ComfyUI 按工作流分开存：键是「comfyui@工作流名」，这个键没存过时回落到接口键「comfyui」。
+ * 传进来的 provider 可以是接口名（comfyui 时按当前工作流解析），也可以是已经解析好的键。
+ */
+export const WORKFLOW_KEY_SEP = '@';
+export const baseProvider = (provider) => String(provider ?? '').split(WORKFLOW_KEY_SEP)[0];
+export function profileKey(s, provider = s?.imageProvider) {
+    if (provider !== 'comfyui') return provider;
+    const lib = s?.comfyWorkflows;
+    if (!lib || typeof lib !== 'object' || Array.isArray(lib) || !Object.keys(lib).length) return provider; // 还没建工作流库：照旧用接口键
+    const { items, active } = readWorkflowLibrary(s?.comfyWorkflows, s?.comfyWorkflowId, s?.comfyWorkflow);
+    return active && Object.prototype.hasOwnProperty.call(items, active) ? `comfyui${WORKFLOW_KEY_SEP}${active}` : provider;
+}
+/** 工作流改名时把它名下的提示词/画师串一起搬到新名字。 */
+export function renameWorkflowProfiles(s, from, to) {
+    const move = (all) => {
+        const a = `comfyui${WORKFLOW_KEY_SEP}${from}`;
+        const b = `comfyui${WORKFLOW_KEY_SEP}${to}`;
+        if (!all || typeof all !== 'object' || !(a in all) || b in all) return all;
+        const { [a]: v, ...rest } = all;
+        return { ...rest, [b]: v };
+    };
+    const prompts = s?.promptProfiles && Object.fromEntries(Object.entries(s.promptProfiles).map(([k, v]) => [k, move(v)]));
+    return { ...s, ...(prompts ? { promptProfiles: prompts } : {}), ...(s?.promptPresetProfiles ? { promptPresetProfiles: move(s.promptPresetProfiles) } : {}) };
 }
 
-/** 首次写入时给三个接口各留一份旧库，之后只改当前接口，避免旧内容丢失或互相覆盖。 */
+const validProfile = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+const fromProfile = (saved) => ({ ...normalizeLibrary(saved.items, saved.active, { normalizeItem: normalizePromptPreset, blank: blankPromptPreset }), random: saved.random === true });
+
+/** 每个支持的接口独立读库；旧全局库作为迁移来源，其他接口始终读到空库。 */
+export function readPromptPresets(s, provider = s?.imageProvider) {
+    const base = baseProvider(provider);
+    if (!supportsPromptPresets(base)) return { ...normalizeLibrary(null, '', { normalizeItem: normalizePromptPreset, blank: blankPromptPreset }), random: false };
+    const key = profileKey(s, provider);
+    const own = s?.promptPresetProfiles?.[key];
+    if (validProfile(own)) return fromProfile(own);
+    const saved = s?.promptPresetProfiles?.[base];
+    if (!validProfile(saved)) return readLegacyPromptPresets(s);
+    return fromProfile(saved);
+}
+
+/** 首次写入时给三个接口各留一份旧库，之后只改当前接口（ComfyUI 是当前工作流），避免旧内容丢失或互相覆盖。 */
 export function writePromptPresets(s, provider, library) {
-    if (!supportsPromptPresets(provider)) return s;
-    const profiles = Object.fromEntries(PROMPT_PRESET_PROVIDERS.map((key) => [key, readPromptPresets(s, key)]));
-    profiles[provider] = {
+    if (!supportsPromptPresets(baseProvider(provider))) return s;
+    const profiles = { ...(s?.promptPresetProfiles || {}) };
+    for (const key of PROMPT_PRESET_PROVIDERS) if (!validProfile(profiles[key])) profiles[key] = readLegacyPromptPresets(s);
+    profiles[profileKey(s, provider)] = {
         ...normalizeLibrary(library.items, library.active, { normalizeItem: normalizePromptPreset, blank: blankPromptPreset }),
         random: library.random === true,
     };

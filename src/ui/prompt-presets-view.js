@@ -3,7 +3,7 @@
  * 生成时拼成「前置, 描述, 后置」，负面单独给（见 core/library.js 的 applyPromptPreset）。
  */
 import {
-    DEFAULT_NAME, blankPromptPreset, cleanName, deleteItem, importItems, normalizePromptPreset, readPromptPresets, renameItem, uniqueName, writePromptPresets,
+    DEFAULT_NAME, blankPromptPreset, cleanName, deleteItem, importItems, normalizePromptPreset, profileKey, readPromptPresets, renameItem, uniqueName, writePromptPresets,
 } from '../core/library.js';
 import { getSettings, peekSettings, saveSettings } from '../settings.js';
 import { el, helpBox } from './dom.js';
@@ -49,7 +49,7 @@ export function mountPromptPresets(root) {
     };
     for (const node of Object.values(areas)) node.addEventListener('input', () => {
         clearTimeout(timer);
-        pending = { provider: peekSettings().imageProvider, active: read().active, current: Object.fromEntries(Object.keys(areas).map((key) => [key, areas[key].value])) };
+        pending = { provider: profileKey(peekSettings()), active: read().active, current: Object.fromEntries(Object.keys(areas).map((key) => [key, areas[key].value])) };
         timer = setTimeout(flush, 400);
     });
 
@@ -57,7 +57,7 @@ export function mountPromptPresets(root) {
     random.checked = read().random;
     random.addEventListener('change', async () => {
         const checked = random.checked;
-        const provider = peekSettings().imageProvider;
+        const provider = profileKey(peekSettings());
         await flush();
         await save({ ...readPromptPresets(await getSettings(), provider), random: checked }, provider);
     });
@@ -106,7 +106,7 @@ export function mountPromptPresets(root) {
         control.node,
         ...FIELDS.map(([key, label]) => el('div', { class: 'st_ai_field st_ai_prompt_textarea_field' }, [el('label', { for: areas[key].id, text: label }), areas[key]])),
         el('label', { class: 'st_ai_checkbox' }, [random, el('span', { text: '每张图随机用一个画师串（只从有内容的里面挑）' })]),
-        helpBox('只用于当前接口：NovelAI、ComfyUI、SD WebUI 各自保存预设、选中项和随机开关。正面拼成「前置, 描述, 后置」，负面单独传。导入导出仅包含当前接口的画师串；支持 st-chatu8 的固定提示词预设。'),
+        helpBox('只用于当前接口：NovelAI、ComfyUI、SD WebUI 各自保存预设、选中项和随机开关；ComfyUI 还按当前工作流分开存（没存过的工作流沿用 ComfyUI 那份）。正面拼成「前置, 描述, 后置」，负面单独传。导入导出仅包含当前接口的画师串；支持 st-chatu8 的固定提示词预设。'),
     ]));
     mounted = { flush, refresh: () => { show(); control.render(); } };
     show();

@@ -6,7 +6,7 @@ import { DEFAULT_SYSTEM_PROMPT } from '../core/constants.js';
 import { registerSystemPrompt } from '../inline/scanner.js';
 import { MEDIA_DEFAULTS, readMediaSettings } from '../media/media-settings.js';
 import { getSettings, peekSettings, saveSettings } from '../settings.js';
-import { promptProvider, readSectionPrompt, writeSectionPrompt } from '../media/prompt-profiles.js';
+import { promptProfileKey, promptProvider, readSectionPrompt, writeSectionPrompt } from '../media/prompt-profiles.js';
 import { extensionPromptPlacement, PROMPT_DEPTH_MAX } from '../st/context.js';
 import { cardHead, debounce, el } from './dom.js';
 
@@ -54,7 +54,9 @@ export function buildPromptSection(id, settings) {
         const p = promptProvider(s, id);
         if (id === 'image') {
             const opt = document.querySelector(`#st_gpt_image_provider option[value="${CSS.escape(p)}"]`);
-            return opt?.textContent?.trim() || p;
+            const key = promptProfileKey(s, id);
+            const wf = key.startsWith('comfyui@') ? `（工作流：${key.slice('comfyui@'.length)}）` : '';
+            return (opt?.textContent?.trim() || p) + wf;
         }
         const opt = document.querySelector(`#st_ai_${id}_provider option[value="${CSS.escape(p)}"]`);
         return opt?.textContent?.trim() || p;
@@ -73,14 +75,14 @@ export function buildPromptSection(id, settings) {
         if (pending) return; // 还有没存的输入，先等 flush
         const s = peekSettings();
         text.value = readSectionPrompt(s, id);
-        which.textContent = `当前接口：${providerLabel(s)}。提示词按接口分开保存，换接口会换成那个接口自己的一份（没改过的接口沿用原来的提示词）。`;
+        which.textContent = `当前接口：${providerLabel(s)}。提示词按接口分开保存，ComfyUI 还按工作流分开；换接口或工作流会换成它自己的一份（没改过的沿用原来的提示词）。`;
     };
     text.value = readSectionPrompt(settings, id);
     mounted[id] = { flush, refresh: async () => { await flush(); refresh(); registerSystemPrompt(); } };
     setTimeout(refresh, 0);
     text.addEventListener('input', () => {
         clearTimeout(timer);
-        pending = { provider: promptProvider(peekSettings(), id), text: text.value };
+        pending = { provider: promptProfileKey(peekSettings(), id), text: text.value };
         timer = setTimeout(flush, 400);
     });
     toggle.addEventListener('change', () => saveToggle(section, toggle.checked));
@@ -90,7 +92,7 @@ export function buildPromptSection(id, settings) {
             pending = null;
             clearTimeout(timer);
             text.value = section.fallback;
-            await savePrompt(id, promptProvider(peekSettings(), id), section.fallback);
+            await savePrompt(id, promptProfileKey(peekSettings(), id), section.fallback);
         },
     });
 

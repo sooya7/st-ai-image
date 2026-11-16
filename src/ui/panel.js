@@ -7,7 +7,7 @@ import { log } from '../core/notify.js';
 import { bindDrag, isMobile, resetDrag } from './drag.js';
 import { el, qs } from './dom.js';
 import { getSettings } from '../settings.js';
-import { buildPromptSection } from './prompt-section.js';
+import { buildPromptSection, flushPromptSection, refreshPromptSection } from './prompt-section.js';
 import { bindSettingsForm } from './settings-view.js';
 import { activateTab, syncTabIndicator } from './tabs.js';
 import { DIALOG_HTML, FALLBACK_BANNER_HTML, PANEL_HTML, PREVIEW_HTML, WAND_BUTTON_HTML, fromHtml } from './template.js';
@@ -39,7 +39,7 @@ let librariesMounted = null;
 /** 画师串和生图工作流库第一次打开面板时才加载（会用到工作流解析代码，不拖慢页面加载）。 */
 function mountImageLibraries() {
     librariesMounted ||= (async () => {
-        const [{ mountPromptPresets }, { createWorkflowLibrary }, { readWorkflowLibrary }, { getSettings, peekSettings, saveSettings }, { WORKFLOW_TEMPLATES }] = await Promise.all([
+        const [{ mountPromptPresets, flushPromptPresetEdits, refreshPromptPresets }, { createWorkflowLibrary }, { readWorkflowLibrary, renameWorkflowProfiles }, { getSettings, peekSettings, saveSettings }, { WORKFLOW_TEMPLATES }] = await Promise.all([
             import('./prompt-presets-view.js'), import('./workflow-library.js'), import('../core/library.js'), import('../settings.js'), import('../media/workflow-templates.js'),
         ]);
         await getSettings();
@@ -51,7 +51,17 @@ function mountImageLibraries() {
                 textarea: qs('#st_gpt_image_comfy_workflow'),
                 status: qs('#st_gpt_image_comfy_status'),
                 read: () => { const s = peekSettings(); return readWorkflowLibrary(s.comfyWorkflows, s.comfyWorkflowId, s.comfyWorkflow); },
-                write: async ({ items, active }) => saveSettings({ ...(await getSettings()), comfyWorkflows: items, comfyWorkflowId: active }),
+                // 提示词和画师串按工作流分开存：换工作流前先存完旧的输入，换完刷新成新工作流那份；改名时把它名下的一起搬走
+                write: async ({ items, active }) => {
+                    const before = peekSettings();
+                    const prev = readWorkflowLibrary(before.comfyWorkflows, before.comfyWorkflowId, before.comfyWorkflow);
+                    const switched = prev.active !== active;
+                    if (switched) { await flushPromptPresetEdits(); await flushPromptSection('image'); }
+                    let next = { ...(await getSettings()), comfyWorkflows: items, comfyWorkflowId: active };
+                    if (switched && !(active in prev.items) && !(prev.active in items)) next = renameWorkflowProfiles(next, prev.active, active);
+                    await saveSettings(next);
+                    if (switched) { refreshPromptPresets(); await refreshPromptSection('image'); }
+                },
                 exportName: 'st-ai-image-ComfyUI生图工作流.json',
                 templates: WORKFLOW_TEMPLATES,
             });
