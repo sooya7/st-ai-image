@@ -11,7 +11,7 @@ import { SELF_HOSTED, serviceRoot } from '../media/selfhosted.js';
 import { createWorkflowLibrary } from './workflow-library.js';
 import { getSettings, saveSettings } from '../settings.js';
 import { card, debounce, el, helpBox } from './dom.js';
-import { buildPromptSection } from './prompt-section.js';
+import { buildPromptSection, flushPromptSection, refreshPromptSection } from './prompt-section.js';
 import { createVoiceControls } from './voice-settings.js';
 
 const SPEC = {
@@ -230,9 +230,11 @@ export async function mountMediaSettings(root, section) {
     provider.addEventListener('change', async () => {
         const next = provider.value;
         await workflowLibrary?.flush();
+        await flushPromptSection(section);
         state.provider = next;
         fill();
-        save();
+        await save();
+        refreshPromptSection(section);
     });
     for (const [key, node] of Object.entries(inputs)) {
         if (key === 'workflow') continue; // 工作流库自己保存

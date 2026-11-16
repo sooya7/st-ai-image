@@ -177,6 +177,12 @@ export const PANEL_HTML = `
                         <span>自动识别AI回复中的生图指令</span>
                     </label>
                 </div>
+                <div class="st_ai_field">
+                    <label class="st_ai_checkbox">
+                        <input type="checkbox" id="st_gpt_image_auto_generate">
+                        <span>AI 回复完自动出图（思维链里的示例不触发）</span>
+                    </label>
+                </div>
             </section>
 
             <section class="st_ai_card" data-tone="violet" data-show-for="novelai comfyui sdwebui">

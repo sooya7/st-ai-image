@@ -14,6 +14,7 @@ import { getSettings, peekSettings } from '../settings.js';
 import { getMessageElement, getMessageIdFromElement } from '../st/chat-dom.js';
 import { onStEvents, setExtensionPrompt } from '../st/context.js';
 import { readMediaSettings, renderVoicePrompt } from '../media/media-settings.js';
+import { readSectionPrompt } from '../media/prompt-profiles.js';
 import { MEDIA_TAG_SOURCE, normalizeMediaText, parseMediaTag } from '../media/tags.js';
 import { createMediaElement } from './media.js';
 import { createInlineGenerateButton, createInlineImageWrapper } from './render.js';
@@ -49,6 +50,8 @@ export function processMessageElement(node, { allowImageRequests = true } = {}) 
     while (walker.nextNode()) {
         // 已替换的播放器/按钮不再作为原始标签扫描，避免把台词内的标签再次渲染。
         if (walker.currentNode.parentElement?.closest('.st_ai_media, .st_gpt_inline_img_wrap, .st_gpt_inline_gen')) continue;
+        // 思维链/折叠块里的示例标签不当真，也不让它们跟正文的标签拼成一段把正文吃掉
+        if (walker.currentNode.parentElement?.closest('details, .mes_reasoning, .mes_reasoning_details, [class*="think"], [class*="reasoning"]')) continue;
         nodes.push(walker.currentNode);
     }
     if (!nodes.length) return false;
@@ -177,12 +180,13 @@ export function startScanInterval(durationMs = LIMITS.scanDurationMs) {
 /** 注入（或按开关清除）让 AI 自动带 [image] 标签的系统提示词。 */
 export function registerSystemPrompt() {
     const s = peekSettings();
-    const instruction = String(s.systemPrompt || '').trim();
+    const instruction = String(readSectionPrompt(s, 'image') || '').trim();
     const active = s.enabled && s.autoInjectPrompt && instruction;
     const placement = { position: s.promptPosition, depth: s.promptDepth };
     for (const [section, suffix] of [['speech', 'voice'], ['video', 'video']]) {
         const media = readMediaSettings(s, section);
-        const text = section === 'speech' ? renderVoicePrompt(media.prompt, media.profiles[media.provider].presets) : media.prompt;
+        const prompt = readSectionPrompt(s, section, media.provider);
+        const text = section === 'speech' ? renderVoicePrompt(prompt, media.profiles[media.provider].presets) : prompt;
         setExtensionPrompt(`${EXT_ID}-${suffix}`, s.enabled && media.enabled && media.autoInject ? text.trim() : '', placement);
     }
     return setExtensionPrompt(EXT_ID, active ? instruction : '', placement);

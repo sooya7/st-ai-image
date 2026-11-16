@@ -89,7 +89,7 @@ export async function regenerateInlineImageInMessage(wrapper, newPrompt) {
     });
     if (!replaced) { notify.warn('原图片标记已被编辑或移除，没有提交生成'); return false; }
 
-    notify.info('正在用新提示词生成图片...');
+    // 进度改由正文里的显影卡片显示，不再弹提示
     let imageUrl;
     try {
         imageUrl = ensureSafeImageUrl(await callImageAPI(newPrompt));

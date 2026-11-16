@@ -13,6 +13,7 @@ import {
 } from '../settings.js';
 import { debounce, el, qs, replaceContent, setBusy } from './dom.js';
 import { flushPromptPresetEdits, refreshPromptPresets } from './prompt-presets-view.js';
+import { refreshPromptSection } from './prompt-section.js';
 
 /** 表单字段 → 设置键。text/textarea 走防抖 input，其余走 change。 */
 const FIELDS = [
@@ -25,6 +26,7 @@ const FIELDS = [
     { id: 'st_gpt_image_model', key: 'model', kind: 'text' },
     { id: 'st_gpt_image_enabled', key: 'enabled', kind: 'bool' },
     { id: 'st_gpt_image_auto_detect', key: 'autoDetect', kind: 'bool' },
+    { id: 'st_gpt_image_auto_generate', key: 'autoGenerate', kind: 'bool' },
     { id: 'st_gpt_image_size', key: 'size', kind: 'select' },
     { id: 'st_gpt_image_quality', key: 'quality', kind: 'select' },
 ];
@@ -48,6 +50,7 @@ function fillForm(settings) {
     if (timeout) timeout.value = String(clampSeconds(Number(settings.imageTimeout || LIMITS.imageGenTimeoutMs) / 1000));
     syncProviderFields(settings.imageProvider, settings);
     refreshPromptPresets();
+    refreshPromptSection('image');
 }
 
 const OPENAI_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'];

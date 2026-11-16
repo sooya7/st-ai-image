@@ -16,9 +16,11 @@ import { migrateInlineMarkersInChat, persistInlineImageInMessage, regenerateInli
 import { bindInlineMedia, stopPlaying } from './src/inline/media.js';
 import { renderInlineImageContent, setInlineGenerateState } from './src/inline/render.js';
 import { initScanner, registerSystemPrompt, scanBurst } from './src/inline/scanner.js';
+import { initAutoGenerate } from './src/inline/auto.js';
 import { endTask, getTask, getTaskKey, isPending, startTask, startStaleCleaner, updateTask } from './src/inline/tasks.js';
 import { debounce, delegate, el, qs, setBusy } from './src/ui/dom.js';
-import { preloadImage } from './src/ui/fx.js';
+import { developCard, preloadImage, ratioOf } from './src/ui/fx.js';
+import { peekSettings } from './src/settings.js';
 import { bindGalleryEvents, renderGallery } from './src/ui/gallery-view.js';
 import { ACTION, markButtonSaved } from './src/ui/image-actions.js';
 import { mountPanel } from './src/ui/panel.js';
@@ -105,12 +107,30 @@ function bindImageActions() {
         if (!isMessageTargetCurrent(targetSnapshot)) return;
         if (imageKeyMissing(s)) return notify.error('请先在面板的「图片」页填写 API Key');
 
+        // 重试时直接在原图卡片上盖一层和首次生成一样的显影动画；失败就揭掉
+        const showDevelop = () => {
+            const host = wrapper.querySelector('.st_ai_img_frame');
+            if (!host || host.querySelector('.st_ai_regen_overlay')) return;
+            host.classList.add('st_ai_regen_host');
+            // 套一个和首次生成完全相同的按钮外壳，让卡片继承同样的字体与排版
+            const shell = el('button', { type: 'button', class: 'st_gpt_inline_gen st_gpt_inline_gen_pending st_ai_regen_overlay', disabled: true, title: prompt },
+                [developCard({ kind: 'image', ratio: ratioOf(peekSettings().size), label: '重新生成中…', hint: prompt, startedAt: Date.now() })]);
+            shell.disabled = true;
+            host.append(shell);
+        };
+        const restoreOld = () => {
+            const host = wrapper.querySelector('.st_ai_img_frame');
+            host?.classList.remove('st_ai_regen_host');
+            host?.querySelectorAll(':scope > .st_ai_regen_overlay').forEach((n) => n.remove());
+        };
         // 已入库的正文图：重新生成并把新标记写回聊天记录，刷新后仍然在
         const frame = wrapper.querySelector('.st_ai_img_frame');
         if (wrapper.dataset.historyId) {
             setBusy(btn, true);
             frame?.classList.add('st_ai_busy');
-            try { await regenerateInlineImageInMessage(wrapper, prompt); }
+            showDevelop();
+            try { if (!await regenerateInlineImageInMessage(wrapper, prompt)) restoreOld(); }
+            catch (err) { restoreOld(); throw err; }
             finally { setBusy(btn, false); frame?.classList.remove('st_ai_busy'); }
             return;
         }
@@ -118,6 +138,7 @@ function bindImageActions() {
         const chatId = getChatIdentity();
         setBusy(btn, true);
         frame?.classList.add('st_ai_busy');
+        showDevelop();
         try {
             const imageUrl = await callImageAPI(prompt);
             if (getChatIdentity() !== chatId) return notify.warn('聊天已切换，图片没有写入另一段聊天');
@@ -138,6 +159,7 @@ function bindImageActions() {
         } catch (err) {
             log.error('内联重新生成失败:', err);
             notify.error(errMsg(err), '生图失败');
+            restoreOld();
             setBusy(btn, false);
             frame?.classList.remove('st_ai_busy');
         }
@@ -271,6 +293,7 @@ export async function init() {
         on(EVENTS.galleryChanged, debounce(() => renderGallery(), 200));
 
         initScanner();
+        initAutoGenerate();
         for (const delay of [0, 1000, 3000]) setTimeout(() => migrateInlineMarkersInChat(), delay);
         setTimeout(scanBurst, 1500);
 

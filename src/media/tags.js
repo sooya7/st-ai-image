@@ -13,7 +13,7 @@ const NAMES = { voice: 'audio', 语音: 'audio', 配音: 'audio', video: 'video'
 // 闭合标签用命名反向引用：这段会被拼进扫描器的大正则，写 \1 会指向别人的分组。
 // 分组固定为 1=标签名、2=属性串、3=正文（text.js 用 $3 取正文）。属性值可用英文/中文引号或不加引号。
 const ATTR = String.raw`\s+[A-Za-z一-鿿]+\s*=\s*(?:"[^"\]]*"|“[^”\]]*”|[^\s"“\]]+)`;
-export const MEDIA_TAG_SOURCE = String.raw`\[\s*(?<mediaTag>voice|语音|配音|video|视频)((?:${ATTR})*)\s*\]([\s\S]+?)\[\s*\/\s*\k<mediaTag>\s*\]`;
+export const MEDIA_TAG_SOURCE = String.raw`\[\s*(?<mediaTag>voice|语音|配音|video|视频)((?:${ATTR})*)\s*\]((?:(?!\[\s*(?:voice|语音|配音|video|视频)(?:\s[^\]]*)?\])[\s\S])+?)\[\s*\/\s*\k<mediaTag>\s*\]`;
 const ATTR_ITEM = /([A-Za-z一-鿿]+)\s*=\s*(?:"([^"\]]*)"|“([^”\]]*)”|([^\s"“\]]+))/g;
 const SPEAKER_KEYS = new Set(['name', 'speaker', 'character', '角色', '说话人']);
 const TYPE_KEYS = new Set(['type', 'voice', 'tone', '音色', '声音', '声线']);

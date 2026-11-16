@@ -29,7 +29,7 @@ export const LIMITS = {
 
 /** 生图标签：[image]...[/image] / <图片>...</图片> 等 */
 export const TAG_NAMES = String.raw`image|图片|图像|画图|生图`;
-export const IMAGE_REQUEST_SOURCE = String.raw`\[\s*(${TAG_NAMES})\s*\]([\s\S]+?)\[\s*\/\s*\1\s*\]|<\s*(${TAG_NAMES})\s*>([\s\S]+?)<\s*\/\s*\3\s*>`;
+export const IMAGE_REQUEST_SOURCE = String.raw`\[\s*(${TAG_NAMES})\s*\]((?:(?!\[\s*(?:${TAG_NAMES})\s*\])[\s\S])+?)\[\s*\/\s*\1\s*\]|<\s*(${TAG_NAMES})\s*>((?:(?!<\s*(?:${TAG_NAMES})\s*>)[\s\S])+?)<\s*\/\s*\3\s*>`;
 export const RE = {
     imageTagAll: new RegExp(IMAGE_REQUEST_SOURCE, 'gi'),
     imageTagFirst: new RegExp(IMAGE_REQUEST_SOURCE, 'i'),
@@ -47,6 +47,7 @@ export const RE = {
 export const DEFAULT_SETTINGS = {
     enabled: true,
     autoDetect: true,
+    autoGenerate: true, // 正文里的 [image] 标签生成结束后自动出图（思维链里的示例不触发）
     apiBase: '',
     apiKey: '',
     imageProvider: 'auto',

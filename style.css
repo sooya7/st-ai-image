@@ -2495,3 +2495,21 @@ body.no-blur .st_ai_gallery_actions,
 body.no-blur .st_gpt_preview_title,
 body.no-blur .st_gpt_preview_header .st_ai_action_row,
 body.no-blur .st_ai_lightbox_caption { background: rgba(255, 255, 255, .95); }
+
+/* 重新生成：用和首次生成相同的按钮外壳盖在原图卡片上，尺寸跟原图一致 */
+.st_ai_img_frame.st_ai_regen_host > .st_gpt_inline_gen.st_ai_regen_overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+}
+.st_ai_img_frame.st_ai_regen_host > .st_ai_regen_overlay > .st_ai_develop {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    aspect-ratio: auto;
+}
+.st_ai_img_frame.st_ai_regen_host .st_gpt_inline_actions,
+.st_ai_img_frame.st_ai_regen_host .st_ai_img_caption { visibility: hidden; }
