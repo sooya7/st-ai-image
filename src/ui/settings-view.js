@@ -3,6 +3,7 @@
  * 所有写入都走 settings.js，这里不直接碰存储。
  */
 import { fetchModelList } from '../api/images.js';
+import { listed } from '../media/detect.js';
 import { LIMITS } from '../core/constants.js';
 import { errMsg, notify } from '../core/notify.js';
 import { switchImageProvider } from '../core/image-profiles.js';
@@ -63,7 +64,7 @@ const PROVIDER_UI = {
         base: ['API 地址', 'https://your-proxy.com/v1'], key: ['API Key（本机或局域网地址可以留空）', 'sk-...'], model: 'gpt-image-2', sizes: OPENAI_SIZES,
         params: '按模型文档填写，会合并进请求体；不要填写密钥。',
     },
-    auto: { hint: '依次试 /v1/images/generations 和 /v1/chat/completions，只在端点明确不支持（404/405/501）时才换下一个。不确定中转站走哪个接口时用这个。' },
+    auto: { hint: '填服务的地址和 Key 就行，按地址自动认：MiniMax、阿里云百炼、Gemini 官方、Stability、Pollinations、AI Horde、fal、Replicate、OpenRouter 各走自己的接口；其余（OpenAI、即梦、硅基流动、各中转站）依次试 /v1/images/generations 和 /v1/chat/completions，只在端点明确不支持（404/405/501）时才换下一个。' },
     openai: { hint: 'OpenAI 官方或兼容中转的 /v1/images/generations。' },
     chat: { hint: '走 /v1/chat/completions，适合只在聊天接口出图的中转（Gemini 图片模型等）。', model: 'gemini-2.5-flash-image', sizes: null },
     gemini: {
@@ -150,8 +151,12 @@ function syncProviderOptions(current) {
     for (const option of document.querySelectorAll('#st_gpt_image_provider option')) {
         option.dataset.label ??= option.textContent;
         const blocked = tauri && NEEDS_PROXY.image.includes(option.value);
-        option.hidden = blocked && option.value !== current;
+        // 只列自动识别和要填特殊东西的；别家并进自动识别，正在用的老选项留着
+        option.hidden = (blocked || !listed('image', option.value, current)) && option.value !== current;
         option.textContent = option.dataset.label + (blocked ? UNAVAILABLE_NOTE : '');
+    }
+    for (const group of document.querySelectorAll('#st_gpt_image_provider optgroup')) {
+        group.hidden = [...group.querySelectorAll('option')].every((o) => o.hidden);
     }
 }
 

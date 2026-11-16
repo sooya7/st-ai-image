@@ -4,6 +4,7 @@
  */
 import { blankPresets, fishPresets, isFishEndpoint, normalizePresets, usableTypes } from './voice-presets.js';
 import { readWorkflowLibrary } from '../core/library.js';
+import { detectProvider } from './detect.js';
 
 /** 提示词里的占位符：注入时换成当前服务音色预设表里已配音色的类型名。 */
 export const VOICE_TYPES_TOKEN = '{{音色类型}}';
@@ -140,8 +141,9 @@ export const DEFAULT_VIDEO_PROMPT = `## 视频标签
 
 export const MEDIA_DEFAULTS = {
     speech: {
-        enabled: true, provider: 'openai', proxy: false, autoInject: false, prompt: DEFAULT_VOICE_PROMPT,
+        enabled: true, provider: 'auto', proxy: false, autoInject: false, prompt: DEFAULT_VOICE_PROMPT,
         profiles: {
+            auto: { base: '', key: '', model: '', voice: '', language: '', extra: '' },
             openai: { base: 'https://api.openai.com/v1', key: '', model: 'tts-1', voice: 'alloy', language: '', extra: '' },
             fish: { base: 'https://api.fish.audio/v1', key: '', model: 's2.1-pro-free', voice: '', language: '', extra: '' },
             elevenlabs: { base: 'https://api.elevenlabs.io/v1', key: '', model: 'eleven_multilingual_v2', voice: '', language: '', extra: '' },
@@ -154,8 +156,9 @@ export const MEDIA_DEFAULTS = {
         },
     },
     video: {
-        enabled: true, provider: 'openai', proxy: false, autoInject: false, prompt: DEFAULT_VIDEO_PROMPT, timeout: '600',
+        enabled: true, provider: 'auto', proxy: false, autoInject: false, prompt: DEFAULT_VIDEO_PROMPT, timeout: '600',
         profiles: {
+            auto: { base: '', key: '', model: '', size: '', seconds: '', extra: '' },
             runway: { base: 'https://api.dev.runwayml.com/v1', key: '', model: 'gen4.5', size: '1280:720', seconds: '5', extra: '' },
             agnes: { base: 'https://apihub.agnes-ai.com/v1', key: '', model: 'agnes-video-2.5-flash', size: '720P', seconds: '5', extra: '' },
             fal: { base: 'https://queue.fal.run', key: '', model: '', size: '', seconds: '', extra: '' },
@@ -223,5 +226,13 @@ export function renderVoicePrompt(prompt, presets) {
 /** 当前服务的请求配置，直接交给 generateMedia。 */
 export function mediaRequestConfig(media, provider = media.provider) {
     const profile = media.profiles[provider];
-    return { ...profile, provider, proxy: media.proxy, ...(media.timeout ? { timeout: Number(media.timeout) * 1000 } : {}) };
+    const extra = { proxy: media.proxy, ...(media.timeout ? { timeout: Number(media.timeout) * 1000 } : {}) };
+    if (provider !== 'auto') return { ...profile, provider, ...extra };
+    // 自动识别：按地址认出是哪家；模型、音色、尺寸没填就用那家的默认值
+    const section = Object.hasOwn(profile, 'voice') ? 'speech' : 'video';
+    const resolved = detectProvider(section, profile.base);
+    const defaults = MEDIA_DEFAULTS[section].profiles[resolved] || {};
+    const filled = Object.fromEntries(Object.entries(profile).map(([k, v]) => [k, (typeof v === 'string' && !v.trim() && k !== 'key' && k !== 'base' && defaults[k]) ? defaults[k] : v]));
+    if (!String(profile.base || '').trim() && defaults.base) filled.base = defaults.base;
+    return { ...filled, provider: resolved, selected: 'auto', ...extra };
 }

@@ -275,7 +275,7 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
             config.emotion = info.emotion;
         }
         const blocked = !settings.enabled || !media.enabled ? `${LABEL[kind]}功能已在设置中关闭`
-            : !config.key.trim() && needsKey(provider, config.base) ? `请先在面板的「${kind === 'audio' ? '配音' : '视频'}」页填写 API Key` : '';
+            : !config.key.trim() && needsKey(config.provider, config.base) ? `请先在面板的「${kind === 'audio' ? '配音' : '视频'}」页填写 API Key` : '';
         if (blocked) return notify.warn(blocked, TITLE[kind]);
         setProgress(key, resume ? '查询原任务…' : '提交中…');
         const { downloadMedia, generateMedia } = await import('../media/client.js');
@@ -287,7 +287,7 @@ async function runMediaJob(wrapper, { resume = false } = {}) {
             const plan = { ...buildRequest(kind, config, text), proxy: !!config.proxy };
             resumeHandle = {
                 plan, id: record.id,
-                links: restoreMediaTaskLinks(record, provider, plan, trustedTaskUrl),
+                links: restoreMediaTaskLinks(record, config.provider, plan, trustedTaskUrl),
             };
         }
         if (!isMessageTargetCurrent(target)) return;

@@ -28,6 +28,7 @@ const SPEC = {
         ],
         hidden: { azure: ['model'], openai: ['language'], fish: ['language'], elevenlabs: ['language'], gemini: ['language'], volcengine: ['language'], gptsovits: ['key', 'model'] },
         hints: {
+            auto: '填服务的地址和 Key 就行，按地址自动认：MiniMax、阿里云百炼、Gemini、ElevenLabs、Azure、豆包语音各走自己的接口，其余（OpenAI、Fish、硅基流动、各中转站）按 OpenAI 兼容 /audio/speech。模型和音色不填就用那家的默认值。',
             openai: '/audio/speech 协议：OpenAI 官方、Fish 的兼容接口和大多数中转站都走这里。用 Fish 点上面的「Fish Audio」一键填地址和免费模型，再一键填入推荐音色；直连就能用，TauriTavern 也行。',
             fish: 'Fish 原生接口不允许浏览器直连，必须勾选「通过酒馆代理」，TauriTavern 里用不了。一般直接用「OpenAI 兼容 TTS」里的 Fish 一键填写就行，效果一样。',
             elevenlabs: '允许浏览器直连。Voice ID 在 ElevenLabs 控制台的声音详情里复制。',
@@ -54,6 +55,7 @@ const SPEC = {
         hidden: { fal: ['size', 'seconds'], replicate: ['size', 'seconds'], comfyui: ['key'], siliconflow: ['seconds'] },
         only: { workflow: ['comfyui'] },
         hints: {
+            auto: '填服务的地址和 Key 就行，按地址自动认：即梦（火山方舟）、海螺、通义万相、Veo、智谱、硅基流动、Luma、fal、可灵、Vidu、Runway、Replicate 各走自己的接口，其余按 /videos 兼容。模型、尺寸、时长不填就用那家的默认值。',
             runway: 'Runway 不允许浏览器直连（跨域被拒），必须勾选「通过酒馆代理」，TauriTavern 里用不了。',
             replicate: 'Replicate 只允许 localhost 打开的酒馆直连，其他地址要勾选「通过酒馆代理」，TauriTavern 里用不了。模型填 owner/name 或 owner/name:version，时长、比例等写进额外参数。',
             agnes: 'Agnes 已并入「/videos 兼容服务」。因为那一组已经填了别的服务的 Key，这里先照旧能用；要合并，就改选「/videos 兼容服务」，点「一键填写：Agnes AI」，再填 Key。',
@@ -106,7 +108,7 @@ export async function mountMediaSettings(root, section) {
         id,
         profile: () => state.profiles[state.provider],
         config: () => mediaRequestConfig(JSON.parse(JSON.stringify(state)), state.provider),
-        isFish: () => isFishEndpoint(state.provider, state.profiles[state.provider].base),
+        isFish: () => isFishEndpoint(state.provider === 'auto' ? 'openai' : state.provider, state.profiles[state.provider].base),
         onChange: () => saveSoon(),
         onCommit: () => save(),
         warning,

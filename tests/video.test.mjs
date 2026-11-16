@@ -136,7 +136,7 @@ test('兼容视频完成只返回内容描述；按需下载，CDN 不带密钥'
 });
 test('视频设置默认 /videos 兼容服务（Runway 要开代理，TauriTavern 里用不了），等待时间换算成毫秒交给客户端', () => {
     const media = readMediaSettings({}, 'video');
-    assert.equal(media.provider, 'openai');
+    assert.equal(media.provider, 'auto');
     assert.equal(media.proxy, false);
     const config = mediaRequestConfig({ ...media, timeout: '900' });
     assert.equal(config.timeout, 900_000);
@@ -151,15 +151,15 @@ test('服务列表：TauriTavern 里不列只能走酒馆代理的服务（当�
     assert.equal(isTauriTavern({ hostname: 'localhost', protocol: 'tauri:' }, {}), true);
     assert.equal(isTauriTavern({ hostname: '127.0.0.1', protocol: 'http:' }, {}), false);
     const values = (list) => list.map((o) => o.value);
-    assert.deepEqual(values(providerOptions('video', PROVIDERS.video, 'openai', { tauri: true })), ['openai', 'ark', 'minimax', 'dashscope', 'veo', 'zhipu', 'siliconflow', 'luma', 'fal', 'comfyui']);
+    assert.deepEqual(values(providerOptions('video', PROVIDERS.video, 'openai', { tauri: true })), ['auto', 'openai', 'comfyui']);
     assert.match(providerOptions('video', PROVIDERS.video, 'agnes', { tauri: true }).find((o) => o.value === 'agnes').text, /已并入/);
-    assert.deepEqual(values(providerOptions('audio', PROVIDERS.audio, 'openai', { tauri: true })), ['openai', 'minimax', 'dashscope', 'gemini', 'elevenlabs', 'azure']);
+    assert.deepEqual(values(providerOptions('audio', PROVIDERS.audio, 'openai', { tauri: true })), ['auto', 'openai']);
     const kept = providerOptions('video', PROVIDERS.video, 'runway', { tauri: true }).find((o) => o.value === 'runway');
     assert.match(kept.text, /TauriTavern 里用不了/);
     const browser = providerOptions('video', PROVIDERS.video, 'agnes', { tauri: false });
-    assert.deepEqual(browser.filter((o) => o.more).map((o) => o.value), ['luma', 'kling', 'vidu', 'runway', 'replicate']);
+    assert.deepEqual(browser.filter((o) => o.more).map((o) => o.value), []);
     assert.ok(browser.every((o) => !o.text.includes('用不了')));
-    assert.deepEqual(providerOptions('audio', PROVIDERS.audio, 'openai', { tauri: false }).filter((o) => o.more).map((o) => o.value), ['elevenlabs', 'azure', 'volcengine', 'gptsovits', 'fish']);
+    assert.deepEqual(providerOptions('audio', PROVIDERS.audio, 'openai', { tauri: false }).filter((o) => o.more).map((o) => o.value), ['gptsovits']);
 });
 test('酒馆代理：URL 改写到 /proxy/，任务查询和下载都走代理', async () => {
     assert.equal(proxyUrl('https://api.dev.runwayml.com/v1/tasks/x'), '/proxy/https://api.dev.runwayml.com/v1/tasks/x');

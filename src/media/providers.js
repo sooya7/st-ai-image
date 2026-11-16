@@ -8,11 +8,13 @@ export { isLocalBase, needsKey } from './keys.js';
 export const PROVIDERS = {
     image: { openai: 'OpenAI / 兼容生图', chat: 'OpenAI Chat 生图', gemini: 'Gemini 原生', fal: 'fal', replicate: 'Replicate', comfyui: 'ComfyUI（自建）', sdwebui: 'SD WebUI（A1111 / Forge，自建）' },
     audio: {
+        auto: '自动识别（填地址和 Key 就行）',
         openai: 'OpenAI 兼容 TTS（Fish、硅基流动、各中转站）', minimax: 'MiniMax 语音', dashscope: '阿里云百炼（Qwen-TTS / CosyVoice）', gemini: 'Gemini TTS',
         elevenlabs: 'ElevenLabs', azure: 'Azure Speech',
         volcengine: '豆包语音（火山引擎，要开酒馆跨域代理）', gptsovits: 'GPT-SoVITS（本地，要开酒馆跨域代理）', fish: 'Fish Audio 原生接口（要开酒馆跨域代理）',
     },
     video: {
+        auto: '自动识别（填地址和 Key 就行）',
         openai: '/videos 兼容服务（Agnes、各中转站）', ark: '即梦 Seedance（火山方舟）', minimax: '海螺（MiniMax）', dashscope: '通义万相（阿里云百炼）',
         veo: 'Google Veo', zhipu: '智谱 CogVideoX', siliconflow: '硅基流动', luma: 'Luma', fal: 'fal（可灵、万相、Veo 等）', comfyui: 'ComfyUI（自建）',
         kling: '可灵（要开酒馆跨域代理）', vidu: 'Vidu（要开酒馆跨域代理）', runway: 'Runway（要开酒馆跨域代理）', replicate: 'Replicate', agnes: 'Agnes AI',

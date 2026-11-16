@@ -4,6 +4,7 @@
  * - 请求时按模型猜最可能的端点顺序，逐个降级重试。
  */
 import { LIMITS } from '../core/constants.js';
+import { detectProvider } from '../media/detect.js';
 import { apiFetch } from '../core/net.js';
 import { log } from '../core/notify.js';
 import { ensureSafeImageUrl, summarizeApiError } from '../core/text.js';
@@ -94,7 +95,7 @@ const isNetworkError = (e) => /Failed to fetch|Network|请求超时|请求失败
  * @param {{signal?: AbortSignal, onProgress?: (p: {attempt: number, total: number, method: string, errors: number}) => void}} options
  */
 export async function callImageAPI(prompt, { signal, onProgress } = {}) {
-    const s = await getSettings();
+    const s = resolveImageProvider(await getSettings());
     const base = normalizeApiBase(s.apiBase);
     // 只在 NovelAI / ComfyUI / SD WebUI 使用各自的画师串，其他接口保留原始描述。
     const { prompt: fullPrompt, negative } = applyImagePromptPreset(prompt, s);
@@ -196,14 +197,22 @@ const activeWorkflow = (s) => {
     return lib.items[lib.active];
 };
 
+/** 自动识别：按地址认出是哪家，认不出的保持 auto（依次试 OpenAI 兼容接口）。 */
+export function resolveImageProvider(s) {
+    if ((s?.imageProvider || 'auto') !== 'auto') return s;
+    const resolved = detectProvider('image', s.apiBase);
+    return resolved === 'auto' ? s : { ...s, imageProvider: resolved };
+}
+
 /** 图片接口缺 Key：自建服务和本机/局域网地址允许留空。 */
 export function imageKeyMissing(s) {
-    return !String(s?.apiKey || '').trim() && needsKey(s?.imageProvider, s?.apiBase || '');
+    const r = resolveImageProvider(s || {});
+    return !String(r?.apiKey || '').trim() && needsKey(r?.imageProvider, r?.apiBase || '');
 }
 
 /** 拉取模型列表（OpenAI 兼容 /v1/models；自建服务走酒馆的 /api/sd/models、/api/sd/comfy/models；NovelAI 用内置列表）。 */
 export async function fetchModelList() {
-    const s = await getSettings();
+    const s = resolveImageProvider(await getSettings());
     if (s.imageProvider === 'comfyui' || s.imageProvider === 'sdwebui') {
         const { serviceRoot } = await import('../media/selfhosted.js');
         const { getRequestHeadersWithCsrf } = await import('../st/context.js');

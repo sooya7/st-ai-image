@@ -74,7 +74,7 @@ export const PANEL_HTML = `
                 <div class="st_ai_field">
                     <label for="st_gpt_image_provider">生图接口</label>
                     <select id="st_gpt_image_provider" class="st_ai_input">
-                        <option value="auto">中转站（自动试接口，旧版兼容）</option>
+                        <option value="auto">自动识别（填地址和 Key 就行）</option>
                         <option value="openai">OpenAI Images / 兼容中转</option>
                         <option value="chat">OpenAI Chat 生图</option>
                         <option value="gemini">Gemini 原生</option>

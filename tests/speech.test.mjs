@@ -53,8 +53,8 @@ test('语音设置按服务隔离，缺字段/坏数据按默认补齐，未知�
     assert.equal(media.profiles.azure.voice, 'zh-CN-XiaoxiaoNeural');
     assert.equal(media.enabled, true);
     assert.equal(media.autoInject, false);
-    assert.equal(readMediaSettings({ speech: 'broken' }, 'speech').provider, 'openai');
-    assert.equal(readMediaSettings({ speech: { provider: 'nope' } }, 'speech').provider, 'openai');
+    assert.equal(readMediaSettings({ speech: 'broken' }, 'speech').provider, 'auto');
+    assert.equal(readMediaSettings({ speech: { provider: 'nope' } }, 'speech').provider, 'auto');
     const config = mediaRequestConfig({ ...media, proxy: true }, 'openai');
     assert.deepEqual([config.provider, config.voice, config.proxy], ['openai', 'nova', true]);
 });

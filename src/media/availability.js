@@ -25,12 +25,14 @@ export const MERGED = { video: { agnes: '（已并入 /videos 兼容，重新选
  * 下拉框选项：[{ value, text, more }]。TauriTavern 里去掉只能走代理的服务；
  * 但当前选中的是这种服务时仍然列出来并注明，免得设置被悄悄换掉。
  */
+import { listed } from './detect.js';
+
 export function providerOptions(kind, labels, current, { tauri = isTauriTavern() } = {}) {
     const blocked = new Set(tauri ? NEEDS_PROXY[kind] || [] : []);
     const merged = MERGED[kind] || {};
     const more = new Set(MORE[kind] || []);
     return Object.entries(labels)
-        .filter(([value]) => (!blocked.has(value) && !Object.hasOwn(merged, value)) || value === current)
+        .filter(([value]) => ((!blocked.has(value) && !Object.hasOwn(merged, value)) && listed(kind, value, current)) || value === current)
         .map(([value, text]) => ({
             value, more: more.has(value),
             text: `${text}${blocked.has(value) ? UNAVAILABLE_NOTE : ''}${Object.hasOwn(merged, value) ? merged[value] : ''}`,
